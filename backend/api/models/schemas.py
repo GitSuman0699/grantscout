@@ -87,6 +87,9 @@ class OrgProfile(BaseModel):
 # ──────────────────────────────────────────────
 
 
+from pydantic import BaseModel, Field, computed_field
+
+
 class MatchScore(BaseModel):
     """Detailed match score breakdown across 5 dimensions."""
 
@@ -96,6 +99,7 @@ class MatchScore(BaseModel):
     geographic_fit: int = Field(0, ge=0, le=15)
     track_record: int = Field(0, ge=0, le=10)
 
+    @computed_field
     @property
     def total(self) -> int:
         return (
