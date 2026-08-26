@@ -26,7 +26,7 @@ class TestMCPServer(unittest.TestCase):
     def test_01_mcp_server_initialization(self):
         """Verify FastMCP server is correctly named with instructions."""
         self.assertEqual(mcp_server.name, "GrantScout MCP")
-        self.assertTrue("GrantScout" in mcp_server.instructions)
+        self.assertTrue("GrantScout" in (mcp_server.instructions or ""))
 
     def test_02_mcp_tools_registered(self):
         """Verify all essential GrantScout tools are declared on the server."""
@@ -94,6 +94,19 @@ class TestMCPServer(unittest.TestCase):
         self.assertIn("name", data)
         self.assertEqual(data["name"], "Youth Education Alliance")
         self.assertEqual(data["org_id"], "default")
+
+
+    def test_09_execute_mcp_search_federal_grants(self):
+        """Verify search_federal_grants tool forwards correct parameters to search_grants."""
+        raw_json = search_federal_grants(keyword="STEM education", max_results=2)
+        data = json.loads(raw_json)
+        self.assertIn("grants", data)
+        self.assertIsNone(data.get("error"))
+
+        # Test keywords alias
+        raw_json_alias = search_federal_grants(keywords="STEM education", max_results=2)
+        data_alias = json.loads(raw_json_alias)
+        self.assertIn("grants", data_alias)
 
 
 if __name__ == "__main__":

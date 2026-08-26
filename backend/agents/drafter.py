@@ -103,9 +103,10 @@ Retrieve our org profile and return a fully formulated ApplicationDraftResult wi
     try:
         # Modern Strands SDK structured output invocation
         agent_result = agent(prompt, structured_output_model=ApplicationDraftResult)
-        draft_result: ApplicationDraftResult = agent_result.structured_output
-        if not draft_result:
-            raise ValueError("Empty structured output returned by drafter agent")
+        if isinstance(agent_result.structured_output, ApplicationDraftResult):
+            draft_result = agent_result.structured_output
+        else:
+            raise ValueError("Empty or invalid structured output returned by drafter agent")
     except Exception as e:
         logger.warning(f"Live Bedrock structured_output invocation unavailable ({e}); generating deterministic structured draft.")
         # Retrieve org profile for context

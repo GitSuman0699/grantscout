@@ -33,17 +33,19 @@ mcp_server = FastMCP(
 
 
 @mcp_server.tool()
-def search_federal_grants(keyword: str, max_results: int = 10) -> str:
+def search_federal_grants(keyword: str = "", max_results: int = 10, keywords: str = "") -> str:
     """Search live Grants.gov database for open and forecasted federal funding opportunities.
 
     Args:
         keyword: Search terms (e.g. 'STEM education', 'robotics youth', 'clean energy community').
         max_results: Maximum opportunities to return (default: 10, max: 25).
+        keywords: Optional alias for keyword search terms.
 
     Returns:
         JSON string containing matching grant opportunities.
     """
-    res = search_grants(keyword=keyword, rows=min(max_results, 25))
+    query = keyword or keywords
+    res = search_grants(keywords=query, max_results=min(max_results, 25))
     return json.dumps(res, indent=2)
 
 
@@ -126,7 +128,7 @@ def draft_grant_section(section_name: str, grant_title: str, agency: str = "Fede
     Returns:
         Formulated draft text grounded in the organization's verified profile and RAG documents.
     """
-    org_res = storage.get_org_profile("default")
+    org_res = storage.get_org_profile("default") or {}
     org_data = org_res.get("profile") or {}
     org_name = org_data.get("name", "Youth Education Alliance")
     budget = org_data.get("annual_budget", 450000)

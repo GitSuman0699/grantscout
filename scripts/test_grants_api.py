@@ -3,6 +3,7 @@
 import sys
 import json
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -13,6 +14,8 @@ print("=" * 60)
 print("TEST 1: Search grants.gov API (STEM education)")
 print("=" * 60)
 
+# Test 1: Search for STEM grants
+hits: list[dict[str, Any]] = []
 response = requests.post(
     "https://api.grants.gov/v1/api/search2",
     headers={"Content-Type": "application/json"},

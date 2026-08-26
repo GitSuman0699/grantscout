@@ -114,9 +114,10 @@ Score this grant across all 5 dimensions and return a complete, validated GrantE
     try:
         # Modern Strands SDK structured output invocation
         agent_result = agent(prompt, structured_output_model=GrantEvaluationResult)
-        evaluation: GrantEvaluationResult = agent_result.structured_output
-        if not evaluation:
-            raise ValueError("Empty structured output returned by agent")
+        if isinstance(agent_result.structured_output, GrantEvaluationResult):
+            evaluation = agent_result.structured_output
+        else:
+            raise ValueError("Empty or invalid structured output returned by agent")
     except Exception as e:
         logger.warning(f"Live Bedrock structured_output invocation unavailable ({e}); generating deterministic structured evaluation.")
         # Deterministic heuristic evaluation for offline / dev mode

@@ -60,6 +60,7 @@ class TestGrantScoutPipeline(unittest.TestCase):
         # Verify saved in storage
         retrieved = storage.get_grant(test_gid)
         self.assertIsNotNone(retrieved)
+        assert retrieved is not None
         self.assertEqual(retrieved["title"], "National Youth STEM Innovation Grant")
         self.assertEqual(sum(retrieved["match_score"].values()), 93)
 
