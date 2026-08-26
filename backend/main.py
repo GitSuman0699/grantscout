@@ -185,6 +185,49 @@ async def get_grant(grant_id: str):
     return grant
 
 
+from backend.rag.knowledge_base import knowledge_base
+
+# ──────────────────────────────────────────────
+#  RAG Knowledge Base Endpoints
+# ──────────────────────────────────────────────
+
+
+@app.get("/api/documents")
+async def list_knowledge_base_documents():
+    """List all organizational documents indexed in the RAG Knowledge Base."""
+    docs = knowledge_base.list_documents()
+    return {"documents": docs, "total": len(docs)}
+
+
+@app.post("/api/documents/search")
+async def search_knowledge_base(payload: dict):
+    """Semantic vector search against indexed nonprofit documents."""
+    query = payload.get("query", "")
+    if not query:
+        raise HTTPException(status_code=400, detail="Query string is required")
+    top_k = int(payload.get("top_k", 3))
+    category = payload.get("category")
+    results = knowledge_base.search(query=query, top_k=top_k, category=category)
+    return {"query": query, "count": len(results), "results": [r.model_dump() for r in results]}
+
+
+@app.post("/api/documents/index")
+async def index_document(
+    payload: dict,
+    auth: TokenPayload = Depends(get_current_auth),
+):
+    """Index a new document into the RAG Knowledge Base (Authenticated)."""
+    doc_name = payload.get("doc_name", "")
+    content = payload.get("content", "")
+    category = payload.get("category", "general")
+
+    if not doc_name or not content:
+        raise HTTPException(status_code=400, detail="doc_name and content are required")
+
+    chunks_indexed = knowledge_base.add_document(doc_name, content, category)
+    return {"status": "indexed", "doc_name": doc_name, "chunks": chunks_indexed, "indexed_by": auth.sub}
+
+
 # ──────────────────────────────────────────────
 #  Application Endpoints
 # ──────────────────────────────────────────────

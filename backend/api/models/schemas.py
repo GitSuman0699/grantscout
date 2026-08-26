@@ -174,6 +174,45 @@ class ApplicationDraft(BaseModel):
 
 
 # ──────────────────────────────────────────────
+#  Agent Structured Output Models (Type-Safe Schemas)
+# ──────────────────────────────────────────────
+
+
+class GrantEvaluationResult(BaseModel):
+    """Structured, type-safe evaluation produced by Matcher Agent."""
+
+    grant_id: str
+    status: GrantStatus = GrantStatus.MATCHED
+    match_score: MatchScore
+    match_reasoning: str
+    key_strengths: list[str] = Field(
+        default_factory=list,
+        description="Key alignment points between the grant and the nonprofit mission.",
+    )
+    potential_risks: list[str] = Field(
+        default_factory=list,
+        description="Capacity, geographic, or administrative challenges identified.",
+    )
+    recommended_action: str = Field(
+        description="Actionable next step: 'auto_draft', 'manual_review', or 'archive_silently'.",
+    )
+
+
+class ApplicationDraftResult(BaseModel):
+    """Structured, type-safe application output produced by Drafter Agent."""
+
+    grant_id: str
+    org_id: str
+    grant_title: str
+    sections: list[ApplicationSection]
+    completion_percentage: float
+    recommended_human_actions: list[str] = Field(
+        default_factory=list,
+        description="Specific tasks recommended for human staff review before submission.",
+    )
+
+
+# ──────────────────────────────────────────────
 #  Activity Feed
 # ──────────────────────────────────────────────
 
