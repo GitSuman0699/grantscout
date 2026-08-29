@@ -404,6 +404,61 @@ body {
   }
 }
 
+/* Optimization & Knowledge Base Responsive Styles */
+.opt-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+
+.model-tier-row {
+  background: var(--card-alt-bg);
+  border: 2px solid var(--border-dark);
+  padding: 1.25rem;
+  display: grid;
+  grid-template-columns: 180px 1fr 200px;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.search-form-container {
+  display: flex;
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .opt-summary-grid {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .model-tier-row {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+    padding: 1rem;
+  }
+
+  .model-tier-rates {
+    text-align: left !important;
+    border-top: 1px dashed var(--border-dashed);
+    padding-top: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .search-form-container {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .search-form-container button {
+    width: 100%;
+  }
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

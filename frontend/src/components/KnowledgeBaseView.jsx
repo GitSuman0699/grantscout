@@ -72,8 +72,8 @@ export default function KnowledgeBaseView() {
       </div>
 
       {/* Semantic Search Box */}
-      <div className="brutalist-card" style={{ padding: '1.5rem', marginBottom: '2.5rem' }}>
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.75rem' }}>
+      <div className="brutalist-card" style={{ padding: '1.25rem 1.5rem', marginBottom: '2rem' }}>
+        <form onSubmit={handleSearch} className="search-form-container">
           <div style={{ position: 'relative', flex: 1 }}>
             <input
               type="text"
@@ -83,7 +83,7 @@ export default function KnowledgeBaseView() {
               style={{
                 width: '100%',
                 padding: '0.75rem 1rem 0.75rem 2.75rem',
-                fontSize: '0.95rem',
+                fontSize: '0.9rem',
                 fontFamily: 'var(--font-body)',
                 border: '2px solid var(--border-dark)',
                 outline: 'none',
@@ -93,7 +93,7 @@ export default function KnowledgeBaseView() {
             <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-muted)' }} />
           </div>
 
-          <button type="submit" className="brutalist-btn btn-primary">
+          <button type="submit" className="brutalist-btn btn-primary" style={{ padding: '0.65rem 1.25rem' }}>
             {isSearching ? 'SEARCHING...' : 'QUERY VECTORS'}
           </button>
         </form>
