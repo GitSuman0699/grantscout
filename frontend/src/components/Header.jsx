@@ -42,7 +42,7 @@ export default function Header() {
           <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
         </div>
 
-        {/* Fixed Right Live Health Status Badge */}
+        {/* Fixed Right Live Health Status Badge — Solid Opaque Rightmost */}
         <div style={{
           position: 'absolute',
           right: 0,
@@ -51,18 +51,19 @@ export default function Header() {
           display: 'flex',
           alignItems: 'center',
           zIndex: 10,
-          background: 'linear-gradient(to right, rgba(24, 24, 27, 0) 0%, rgba(24, 24, 27, 0.95) 24%, rgba(24, 24, 27, 1) 100%)',
-          paddingLeft: '2.5rem',
-          paddingRight: '1rem'
+          backgroundColor: 'var(--ink)',
+          borderLeft: '2px solid rgba(255, 255, 255, 0.15)',
+          paddingLeft: '0.75rem',
+          paddingRight: '0.75rem'
         }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: '0.45rem',
-            background: 'rgba(34, 197, 94, 0.12)',
-            border: '1px solid rgba(34, 197, 94, 0.45)',
-            boxShadow: '0 0 10px rgba(34, 197, 94, 0.2)',
-            padding: '0.2rem 0.65rem',
+            background: 'rgba(34, 197, 94, 0.15)',
+            border: '1px solid rgba(34, 197, 94, 0.5)',
+            boxShadow: '0 0 8px rgba(34, 197, 94, 0.25)',
+            padding: '0.15rem 0.55rem',
             borderRadius: '2px',
             fontFamily: 'var(--font-mono)',
             fontSize: '0.68rem',
