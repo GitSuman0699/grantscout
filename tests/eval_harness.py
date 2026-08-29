@@ -424,6 +424,12 @@ def print_report(report: EvalReport, rag_results: dict, drafter_results: dict):
 
 def main():
     """Run the complete evaluation harness."""
+    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     print("\n🧪 Running GrantScout Evaluation Harness...\n")
 
     report = run_full_evaluation()
