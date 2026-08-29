@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header';
+import ScrollToTop from './components/ScrollToTop';
 import DashboardPage from './pages/DashboardPage';
 import GrantDetailPage from './pages/GrantDetailPage';
 import DraftsPage from './pages/DraftsPage';
@@ -12,6 +13,7 @@ export default function App() {
   return (
     <GrantProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           <Header />
           
