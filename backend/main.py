@@ -459,6 +459,48 @@ async def health_check():
     }
 
 
+# ──────────────────────────────────────────────
+#  Cost & Token Optimization Endpoints
+# ──────────────────────────────────────────────
+
+from backend.optimization import (
+    response_cache,
+    token_tracker,
+    get_model_for_agent,
+    MODEL_TIERS,
+    AGENT_TIER_MAP,
+)
+
+
+@app.get("/api/optimization/token-usage")
+async def get_token_usage():
+    """Get per-agent token usage, estimated costs, and cache savings."""
+    return token_tracker.summary
+
+
+@app.get("/api/optimization/cache-stats")
+async def get_cache_stats():
+    """Get response cache performance metrics (hits, misses, hit rate)."""
+    return response_cache.stats
+
+
+@app.get("/api/optimization/model-tiers")
+async def get_model_tiers():
+    """Get the tiered model routing configuration for all agents."""
+    tiers = {}
+    for tier_name, model_cfg in MODEL_TIERS.items():
+        tiers[tier_name.value] = {
+            "model_id": model_cfg.model_id,
+            "region": model_cfg.region,
+            "cost_per_1k_input": model_cfg.cost_per_1k_input,
+            "cost_per_1k_output": model_cfg.cost_per_1k_output,
+            "max_tokens": model_cfg.max_tokens,
+            "description": model_cfg.description,
+        }
+    agent_map = {agent: tier.value for agent, tier in AGENT_TIER_MAP.items()}
+    return {"tiers": tiers, "agent_routing": agent_map}
+
+
 if __name__ == "__main__":
     import uvicorn
 
@@ -468,3 +510,4 @@ if __name__ == "__main__":
         port=config.API_PORT,
         reload=True,
     )
+

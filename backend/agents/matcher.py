@@ -123,18 +123,69 @@ Score this grant across all 5 dimensions and return a complete, validated GrantE
         # Deterministic heuristic evaluation for offline / dev mode
         synopsis_lower = str(grant_details.get("synopsis", "")).lower()
         title_lower = str(grant_details.get("title", "")).lower()
+        applicant_types_raw = str(grant_details.get("applicant_types", "")).lower()
+        category_raw = str(grant_details.get("category_of_funding", "")).lower()
+        award_ceiling = float(grant_details.get("award_ceiling") or 0)
 
-        # Heuristic scoring based on keywords
-        is_stem = any(k in synopsis_lower or k in title_lower for k in ["stem", "robotics", "coding", "education", "youth"])
-        mission_pts = 28 if is_stem else 15
-        eligibility_pts = 24
-        capacity_pts = 18
-        geo_pts = 14
-        track_pts = 8
+        # Mission alignment: keyword-based
+        stem_keywords = ["stem", "robotics", "coding", "education", "youth", "after-school", "k-12", "student"]
+        mission_hits = sum(1 for k in stem_keywords if k in synopsis_lower or k in title_lower)
+        mission_pts = min(30, mission_hits * 7) if mission_hits > 0 else 5
+
+        # Eligibility fit: check applicant types
+        is_nonprofit_eligible = any(t in applicant_types_raw for t in ["501(c)(3)", "nonprofit", "community"])
+        is_university_only = "higher education" in applicant_types_raw and not is_nonprofit_eligible
+        is_defense_only = any(t in applicant_types_raw for t in ["defense", "federally funded", "cleared", "military"])
+        if is_defense_only or is_university_only:
+            eligibility_pts = 0
+        elif is_nonprofit_eligible or not applicant_types_raw.strip():
+            eligibility_pts = 22
+        else:
+            eligibility_pts = 8
+
+        # Capacity match: check award ceiling against org budget ($450K)
+        org_budget = 450000
+        if award_ceiling > org_budget * 3:
+            capacity_pts = 3
+        elif award_ceiling > org_budget:
+            capacity_pts = 10
+        else:
+            capacity_pts = 17
+
+        # Geographic fit: default to national (reasonable assumption)
+        geo_pts = 13
+
+        # Track record: check category overlap with org mission
+        mission_categories = ["education", "science", "technology", "community", "youth"]
+        category_match = any(mc in category_raw for mc in mission_categories)
+        track_pts = 8 if category_match else 2
+
+        # Mismatch penalty for completely off-mission topics
+        mismatch_keywords = ["agriculture", "farming", "irrigation", "defense", "quantum", "military", "nuclear", "veterans"]
+        is_hard_mismatch = any(k in synopsis_lower or k in title_lower for k in mismatch_keywords)
+        if is_hard_mismatch:
+            mission_pts = min(mission_pts, 3)
+            track_pts = min(track_pts, 1)
 
         total = mission_pts + eligibility_pts + capacity_pts + geo_pts + track_pts
         status = GrantStatus.MATCHED if total >= 50 else GrantStatus.ARCHIVED
         rec_action = "auto_draft" if total >= 80 else ("manual_review" if total >= 50 else "archive_silently")
+
+        # Build contextual reasoning
+        strengths = []
+        risks = []
+        if mission_pts >= 20:
+            strengths.append("Direct mission alignment with youth STEM education")
+        if eligibility_pts >= 20:
+            strengths.append("Eligible 501(c)(3) applicant type")
+        if is_hard_mismatch:
+            risks.append("Grant focus area is outside organization's core mission")
+        if eligibility_pts == 0:
+            risks.append("Organization type does not meet eligibility requirements")
+        if capacity_pts <= 5:
+            risks.append("Award amount significantly exceeds organizational capacity")
+        if not risks:
+            risks.append("Timeline reporting requirements require tracking milestones")
 
         evaluation = GrantEvaluationResult(
             grant_id=gid,
@@ -146,9 +197,9 @@ Score this grant across all 5 dimensions and return a complete, validated GrantE
                 geographic_fit=geo_pts,
                 track_record=track_pts,
             ),
-            match_reasoning=f"Analyzed against Youth Education Alliance mission. Found strong alignment with after-school STEM curricula (total score: {total}/100).",
-            key_strengths=["Direct mission alignment with youth STEM education", "Eligible 501(c)(3) applicant type"],
-            potential_risks=["Timeline reporting requirements require tracking milestones"],
+            match_reasoning=f"Deterministic evaluation against Youth Education Alliance mission profile (total score: {total}/100).",
+            key_strengths=strengths if strengths else ["No significant alignment detected"],
+            potential_risks=risks,
             recommended_action=rec_action,
         )
 
