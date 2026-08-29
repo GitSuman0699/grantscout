@@ -14,13 +14,14 @@ export default function Header() {
   }, [location.pathname]);
 
   const navItems = [
-    { to: '/', label: 'PIPELINE' },
+    { to: '/', label: 'HOME', end: true },
+    { to: '/pipeline', label: 'PIPELINE' },
     { to: '/drafts', label: 'APPLICATION DRAFTS' },
     { to: '/knowledge', label: 'RAG KNOWLEDGE BASE' },
     { to: '/optimization', label: 'COST OPTIMIZATION' }
   ];
 
-  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH ● LIVE SYSTEM HEALTH: NORMAL (PORT 8000) • ";
+  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH • ● LIVE SYSTEM HEALTH: NORMAL (PORT 8000) • ";
 
   return (
     <header style={{
@@ -31,7 +32,7 @@ export default function Header() {
       zIndex: 50,
       width: '100%'
     }}>
-      {/* Running Marquee Banner — Single-line right-to-left continuous scroll on all devices */}
+      {/* Running Marquee Banner — Single-line continuous right-to-left marquee on all devices */}
       <div className="ticker-marquee-container">
         <div className="ticker-marquee-track font-mono" style={{ fontSize: '0.72rem', letterSpacing: '0.04em' }}>
           <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
@@ -83,6 +84,7 @@ export default function Header() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               className={({ isActive }) => `font-heading ${isActive ? 'active-nav' : ''}`}
               style={({ isActive }) => ({
                 padding: '0.45rem 0.85rem',
@@ -156,6 +158,7 @@ export default function Header() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.end}
                 onClick={() => setMobileMenuOpen(false)}
                 className="font-heading"
                 style={({ isActive }) => ({

@@ -2,7 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import ScrollToTop from './components/ScrollToTop';
-import DashboardPage from './pages/DashboardPage';
+import HomePage from './pages/HomePage';
+import PipelinePage from './pages/PipelinePage';
 import GrantDetailPage from './pages/GrantDetailPage';
 import DraftsPage from './pages/DraftsPage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
@@ -19,7 +20,8 @@ export default function App() {
           
           <main style={{ flex: 1, width: '100%' }}>
             <Routes>
-              <Route path="/" element={<DashboardPage />} />
+              <Route path="/" element={<HomePage />} />
+              <Route path="/pipeline" element={<PipelinePage />} />
               <Route path="/grants/:id" element={<GrantDetailPage />} />
               <Route path="/drafts" element={<DraftsPage />} />
               <Route path="/knowledge" element={<KnowledgeBasePage />} />
