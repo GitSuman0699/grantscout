@@ -12,7 +12,7 @@ import logging
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -254,7 +254,7 @@ def evaluate_rag_retrieval() -> dict[str, Any]:
         {
             "query": "What percentage of students improved math grades?",
             "expected_fact": "85%",
-            "category": None,
+            "category": "",
         },
         {
             "query": "annual operating budget and program expenditure ratio",
@@ -340,7 +340,7 @@ def evaluate_drafter_completeness() -> dict[str, Any]:
 
 def run_full_evaluation() -> EvalReport:
     """Run the complete evaluation harness and produce an aggregate report."""
-    report = EvalReport(timestamp=datetime.utcnow().isoformat())
+    report = EvalReport(timestamp=datetime.now(timezone.utc).isoformat())
 
     # 1. Matcher scoring evaluation
     case_results = []
@@ -441,7 +441,7 @@ def main():
     # Save report as JSON artifact
     output_dir = Path(__file__).parent.parent / "data" / "evals"
     output_dir.mkdir(parents=True, exist_ok=True)
-    report_path = output_dir / f"eval_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+    report_path = output_dir / f"eval_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
 
     report_data = {
         "timestamp": report.timestamp,
