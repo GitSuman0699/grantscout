@@ -1,6 +1,7 @@
 import React from 'react';
 import MetricsBar from '../components/MetricsBar';
 import GrantCard from '../components/GrantCard';
+import MissionLoopBanner from '../components/MissionLoopBanner';
 import { useGrants } from '../context/GrantContext';
 
 export default function DashboardPage() {
@@ -21,35 +22,30 @@ export default function DashboardPage() {
 
   return (
     <div className="page-container">
-      {/* Hero / Statement Section */}
+      {/* 3-Step Autonomous Loop & Mission Strip */}
+      <MissionLoopBanner />
+
+      {/* Metrics Bar */}
+      <MetricsBar stats={{ scanned: '78', matched: '14', drafts: '6', pipelineValue: '$1.45M' }} />
+
+      {/* Pipeline Section Title */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
         flexWrap: 'wrap',
         gap: '1rem',
-        marginBottom: '2rem'
+        marginBottom: '1.25rem'
       }}>
         <div>
-          <span className="tag-badge tag-dark" style={{ marginBottom: '0.5rem', display: 'inline-block' }}>
-            AUTONOMOUS MISSION EXPLORER
+          <span className="tag-badge tag-dark" style={{ marginBottom: '0.4rem', display: 'inline-block' }}>
+            LIVE FEDERAL PIPELINE
           </span>
-          <h2 className="font-heading hero-title" style={{ fontSize: '2.8rem', lineHeight: '0.95', color: 'var(--ink)' }}>
-            CURATED FEDERAL GRANT PIPELINE
+          <h2 className="font-heading hero-title" style={{ fontSize: '2.5rem', lineHeight: '0.95', color: 'var(--ink)' }}>
+            ACTIVE GRANT OPPORTUNITIES ({filteredGrants.length})
           </h2>
-          <p style={{ color: 'var(--ink-muted)', fontSize: '0.95rem', marginTop: '0.4rem', maxWidth: '720px' }}>
-            Scanning Grants.gov in the background, calculating 5-dimension organizational fit, and auto-drafting proposal packages.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontWeight: 700, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--ink-muted)' }}>TARGET ORG:</span>
-          <span className="tag-badge tag-amber">YOUTH EDUCATION ALLIANCE (501c3)</span>
         </div>
       </div>
-
-      {/* Metrics Bar */}
-      <MetricsBar stats={{ scanned: '78', matched: '14', drafts: '6', pipelineValue: '$1.45M' }} />
 
       {/* Filter Pills Bar */}
       <div style={{
