@@ -42,7 +42,7 @@ export default function Header() {
           <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
         </div>
 
-        {/* Fixed Right Live Health Status Badge — Solid Opaque Rightmost */}
+        {/* Fixed Right Live Health Status Badge — Compact & Sleek */}
         <div style={{
           position: 'absolute',
           right: 0,
@@ -52,29 +52,26 @@ export default function Header() {
           alignItems: 'center',
           zIndex: 10,
           backgroundColor: 'var(--ink)',
-          borderLeft: '2px solid rgba(255, 255, 255, 0.15)',
-          paddingLeft: '0.75rem',
+          borderLeft: '1px solid rgba(255, 255, 255, 0.18)',
+          paddingLeft: '0.5rem',
           paddingRight: '0.75rem'
         }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '0.45rem',
+            gap: '0.35rem',
             background: 'rgba(34, 197, 94, 0.15)',
-            border: '1px solid rgba(34, 197, 94, 0.5)',
-            boxShadow: '0 0 8px rgba(34, 197, 94, 0.25)',
-            padding: '0.15rem 0.55rem',
+            border: '1px solid rgba(34, 197, 94, 0.4)',
+            padding: '0.12rem 0.45rem',
             borderRadius: '2px',
             fontFamily: 'var(--font-mono)',
             fontSize: '0.68rem',
-            fontWeight: 700,
+            fontWeight: 800,
             whiteSpace: 'nowrap'
           }}>
             <span className="live-indicator" style={{ width: '6px', height: '6px' }}></span>
-            <span style={{ color: '#22C55E', letterSpacing: '0.05em' }}>
-              LIVE SYSTEM HEALTH: NORMAL
-            </span>
-            <span style={{ color: '#A1A1AA', fontSize: '0.62rem', fontWeight: 600 }}>
+            <span style={{ color: '#22C55E', letterSpacing: '0.06em' }}>LIVE</span>
+            <span className="desktop-only" style={{ color: '#A1A1AA', fontSize: '0.62rem', fontWeight: 600 }}>
               (PORT 8000)
             </span>
           </div>
