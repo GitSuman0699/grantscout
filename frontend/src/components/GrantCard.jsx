@@ -1,7 +1,8 @@
 import React from 'react';
-import { Calendar, DollarSign, Building2, CheckCircle2, ChevronRight, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Building2, Sparkles, ChevronRight } from 'lucide-react';
 
-export default function GrantCard({ grant, onInspect, onDraft }) {
+export default function GrantCard({ grant }) {
   const isHighFit = grant.match_score?.total >= 80;
   const isReview = grant.match_score?.total >= 50 && grant.match_score?.total < 80;
   
@@ -9,6 +10,8 @@ export default function GrantCard({ grant, onInspect, onDraft }) {
   const awardText = grant.award_ceiling 
     ? `$${(grant.award_ceiling).toLocaleString()}` 
     : 'Funding Varies';
+
+  const grantUrl = `/grants/${grant.id || grant.grant_id}`;
 
   return (
     <div
@@ -28,7 +31,8 @@ export default function GrantCard({ grant, onInspect, onDraft }) {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        gap: '0.5rem'
+        gap: '0.5rem',
+        flexWrap: 'wrap'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)' }}>
           <Building2 size={16} />
@@ -54,17 +58,20 @@ export default function GrantCard({ grant, onInspect, onDraft }) {
         </div>
 
         {/* Title */}
-        <h3
-          className="font-heading"
-          style={{
-            fontSize: '1.75rem',
-            lineHeight: '1.1',
-            color: 'var(--ink)',
-            marginBottom: '0.75rem'
-          }}
-        >
-          {grant.title}
-        </h3>
+        <Link to={grantUrl} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <h3
+            className="font-heading"
+            style={{
+              fontSize: '1.75rem',
+              lineHeight: '1.1',
+              color: 'var(--ink)',
+              marginBottom: '0.75rem',
+              transition: 'color 0.15s ease'
+            }}
+          >
+            {grant.title}
+          </h3>
+        </Link>
 
         {/* Synopsis Excerpt */}
         <p style={{
@@ -101,24 +108,24 @@ export default function GrantCard({ grant, onInspect, onDraft }) {
           </div>
         </div>
 
-        {/* Action Button Row */}
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button
-            onClick={() => onInspect(grant)}
+        {/* Action Button Row with Page Navigation */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <Link
+            to={grantUrl}
             className="brutalist-btn btn-outline"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
             INSPECT RUBRIC
-          </button>
+          </Link>
           
-          <button
-            onClick={() => onDraft(grant)}
+          <Link
+            to={grantUrl}
             className="brutalist-btn btn-primary"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
             <Sparkles size={16} />
             PRE-FILL DRAFT
-          </button>
+          </Link>
         </div>
       </div>
     </div>

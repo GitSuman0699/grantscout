@@ -1,5 +1,6 @@
 /* ==========================================================================
    GrantScout — Field Ops / Editorial Brutalist Design System
+   Responsive Multi-Screen Architecture
    ========================================================================== */
 
 :root {
@@ -39,6 +40,11 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+html, body {
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -94,6 +100,7 @@ body {
   text-decoration: none;
   box-shadow: var(--shadow-offset-sm);
   transition: all 0.1s ease;
+  white-space: nowrap;
 }
 
 .brutalist-btn:active {
@@ -149,6 +156,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  white-space: nowrap;
 }
 
 .tag-dark {
@@ -206,7 +214,129 @@ body {
   }
 }
 
-/* Custom Scrollbar */
+/* ==========================================================================
+   Responsive Breakpoints & Layouts
+   ========================================================================== */
+
+/* Main Container */
+.page-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 2rem;
+  width: 100%;
+}
+
+/* Responsive Grid Layouts */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.grants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1.75rem;
+}
+
+/* Workstation 2-Column Split View */
+.workstation-container {
+  display: grid;
+  grid-template-columns: 440px 1fr;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+/* Responsive Navigation Bar */
+.nav-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+
+/* Tablet (max-width: 1024px) */
+@media (max-width: 1024px) {
+  .workstation-container {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .page-container {
+    padding: 1.5rem;
+  }
+}
+
+/* Mobile (max-width: 768px) */
+@media (max-width: 768px) {
+  .page-container {
+    padding: 1rem;
+  }
+
+  .brutalist-card {
+    box-shadow: var(--shadow-offset-sm);
+  }
+
+  .brutalist-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-offset-sm);
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .grants-grid {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .header-main-bar {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .nav-container {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .font-heading {
+    letter-spacing: 0.02em;
+  }
+
+  .hero-title {
+    font-size: 2.2rem !important;
+  }
+
+  .ticker-bar {
+    font-size: 0.68rem !important;
+    padding: 0.35rem 0.75rem !important;
+  }
+}
+
+/* Small Mobile (max-width: 480px) */
+@media (max-width: 480px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-title {
+    font-size: 1.85rem !important;
+  }
+
+  .brutalist-btn {
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+  }
+}
+
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
