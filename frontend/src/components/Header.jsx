@@ -20,7 +20,7 @@ export default function Header() {
     { to: '/optimization', label: 'COST OPTIMIZATION' }
   ];
 
-  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH • ● LIVE SYSTEM HEALTH: NORMAL (PORT 8000) • ";
+  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH ● LIVE SYSTEM HEALTH: NORMAL (PORT 8000) • ";
 
   return (
     <header style={{

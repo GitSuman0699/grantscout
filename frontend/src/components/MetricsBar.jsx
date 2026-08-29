@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Target, FileText, DollarSign, TrendingUp } from 'lucide-react';
+import { Search, Target, FileText, DollarSign } from 'lucide-react';
 
 export default function MetricsBar({ stats }) {
   const items = [
@@ -34,18 +34,13 @@ export default function MetricsBar({ stats }) {
   ];
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-      gap: '1.25rem',
-      marginBottom: '2rem'
-    }}>
+    <div className="metrics-grid">
       {items.map((item, idx) => {
         const Icon = item.icon;
         return (
           <div
             key={idx}
-            className="brutalist-card"
+            className="brutalist-card metric-card-inner"
             style={{
               padding: '1.25rem 1.5rem',
               display: 'flex',
@@ -54,30 +49,36 @@ export default function MetricsBar({ stats }) {
               position: 'relative'
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-              <span className="tag-badge tag-dark">{item.badge}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+              <span className="tag-badge tag-dark" style={{ fontSize: '0.68rem', padding: '0.2rem 0.45rem' }}>
+                {item.badge}
+              </span>
               <div style={{
                 background: 'var(--card-alt-bg)',
-                padding: '0.4rem',
-                border: '1px solid var(--border-dark)'
+                padding: '0.35rem',
+                border: '1px solid var(--border-dark)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}>
-                <Icon size={18} strokeWidth={2} />
+                <Icon size={16} strokeWidth={2} />
               </div>
             </div>
 
             <div>
-              <div className="font-heading" style={{ fontSize: '2.5rem', lineHeight: '1', color: 'var(--ink)', marginBottom: '0.25rem' }}>
+              <div className="font-heading metric-card-value" style={{ fontSize: '2.5rem', lineHeight: '1', color: 'var(--ink)', marginBottom: '0.25rem' }}>
                 {item.value}
               </div>
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div className="metric-card-label" style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {item.label}
               </div>
             </div>
 
-            <hr className="dashed-divider" style={{ margin: '0.75rem 0' }} />
-
-            <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)' }}>
-              {item.meta}
+            <div className="metric-card-meta">
+              <hr className="dashed-divider" style={{ margin: '0.75rem 0' }} />
+              <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)' }}>
+                {item.meta}
+              </div>
             </div>
           </div>
         );
