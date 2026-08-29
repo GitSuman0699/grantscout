@@ -355,6 +355,38 @@ body {
   }
 }
 
+/* Continuous Running Marquee Banner */
+.ticker-marquee-container {
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+  background-color: var(--ink);
+  color: var(--canvas-bg);
+  padding: 0.35rem 0;
+  display: flex;
+  position: relative;
+}
+
+.ticker-marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  will-change: transform;
+  animation: marquee-scroll 28s linear infinite;
+}
+
+.ticker-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Compass, Zap, Activity, Menu, X, ChevronRight, Layers, ShieldCheck } from 'lucide-react';
+import { Compass, Zap, Activity, Menu, X, ChevronRight } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 
 export default function Header() {
@@ -8,7 +8,7 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
-  // Close mobile menu on route change
+  // Auto-close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
@@ -20,6 +20,8 @@ export default function Header() {
     { to: '/optimization', label: 'COST OPTIMIZATION' }
   ];
 
+  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH • ● LIVE SYSTEM HEALTH: NORMAL (PORT 8000) • ";
+
   return (
     <header style={{
       borderBottom: '2px solid var(--border-dark)',
@@ -29,29 +31,13 @@ export default function Header() {
       zIndex: 50,
       width: '100%'
     }}>
-      {/* Top Banner Ticker — Desktop Only */}
-      <div className="ticker-bar desktop-only" style={{
-        backgroundColor: 'var(--ink)',
-        color: 'var(--canvas-bg)',
-        padding: '0.35rem 1.5rem',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        fontSize: '0.75rem',
-        fontFamily: 'var(--font-mono)',
-        overflowX: 'auto',
-        whiteSpace: 'nowrap'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span className="live-indicator"></span>
-          <span>STRANDS AGENTS SDK 1.52.0</span>
-          <span>•</span>
-          <span>AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5)</span>
-          <span>•</span>
-          <span>RAG HYBRID VECTOR SEARCH</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginLeft: '1rem' }}>
-          <span style={{ color: '#22C55E' }}>● LIVE SYSTEM HEALTH: NORMAL</span>
-          <span>PORT 8000</span>
+      {/* Running Marquee Banner — Single-line right-to-left continuous scroll on all devices */}
+      <div className="ticker-marquee-container">
+        <div className="ticker-marquee-track font-mono" style={{ fontSize: '0.72rem', letterSpacing: '0.04em' }}>
+          <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
         </div>
       </div>
 
@@ -65,7 +51,7 @@ export default function Header() {
         justifyContent: 'space-between',
         gap: '1rem'
       }}>
-        {/* Brand Logo & Wordmark (Visible on All Devices) */}
+        {/* Brand Logo: ONLY 'GRANTSCOUT' on mobile; full title on desktop */}
         <Link to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{
             background: 'var(--ink)',
@@ -82,16 +68,16 @@ export default function Header() {
             <Compass size={22} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="font-heading" style={{ fontSize: '1.95rem', lineHeight: '1', color: 'var(--ink)' }}>
+            <h1 className="font-heading" style={{ fontSize: '2rem', lineHeight: '1', color: 'var(--ink)' }}>
               GRANTSCOUT
             </h1>
-            <p style={{ fontSize: '0.65rem', color: 'var(--ink-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>
+            <p className="desktop-only" style={{ fontSize: '0.65rem', color: 'var(--ink-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>
               AUTONOMOUS GRANT INTELLIGENCE & PROPOSAL PRE-FILL
             </p>
           </div>
         </Link>
 
-        {/* Desktop Navigation Links — Desktop Only */}
+        {/* Desktop Navigation Links — Hidden on Mobile */}
         <nav className="nav-container desktop-only">
           {navItems.map((item) => (
             <NavLink
@@ -117,7 +103,7 @@ export default function Header() {
           ))}
         </nav>
 
-        {/* Desktop Action Button — Desktop Only */}
+        {/* Desktop Action Button — Hidden on Mobile */}
         <button
           onClick={runScanCycle}
           disabled={isScanning}
@@ -137,13 +123,13 @@ export default function Header() {
           )}
         </button>
 
-        {/* Mobile Hamburger Toggle Button — Mobile Only */}
+        {/* Mobile Hamburger Toggle Button — Hidden on Desktop */}
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="mobile-only brutalist-btn btn-outline"
           aria-label="Toggle navigation menu"
           style={{
-            padding: '0.5rem 0.65rem',
+            padding: '0.45rem 0.6rem',
             background: mobileMenuOpen ? 'var(--ink)' : 'var(--card-bg)',
             color: mobileMenuOpen ? 'var(--canvas-bg)' : 'var(--ink)'
           }}
@@ -161,32 +147,10 @@ export default function Header() {
           padding: '1.25rem 1.5rem',
           display: 'flex',
           flexDirection: 'column',
-          gap: '1.25rem',
-          boxShadow: '0 8px 16px rgba(0,0,0,0.1)'
+          gap: '1rem',
+          boxShadow: '0 8px 20px rgba(0,0,0,0.12)'
         }}>
-          {/* System & Telemetry Block inside Hamburger */}
-          <div style={{
-            background: 'var(--ink)',
-            color: 'var(--canvas-bg)',
-            padding: '0.85rem 1rem',
-            border: '2px solid var(--border-dark)',
-            fontSize: '0.72rem',
-            fontFamily: 'var(--font-mono)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.4rem'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span className="live-indicator"></span>
-              <span style={{ color: '#22C55E', fontWeight: 700 }}>● LIVE SYSTEM HEALTH: NORMAL</span>
-              <span style={{ marginLeft: 'auto' }}>PORT 8000</span>
-            </div>
-            <div style={{ color: '#D1D5DB', fontSize: '0.68rem', lineHeight: '1.4' }}>
-              STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH
-            </div>
-          </div>
-
-          {/* Navigation Links inside Hamburger */}
+          {/* Navigation Links inside Mobile Drawer */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {navItems.map((item) => (
               <NavLink
@@ -213,7 +177,7 @@ export default function Header() {
             ))}
           </nav>
 
-          {/* Action Button inside Hamburger */}
+          {/* Action Button inside Mobile Drawer */}
           <button
             onClick={() => {
               runScanCycle();
