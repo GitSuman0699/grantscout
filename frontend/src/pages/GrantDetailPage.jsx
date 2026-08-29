@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Download, Copy, Check, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 
 export default function GrantDetailPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { getGrantById } = useGrants();
   
   const grant = getGrantById(id);
@@ -92,14 +91,14 @@ export default function GrantDetailPage() {
   return (
     <div className="page-container">
       {/* Top Breadcrumb Bar */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <Link to="/" className="brutalist-btn btn-outline" style={{ padding: '0.4rem 0.9rem', fontSize: '0.9rem' }}>
+      <div style={{ marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <Link to="/" className="brutalist-btn btn-outline" style={{ padding: '0.4rem 0.85rem', fontSize: '0.9rem' }}>
           <ArrowLeft size={16} /> BACK TO PIPELINE
         </Link>
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="workstation-action-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button onClick={handleExportMarkdown} className="brutalist-btn btn-amber" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
-            <Download size={16} /> EXPORT MARKDOWN (.MD)
+            <Download size={16} /> EXPORT .MD
           </button>
           <button onClick={handleCopy} className="brutalist-btn btn-outline" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
             {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'COPIED' : 'COPY ALL'}
@@ -107,20 +106,20 @@ export default function GrantDetailPage() {
         </div>
       </div>
 
-      {/* Grant Overview Card */}
-      <div className="brutalist-card" style={{ padding: '1.5rem 2rem', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+      {/* Grant Overview Header Card */}
+      <div className="brutalist-card workstation-header-card" style={{ padding: '1.5rem 2rem', marginBottom: '1.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
           <span className="tag-badge tag-amber">AUTONOMOUS DRAFT READY</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--ink-muted)' }}>
-            {grant.agency || 'Federal Agency'} • OPPORTUNITY ID: {grant.grant_id || grant.id}
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
+            {grant.agency || 'Federal Agency'} • ID: {grant.grant_id || grant.id}
           </span>
         </div>
 
-        <h1 className="font-heading" style={{ fontSize: '2.5rem', lineHeight: '1.05', color: 'var(--ink)', marginBottom: '0.75rem' }}>
+        <h1 className="font-heading workstation-title" style={{ fontSize: '2.5rem', lineHeight: '1.05', color: 'var(--ink)', marginBottom: '0.65rem' }}>
           {grant.title}
         </h1>
 
-        <p style={{ color: 'var(--ink-muted)', fontSize: '0.95rem', lineHeight: '1.5', maxWidth: '960px' }}>
+        <p style={{ color: 'var(--ink-muted)', fontSize: '0.9rem', lineHeight: '1.45', maxWidth: '960px' }}>
           {grant.synopsis || 'Pre-filled autonomous proposal package structured across 6 required federal sections with Pydantic schema enforcement and RAG verification.'}
         </p>
       </div>
@@ -128,27 +127,27 @@ export default function GrantDetailPage() {
       {/* Workstation 2-Column Responsive Layout */}
       <div className="workstation-container">
         {/* Left Column: 5-Dimension Rubric & RAG Knowledge */}
-        <div className="brutalist-card" style={{ padding: '1.5rem' }}>
+        <div className="brutalist-card" style={{ padding: '1.25rem' }}>
           {/* Fit Score Header */}
           <div style={{
             background: 'var(--card-alt-bg)',
             border: '2px solid var(--border-dark)',
-            padding: '1rem',
-            marginBottom: '1.5rem'
+            padding: '0.85rem 1rem',
+            marginBottom: '1.25rem'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-              <span className="font-heading" style={{ fontSize: '1.3rem' }}>FIT SCORE OVERVIEW</span>
-              <span className="tag-badge tag-amber" style={{ fontSize: '0.9rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <span className="font-heading" style={{ fontSize: '1.25rem' }}>FIT SCORE OVERVIEW</span>
+              <span className="tag-badge tag-amber" style={{ fontSize: '0.85rem' }}>
                 {score.total} / 100 • AUTO-DRAFT
               </span>
             </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--ink-muted)', lineHeight: '1.4' }}>
+            <p style={{ fontSize: '0.78rem', color: 'var(--ink-muted)', lineHeight: '1.35' }}>
               Evaluated against Youth Education Alliance mission profile and 990 financial filings.
             </p>
           </div>
 
           {/* 5-Dimension Progress Breakdown */}
-          <h4 className="font-heading" style={{ fontSize: '1.15rem', marginBottom: '0.75rem', color: 'var(--ink)' }}>
+          <h4 className="font-heading" style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--ink)' }}>
             5-DIMENSION RUBRIC BREAKDOWN
           </h4>
 
@@ -159,38 +158,38 @@ export default function GrantDetailPage() {
             { label: 'Geographic Fit', score: score.geographic_fit || 14, max: 15, note: 'National & regional urban hubs' },
             { label: 'Past Track Record', score: score.track_record || 10, max: 10, note: 'Prior $25k NSF grant successfully closed' }
           ].map((dim, idx) => (
-            <div key={idx} style={{ marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+            <div key={idx} style={{ marginBottom: '0.85rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.2rem' }}>
                 <span>{dim.label}</span>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>{dim.score} / {dim.max}</span>
               </div>
-              <div style={{ height: '8px', background: '#E4E4E7', border: '1px solid var(--border-dark)' }}>
+              <div style={{ height: '7px', background: '#E4E4E7', border: '1px solid var(--border-dark)' }}>
                 <div style={{
                   height: '100%',
                   width: `${(dim.score / dim.max) * 100}%`,
                   backgroundColor: dim.score / dim.max >= 0.8 ? 'var(--amber-signal)' : 'var(--ink)'
                 }} />
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--ink-muted)', marginTop: '0.2rem' }}>
+              <div style={{ fontSize: '0.7rem', color: 'var(--ink-muted)', marginTop: '0.15rem' }}>
                 {dim.note}
               </div>
             </div>
           ))}
 
-          <hr className="dashed-divider" />
+          <hr className="dashed-divider" style={{ margin: '0.85rem 0' }} />
 
           {/* Cited Knowledge Sources */}
           <div style={{
             background: 'var(--canvas-bg)',
             border: '1px solid var(--border-dark)',
-            padding: '1rem',
-            fontSize: '0.78rem'
+            padding: '0.85rem 1rem',
+            fontSize: '0.75rem'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-              <BookOpen size={16} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, marginBottom: '0.4rem' }}>
+              <BookOpen size={15} />
               <span>CITED RAG KNOWLEDGE SOURCES</span>
             </div>
-            <ul style={{ paddingLeft: '1.2rem', color: 'var(--ink-muted)', lineHeight: '1.5' }}>
+            <ul style={{ paddingLeft: '1.1rem', color: 'var(--ink-muted)', lineHeight: '1.45' }}>
               <li><strong>IRS Form 990 (2024)</strong>: 88.7% program expense ratio, $450K annual budget.</li>
               <li><strong>2025 Impact Report</strong>: 85% math improvement rate across 1,200 students.</li>
               <li><strong>NSF Award Archive</strong>: Grant #NSF-EDU-2023-4412 ($25K).</li>
@@ -200,10 +199,11 @@ export default function GrantDetailPage() {
 
         {/* Right Column: 6-Section Document Editor */}
         <div className="brutalist-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Section Tabs Strip */}
+          {/* Section Tabs Strip (Horizontal Scroll on Mobile) */}
           <div style={{
             display: 'flex',
             overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
             borderBottom: '2px solid var(--border-dark)',
             backgroundColor: 'var(--card-alt-bg)',
             whiteSpace: 'nowrap'
@@ -216,8 +216,8 @@ export default function GrantDetailPage() {
                   onClick={() => setActiveSectionIdx(idx)}
                   className="font-heading"
                   style={{
-                    padding: '0.85rem 1.25rem',
-                    fontSize: '1rem',
+                    padding: '0.75rem 1rem',
+                    fontSize: '0.92rem',
                     whiteSpace: 'nowrap',
                     borderRight: '1px solid var(--border-dashed)',
                     borderTop: 'none',
@@ -235,9 +235,9 @@ export default function GrantDetailPage() {
           </div>
 
           {/* Active Section Content */}
-          <div style={{ padding: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <h3 className="font-heading" style={{ fontSize: '1.75rem', color: 'var(--ink)' }}>
+          <div className="workstation-editor-pane" style={{ padding: '1.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <h3 className="font-heading" style={{ fontSize: '1.5rem', color: 'var(--ink)' }}>
                 {sections[activeSectionIdx].title}
               </h3>
               <span className="tag-badge tag-dark">
@@ -251,9 +251,9 @@ export default function GrantDetailPage() {
               style={{
                 width: '100%',
                 minHeight: '260px',
-                padding: '1.25rem',
-                fontSize: '0.95rem',
-                lineHeight: '1.65',
+                padding: '1rem',
+                fontSize: '0.9rem',
+                lineHeight: '1.6',
                 fontFamily: 'var(--font-body)',
                 color: 'var(--ink)',
                 backgroundColor: 'var(--canvas-bg)',
@@ -265,20 +265,20 @@ export default function GrantDetailPage() {
 
             {/* Human Action Items Box */}
             <div style={{
-              marginTop: '1.5rem',
+              marginTop: '1.25rem',
               backgroundColor: 'var(--card-alt-bg)',
               border: '2px solid var(--border-dark)',
-              padding: '1rem 1.25rem',
+              padding: '0.85rem 1rem',
               display: 'flex',
               alignItems: 'flex-start',
-              gap: '0.75rem'
+              gap: '0.65rem'
             }}>
-              <AlertTriangle size={20} color="var(--amber-signal)" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <AlertTriangle size={18} color="var(--amber-signal)" style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase' }}>
                   HUMAN REVIEW ACTION ITEMS REQUIRED (2):
                 </div>
-                <ul style={{ fontSize: '0.82rem', color: 'var(--ink-muted)', marginTop: '0.25rem', paddingLeft: '1.2rem' }}>
+                <ul style={{ fontSize: '0.78rem', color: 'var(--ink-muted)', marginTop: '0.2rem', paddingLeft: '1.1rem', lineHeight: '1.4' }}>
                   <li>Attach official 501(c)(3) IRS Determination Letter and Board Resolution signature.</li>
                   <li>Confirm Q3 milestone dates against the final agency calendar before final submission.</li>
                 </ul>

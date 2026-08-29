@@ -457,6 +457,32 @@ body {
   .search-form-container button {
     width: 100%;
   }
+
+  /* Workstation & Draft Editor Mobile Styles */
+  .workstation-header-card {
+    padding: 1rem 1.25rem !important;
+  }
+
+  .workstation-title {
+    font-size: 1.85rem !important;
+  }
+
+  .workstation-editor-pane {
+    padding: 1.25rem 1rem !important;
+  }
+
+  .workstation-action-bar {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .workstation-action-bar button, .workstation-action-bar a {
+    width: 100%;
+    padding: 0.5rem 0.65rem !important;
+    font-size: 0.85rem !important;
+  }
 }
 
 /* Custom Scrollbars */
