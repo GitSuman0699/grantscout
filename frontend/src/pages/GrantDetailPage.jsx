@@ -1,15 +1,27 @@
 import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Download, Copy, Check, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 
 export default function GrantDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
   const { getGrantById } = useGrants();
   
   const grant = getGrantById(id);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  // Determine dynamic origin path and back button label
+  const fromPath = location.state?.from || '/pipeline';
+  
+  const getBackLabel = (path) => {
+    if (path === '/drafts') return 'BACK TO APPLICATION DRAFTS';
+    if (path === '/') return 'BACK TO HOME';
+    return 'BACK TO PIPELINE';
+  };
+
+  const backLabel = getBackLabel(fromPath);
 
   if (!grant) {
     return (
@@ -20,8 +32,8 @@ export default function GrantDetailPage() {
         <p style={{ color: 'var(--ink-muted)', marginBottom: '1.5rem' }}>
           The requested federal opportunity could not be located in the local cache.
         </p>
-        <Link to="/" className="brutalist-btn btn-primary">
-          <ArrowLeft size={18} /> BACK TO PIPELINE
+        <Link to={fromPath} className="brutalist-btn btn-primary">
+          <ArrowLeft size={18} /> {backLabel}
         </Link>
       </div>
     );
@@ -90,10 +102,10 @@ export default function GrantDetailPage() {
 
   return (
     <div className="page-container">
-      {/* Top Breadcrumb Bar */}
+      {/* Top Dynamic Breadcrumb Bar */}
       <div style={{ marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <Link to="/" className="brutalist-btn btn-outline" style={{ padding: '0.4rem 0.85rem', fontSize: '0.9rem' }}>
-          <ArrowLeft size={16} /> BACK TO PIPELINE
+        <Link to={fromPath} className="brutalist-btn btn-outline" style={{ padding: '0.4rem 0.85rem', fontSize: '0.9rem' }}>
+          <ArrowLeft size={16} /> {backLabel}
         </Link>
 
         <div className="workstation-action-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

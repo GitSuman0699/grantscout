@@ -1,8 +1,9 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Building2, Sparkles, ChevronRight } from 'lucide-react';
 
 export default function GrantCard({ grant }) {
+  const location = useLocation();
   const isHighFit = grant.match_score?.total >= 80;
   const isReview = grant.match_score?.total >= 50 && grant.match_score?.total < 80;
   
@@ -12,6 +13,7 @@ export default function GrantCard({ grant }) {
     : 'Funding Varies';
 
   const grantUrl = `/grants/${grant.id || grant.grant_id}`;
+  const navigationState = { from: location.pathname };
 
   return (
     <div
@@ -58,7 +60,7 @@ export default function GrantCard({ grant }) {
         </div>
 
         {/* Title */}
-        <Link to={grantUrl} style={{ textDecoration: 'none', color: 'inherit' }}>
+        <Link to={grantUrl} state={navigationState} style={{ textDecoration: 'none', color: 'inherit' }}>
           <h3
             className="font-heading"
             style={{
@@ -108,10 +110,11 @@ export default function GrantCard({ grant }) {
           </div>
         </div>
 
-        {/* Action Button Row with Page Navigation */}
+        {/* Action Button Row with Page Navigation & Origin Tracking */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <Link
             to={grantUrl}
+            state={navigationState}
             className="brutalist-btn btn-outline"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
@@ -120,6 +123,7 @@ export default function GrantCard({ grant }) {
           
           <Link
             to={grantUrl}
+            state={navigationState}
             className="brutalist-btn btn-primary"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
