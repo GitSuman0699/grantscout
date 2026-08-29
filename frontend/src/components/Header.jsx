@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Compass, Zap, Activity, Menu, X, ChevronRight } from 'lucide-react';
+import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 
 export default function Header() {
@@ -21,7 +21,7 @@ export default function Header() {
     { to: '/optimization', label: 'COST OPTIMIZATION' }
   ];
 
-  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH • ● LIVE SYSTEM HEALTH: NORMAL (PORT 8000) • ";
+  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH • 5-DIMENSION RUBRIC SCORING • ZERO HALLUCINATION FORM 990 FACTS • GRANTS.GOV REST API • ";
 
   return (
     <header style={{
@@ -32,13 +32,51 @@ export default function Header() {
       zIndex: 50,
       width: '100%'
     }}>
-      {/* Running Marquee Banner — Single-line continuous right-to-left marquee on all devices */}
-      <div className="ticker-marquee-container">
-        <div className="ticker-marquee-track font-mono" style={{ fontSize: '0.72rem', letterSpacing: '0.04em' }}>
+      {/* Top Banner Ticker with Fixed Live Health Badge on Right */}
+      <div className="ticker-marquee-container" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        {/* Scrolling Track (Slides underneath the fixed badge) */}
+        <div className="ticker-marquee-track font-mono" style={{ fontSize: '0.7rem', letterSpacing: '0.04em', zIndex: 1 }}>
           <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
           <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
           <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
           <span>{tickerText}&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        </div>
+
+        {/* Fixed Right Live Health Status Badge */}
+        <div style={{
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          zIndex: 10,
+          background: 'linear-gradient(to right, rgba(24, 24, 27, 0) 0%, rgba(24, 24, 27, 0.95) 24%, rgba(24, 24, 27, 1) 100%)',
+          paddingLeft: '2.5rem',
+          paddingRight: '1rem'
+        }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.45rem',
+            background: 'rgba(34, 197, 94, 0.12)',
+            border: '1px solid rgba(34, 197, 94, 0.45)',
+            boxShadow: '0 0 10px rgba(34, 197, 94, 0.2)',
+            padding: '0.2rem 0.65rem',
+            borderRadius: '2px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            whiteSpace: 'nowrap'
+          }}>
+            <span className="live-indicator" style={{ width: '6px', height: '6px' }}></span>
+            <span style={{ color: '#22C55E', letterSpacing: '0.05em' }}>
+              LIVE SYSTEM HEALTH: NORMAL
+            </span>
+            <span style={{ color: '#A1A1AA', fontSize: '0.62rem', fontWeight: 600 }}>
+              (PORT 8000)
+            </span>
+          </div>
         </div>
       </div>
 
