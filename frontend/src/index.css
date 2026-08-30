@@ -240,38 +240,46 @@ body {
   gap: 1.75rem;
 }
 
-/* Workstation 2-Column Split View */
-.workstation-container {
+/* Workstation Layout Modes */
+.workstation-container.layout-split {
   display: grid;
   grid-template-columns: 440px 1fr;
   gap: 1.75rem;
   align-items: start;
 }
 
+.workstation-container.layout-single {
+  display: block;
+  width: 100%;
+}
+
 .workstation-view-toggle {
-  display: none;
+  display: flex;
   gap: 0.4rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
   background: var(--card-alt-bg);
-  padding: 0.3rem;
+  padding: 0.35rem;
   border: 2px solid var(--border-dark);
   box-shadow: 3px 3px 0px var(--border-dark);
+  flex-wrap: wrap;
 }
 
 .workstation-tab-btn {
   flex: 1;
+  min-width: 200px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  padding: 0.6rem 0.85rem;
+  padding: 0.65rem 1rem;
   font-family: var(--font-heading);
-  font-size: 1rem;
+  font-size: 1.05rem;
   background: transparent;
   color: var(--ink-muted);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .workstation-tab-btn.active {
@@ -283,12 +291,9 @@ body {
 }
 
 @media (max-width: 1024px) {
-  .workstation-view-toggle {
-    display: flex;
-  }
-
-  .workstation-column.hidden-mobile {
-    display: none !important;
+  .workstation-container.layout-split {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 }
 

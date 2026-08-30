@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Download, Copy, Check, Sparkles, Target, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, Copy, Check, Sparkles, Target, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, Loader2, Columns, ArrowRight } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft } from '../services/api';
 
@@ -19,20 +19,17 @@ export default function GrantDetailPage() {
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  // Read view parameter ('rubric' | 'draft')
+  // View state: 'rubric' | 'draft' | 'split'
   const initialView = searchParams.get('view') || location.state?.view || 'rubric';
-  const [activeViewTab, setActiveViewTab] = useState(initialView);
+  const [activeViewMode, setActiveViewMode] = useState(initialView);
 
-  const draftPaneRef = useRef(null);
-  const rubricPaneRef = useRef(null);
-
-  // Sync tab with URL search parameter if changed
+  // Sync state if URL query param changes
   useEffect(() => {
-    const viewParam = searchParams.get('view') || location.state?.view;
-    if (viewParam && (viewParam === 'rubric' || viewParam === 'draft')) {
-      setActiveViewTab(viewParam);
+    const viewParam = searchParams.get('view');
+    if (viewParam && ['rubric', 'draft', 'split'].includes(viewParam)) {
+      setActiveViewMode(viewParam);
     }
-  }, [searchParams, location.state]);
+  }, [searchParams]);
 
   // Determine dynamic origin path and back button label
   const fromPath = location.state?.from || '/pipeline';
@@ -46,12 +43,16 @@ export default function GrantDetailPage() {
   const backLabel = getBackLabel(fromPath);
 
   const handleBackNavigation = () => {
-    // If we have history within the app, use back navigation to maintain scroll position
     if (window.history.state && window.history.state.idx > 0) {
       navigate(-1);
     } else {
       navigate(fromPath);
     }
+  };
+
+  const switchView = (mode) => {
+    setActiveViewMode(mode);
+    setSearchParams({ view: mode });
   };
 
   // Fetch drafted application for this grant from API
@@ -150,11 +151,264 @@ export default function GrantDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // ─────────────────────────────────────────────
+  //  Rubric Component (Left / Standalone)
+  // ─────────────────────────────────────────────
+  const renderRubricPanel = (isFullWidth = false) => (
+    <div className="brutalist-card" style={{ padding: isFullWidth ? '2rem' : '1.25rem' }}>
+      {/* Fit Score Header */}
+      <div style={{
+        background: 'var(--card-alt-bg)',
+        border: '2px solid var(--border-dark)',
+        padding: isFullWidth ? '1.25rem 1.5rem' : '0.85rem 1rem',
+        marginBottom: '1.5rem'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+          <span className="font-heading" style={{ fontSize: isFullWidth ? '1.6rem' : '1.25rem' }}>
+            5-DIMENSION FIT SCORE OVERVIEW
+          </span>
+          <span className={`tag-badge ${score.total >= 80 ? 'tag-amber' : 'tag-neutral'}`} style={{ fontSize: '0.95rem', padding: '0.35rem 0.75rem' }}>
+            {score.total} / 100 {score.total >= 80 ? '• AUTO-DRAFT READY' : ''}
+          </span>
+        </div>
+        <p style={{ fontSize: '0.85rem', color: 'var(--ink-muted)', lineHeight: '1.4' }}>
+          Autonomous scoring calculated by the Matcher Agent against Youth Education Alliance organization profile, financial ratios, and RAG-indexed documents.
+        </p>
+      </div>
+
+      {/* 5-Dimension Progress Breakdown */}
+      <h3 className="font-heading" style={{ fontSize: isFullWidth ? '1.4rem' : '1.1rem', marginBottom: '1rem', color: 'var(--ink)' }}>
+        5-DIMENSION RUBRIC BREAKDOWN
+      </h3>
+
+      <div style={{ display: isFullWidth ? 'grid' : 'block', gridTemplateColumns: isFullWidth ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
+        {[
+          { label: 'Mission Alignment', score: score.mission_alignment || 0, max: 30, desc: 'Alignment with nonprofit focus areas, keywords, and programmatic priorities.' },
+          { label: 'Eligibility Fit', score: score.eligibility_fit || 0, max: 25, desc: '501(c)(3) active status, SAM.gov registration, and applicant type constraints.' },
+          { label: 'Capacity Match', score: score.capacity_match || 0, max: 20, desc: 'Award ceiling alignment with $450K operating budget and 14 instructional staff.' },
+          { label: 'Geographic Fit', score: score.geographic_fit || 0, max: 15, desc: 'Target geography, municipal service area, and designated Title I district fit.' },
+          { label: 'Past Track Record', score: score.track_record || 0, max: 10, desc: 'Prior federal award close-out compliance and historical execution benchmarks.' }
+        ].map((dim, idx) => (
+          <div key={idx} style={{ marginBottom: isFullWidth ? '0' : '0.85rem', background: isFullWidth ? 'var(--card-alt-bg)' : 'transparent', padding: isFullWidth ? '1rem' : '0', border: isFullWidth ? '1px solid var(--border-dark)' : 'none' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+              <span>{dim.label}</span>
+              <span style={{ fontFamily: 'var(--font-mono)' }}>{dim.score} / {dim.max}</span>
+            </div>
+            <div style={{ height: '8px', background: '#E4E4E7', border: '1px solid var(--border-dark)', marginBottom: '0.35rem' }}>
+              <div style={{
+                height: '100%',
+                width: `${dim.max > 0 ? (dim.score / dim.max) * 100 : 0}%`,
+                backgroundColor: (dim.score / (dim.max || 1)) >= 0.8 ? 'var(--amber-signal)' : 'var(--ink)'
+              }} />
+            </div>
+            {isFullWidth && (
+              <div style={{ fontSize: '0.72rem', color: 'var(--ink-muted)', lineHeight: '1.3' }}>
+                {dim.desc}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Key Strengths & Alignment */}
+      {grant.key_strengths && grant.key_strengths.length > 0 && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <hr className="dashed-divider" style={{ margin: '1rem 0' }} />
+          <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '0.5rem', textTransform: 'uppercase', color: 'var(--ink)' }}>
+            ✅ Key Alignment Strengths:
+          </div>
+          <ul style={{ paddingLeft: '1.2rem', color: 'var(--ink)', lineHeight: '1.6', fontSize: '0.85rem' }}>
+            {grant.key_strengths.map((s, idx) => (
+              <li key={idx} style={{ marginBottom: '0.35rem' }}>{s}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Potential Risks */}
+      {grant.potential_risks && grant.potential_risks.length > 0 && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <hr className="dashed-divider" style={{ margin: '1rem 0' }} />
+          <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: '0.5rem', textTransform: 'uppercase', color: 'var(--amber-signal)' }}>
+            ⚠️ Potential Considerations & Compliance Notes:
+          </div>
+          <ul style={{ paddingLeft: '1.2rem', color: 'var(--ink-muted)', lineHeight: '1.6', fontSize: '0.85rem' }}>
+            {grant.potential_risks.map((r, idx) => (
+              <li key={idx} style={{ marginBottom: '0.35rem' }}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* CTA to proceed to draft workstation if in Rubric View */}
+      {activeViewMode === 'rubric' && (
+        <div style={{
+          marginTop: '2rem',
+          padding: '1.25rem',
+          background: 'var(--card-alt-bg)',
+          border: '2px solid var(--border-dark)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '1rem'
+        }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>READY TO PRE-FILL APPLICATION?</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--ink-muted)' }}>
+              Open the 6-section proposal draft workstation grounded with RAG facts.
+            </div>
+          </div>
+          <button
+            onClick={() => switchView('draft')}
+            className="brutalist-btn btn-primary"
+            style={{ padding: '0.65rem 1.4rem', fontSize: '0.95rem' }}
+          >
+            <Sparkles size={16} /> OPEN PROPOSAL WORKSTATION <ArrowRight size={16} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // ─────────────────────────────────────────────
+  //  Proposal Draft Workstation Component
+  // ─────────────────────────────────────────────
+  const renderDraftWorkstation = (isFullWidth = false) => (
+    <div className="brutalist-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {loadingDraft ? (
+        <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--ink-muted)' }}>
+          <Loader2 className="animate-spin" size={32} style={{ margin: '0 auto 1rem' }} />
+          <div className="font-heading" style={{ fontSize: '1.4rem' }}>LOADING APPLICATION DRAFT...</div>
+        </div>
+      ) : sections.length > 0 ? (
+        <>
+          {/* Section Tabs Strip */}
+          <div style={{
+            display: 'flex',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            borderBottom: '2px solid var(--border-dark)',
+            backgroundColor: 'var(--card-alt-bg)',
+            whiteSpace: 'nowrap'
+          }}>
+            {sections.map((s, idx) => {
+              const isActive = activeSectionIdx === idx;
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setActiveSectionIdx(idx)}
+                  className="font-heading"
+                  style={{
+                    padding: '0.85rem 1.15rem',
+                    fontSize: '0.95rem',
+                    whiteSpace: 'nowrap',
+                    borderRight: '1px solid var(--border-dashed)',
+                    borderTop: 'none',
+                    borderLeft: 'none',
+                    borderBottom: isActive ? '3px solid var(--amber-signal)' : 'none',
+                    backgroundColor: isActive ? '#FFFFFF' : 'transparent',
+                    color: isActive ? 'var(--amber-signal)' : 'var(--ink)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {s.title}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Active Section Content */}
+          {sections[activeSectionIdx] && (
+            <div className="workstation-editor-pane" style={{ padding: isFullWidth ? '2rem' : '1.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div>
+                  <span className="tag-badge tag-green" style={{ marginBottom: '0.35rem', display: 'inline-block' }}>
+                    {sections[activeSectionIdx].is_auto_filled ? 'AI AUTONOMOUSLY PRE-FILLED' : 'PYDANTIC SCHEMA VALIDATED'}
+                  </span>
+                  <h3 className="font-heading" style={{ fontSize: isFullWidth ? '1.8rem' : '1.5rem', color: 'var(--ink)', lineHeight: '1.1' }}>
+                    {sections[activeSectionIdx].title}
+                  </h3>
+                </div>
+
+                <span className="tag-badge tag-dark" style={{ fontSize: '0.78rem' }}>
+                  {sections[activeSectionIdx].word_count || sections[activeSectionIdx].content?.split(/\s+/).filter(Boolean).length || 0} WORDS
+                </span>
+              </div>
+
+              <textarea
+                value={sections[activeSectionIdx].content}
+                readOnly
+                style={{
+                  width: '100%',
+                  minHeight: isFullWidth ? '380px' : '280px',
+                  padding: '1.25rem',
+                  fontSize: '0.92rem',
+                  lineHeight: '1.65',
+                  fontFamily: 'var(--font-body)',
+                  color: 'var(--ink)',
+                  backgroundColor: 'var(--canvas-bg)',
+                  border: '2px solid var(--border-dark)',
+                  boxShadow: '3px 3px 0px var(--border-dark)',
+                  resize: 'vertical'
+                }}
+              />
+
+              {/* Bottom Quick Context */}
+              {activeViewMode === 'draft' && (
+                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <button
+                    onClick={() => switchView('rubric')}
+                    className="brutalist-btn btn-outline"
+                    style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                  >
+                    <Target size={15} /> ← VIEW 5-DIMENSION MATCHING RUBRIC
+                  </button>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
+                    Section {activeSectionIdx + 1} of {sections.length} • Formatted with RAG citations
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        /* No draft yet: Trigger Drafting Action */
+        <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+          <Sparkles size={40} color="var(--amber-signal)" style={{ margin: '0 auto 1.25rem' }} />
+          <h3 className="font-heading" style={{ fontSize: '2rem', color: 'var(--ink)', marginBottom: '0.5rem' }}>
+            AUTONOMOUS PROPOSAL DRAFTER
+          </h3>
+          <p style={{ color: 'var(--ink-muted)', fontSize: '0.95rem', maxWidth: '520px', margin: '0 auto 1.75rem', lineHeight: '1.55' }}>
+            Generate a complete 6-section proposal draft pre-populated with Youth Education Alliance organizational facts, budget calculations, and RAG-verified citations.
+          </p>
+
+          {draftError && (
+            <div className="brutalist-card" style={{ padding: '0.85rem 1.25rem', marginBottom: '1.5rem', borderLeft: '4px solid #EF4444', maxWidth: '520px', margin: '0 auto 1.5rem' }}>
+              <div style={{ fontSize: '0.85rem', color: '#EF4444' }}>
+                {draftError}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleGenerateDraft}
+            disabled={isDrafting}
+            className="brutalist-btn btn-primary"
+            style={{ padding: '0.85rem 2rem', fontSize: '1.05rem' }}
+          >
+            {isDrafting ? 'GENERATING PROPOSAL DRAFT...' : 'GENERATE APPLICATION DRAFT'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="page-container">
-      {/* Top Dynamic Breadcrumb Bar */}
+      {/* Top Navigation & Action Toolbar */}
       <div style={{ marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <button onClick={handleBackNavigation} className="brutalist-btn btn-outline" style={{ padding: '0.4rem 0.85rem', fontSize: '0.9rem', cursor: 'pointer' }}>
+        <button onClick={handleBackNavigation} className="brutalist-btn btn-outline" style={{ padding: '0.45rem 0.95rem', fontSize: '0.9rem', cursor: 'pointer' }}>
           <ArrowLeft size={16} /> {backLabel}
         </button>
 
@@ -171,7 +425,7 @@ export default function GrantDetailPage() {
       </div>
 
       {/* Grant Overview Header Card */}
-      <div className="brutalist-card workstation-header-card" style={{ padding: '1.5rem 2rem', marginBottom: '1.75rem' }}>
+      <div className="brutalist-card workstation-header-card" style={{ padding: '1.5rem 2rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
           <span className={`tag-badge ${score.total >= 80 ? 'tag-amber' : 'tag-neutral'}`}>
             {score.total >= 80 ? 'HIGH FIT OPPORTUNITY' : 'OPPORTUNITY'}
@@ -203,227 +457,44 @@ export default function GrantDetailPage() {
         )}
       </div>
 
-      {/* Mobile/Tablet Workstation View Switcher Tabs */}
+      {/* Top Workstation View Mode Switcher */}
       <div className="workstation-view-toggle">
         <button
-          onClick={() => {
-            setActiveViewTab('rubric');
-            setSearchParams({ view: 'rubric' });
-          }}
-          className={`workstation-tab-btn ${activeViewTab === 'rubric' ? 'active' : ''}`}
+          onClick={() => switchView('rubric')}
+          className={`workstation-tab-btn ${activeViewMode === 'rubric' ? 'active' : ''}`}
         >
-          <Target size={16} /> 5-DIMENSION RUBRIC
+          <Target size={16} /> 5-DIMENSION RUBRIC ({score.total}/100)
         </button>
         <button
-          onClick={() => {
-            setActiveViewTab('draft');
-            setSearchParams({ view: 'draft' });
-          }}
-          className={`workstation-tab-btn ${activeViewTab === 'draft' ? 'active' : ''}`}
+          onClick={() => switchView('draft')}
+          className={`workstation-tab-btn ${activeViewMode === 'draft' ? 'active' : ''}`}
         >
-          <Sparkles size={16} /> PROPOSAL WORKSTATION {sections.length > 0 ? `(${sections.length})` : ''}
+          <Sparkles size={16} /> PROPOSAL WORKSTATION {sections.length > 0 ? `(${sections.length} SECTIONS)` : ''}
+        </button>
+        <button
+          onClick={() => switchView('split')}
+          className={`workstation-tab-btn ${activeViewMode === 'split' ? 'active' : ''}`}
+        >
+          <Columns size={16} /> SPLIT VIEW
         </button>
       </div>
 
-      {/* Workstation 2-Column Responsive Layout */}
-      <div className="workstation-container">
-        {/* Left Column: 5-Dimension Rubric & Strengths */}
-        <div
-          ref={rubricPaneRef}
-          className={`brutalist-card workstation-column ${activeViewTab !== 'rubric' ? 'hidden-mobile' : ''}`}
-          style={{ padding: '1.25rem' }}
-        >
-          {/* Fit Score Header */}
-          <div style={{
-            background: 'var(--card-alt-bg)',
-            border: '2px solid var(--border-dark)',
-            padding: '0.85rem 1rem',
-            marginBottom: '1.25rem'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-              <span className="font-heading" style={{ fontSize: '1.25rem' }}>FIT SCORE OVERVIEW</span>
-              <span className={`tag-badge ${score.total >= 80 ? 'tag-amber' : 'tag-neutral'}`} style={{ fontSize: '0.85rem' }}>
-                {score.total} / 100 {score.total >= 80 ? '• AUTO-DRAFT' : ''}
-              </span>
-            </div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--ink-muted)', lineHeight: '1.35' }}>
-              Evaluated against organization profile and RAG-indexed filings.
-            </p>
-          </div>
-
-          {/* 5-Dimension Progress Breakdown */}
-          <h4 className="font-heading" style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: 'var(--ink)' }}>
-            5-DIMENSION RUBRIC BREAKDOWN
-          </h4>
-
-          {[
-            { label: 'Mission Alignment', score: score.mission_alignment || 0, max: 30 },
-            { label: 'Eligibility Fit', score: score.eligibility_fit || 0, max: 25 },
-            { label: 'Capacity Match', score: score.capacity_match || 0, max: 20 },
-            { label: 'Geographic Fit', score: score.geographic_fit || 0, max: 15 },
-            { label: 'Past Track Record', score: score.track_record || 0, max: 10 }
-          ].map((dim, idx) => (
-            <div key={idx} style={{ marginBottom: '0.85rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.2rem' }}>
-                <span>{dim.label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{dim.score} / {dim.max}</span>
-              </div>
-              <div style={{ height: '7px', background: '#E4E4E7', border: '1px solid var(--border-dark)' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${dim.max > 0 ? (dim.score / dim.max) * 100 : 0}%`,
-                  backgroundColor: (dim.score / (dim.max || 1)) >= 0.8 ? 'var(--amber-signal)' : 'var(--ink)'
-                }} />
-              </div>
-            </div>
-          ))}
-
-          {/* Key Strengths from Matcher Agent */}
-          {grant.key_strengths && grant.key_strengths.length > 0 && (
-            <>
-              <hr className="dashed-divider" style={{ margin: '0.85rem 0' }} />
-              <div style={{ fontSize: '0.8rem' }}>
-                <div style={{ fontWeight: 700, marginBottom: '0.35rem', textTransform: 'uppercase' }}>
-                  Key Strengths:
-                </div>
-                <ul style={{ paddingLeft: '1.1rem', color: 'var(--ink-muted)', lineHeight: '1.45', fontSize: '0.78rem' }}>
-                  {grant.key_strengths.map((s, idx) => (
-                    <li key={idx}>{s}</li>
-                  ))}
-                </ul>
-              </div>
-            </>
-          )}
-
-          {/* Potential Risks */}
-          {grant.potential_risks && grant.potential_risks.length > 0 && (
-            <>
-              <hr className="dashed-divider" style={{ margin: '0.85rem 0' }} />
-              <div style={{ fontSize: '0.8rem' }}>
-                <div style={{ fontWeight: 700, marginBottom: '0.35rem', textTransform: 'uppercase', color: 'var(--amber-signal)' }}>
-                  Potential Considerations:
-                </div>
-                <ul style={{ paddingLeft: '1.1rem', color: 'var(--ink-muted)', lineHeight: '1.45', fontSize: '0.78rem' }}>
-                  {grant.potential_risks.map((r, idx) => (
-                    <li key={idx}>{r}</li>
-                  ))}
-                </ul>
-              </div>
-            </>
-          )}
+      {/* Dynamic View Layout Rendering */}
+      {activeViewMode === 'rubric' ? (
+        <div className="workstation-container layout-single">
+          {renderRubricPanel(true)}
         </div>
-
-        {/* Right Column: 6-Section Document Editor or Generation CTA */}
-        <div
-          ref={draftPaneRef}
-          className={`brutalist-card workstation-column ${activeViewTab !== 'draft' ? 'hidden-mobile' : ''}`}
-          style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-        >
-          {loadingDraft ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--ink-muted)' }}>
-              <Loader2 className="animate-spin" size={28} style={{ margin: '0 auto 0.75rem' }} />
-              <div>Loading application draft status...</div>
-            </div>
-          ) : sections.length > 0 ? (
-            <>
-              {/* Section Tabs Strip */}
-              <div style={{
-                display: 'flex',
-                overflowX: 'auto',
-                WebkitOverflowScrolling: 'touch',
-                borderBottom: '2px solid var(--border-dark)',
-                backgroundColor: 'var(--card-alt-bg)',
-                whiteSpace: 'nowrap'
-              }}>
-                {sections.map((s, idx) => {
-                  const isActive = activeSectionIdx === idx;
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => setActiveSectionIdx(idx)}
-                      className="font-heading"
-                      style={{
-                        padding: '0.75rem 1rem',
-                        fontSize: '0.92rem',
-                        whiteSpace: 'nowrap',
-                        borderRight: '1px solid var(--border-dashed)',
-                        borderTop: 'none',
-                        borderLeft: 'none',
-                        borderBottom: isActive ? '3px solid var(--amber-signal)' : 'none',
-                        backgroundColor: isActive ? '#FFFFFF' : 'transparent',
-                        color: isActive ? 'var(--amber-signal)' : 'var(--ink)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {s.title}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Active Section Content */}
-              {sections[activeSectionIdx] && (
-                <div className="workstation-editor-pane" style={{ padding: '1.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    <h3 className="font-heading" style={{ fontSize: '1.5rem', color: 'var(--ink)' }}>
-                      {sections[activeSectionIdx].title}
-                    </h3>
-                    <span className="tag-badge tag-dark">
-                      {sections[activeSectionIdx].word_count || sections[activeSectionIdx].content?.split(/\s+/).filter(Boolean).length || 0} WORDS
-                    </span>
-                  </div>
-
-                  <textarea
-                    value={sections[activeSectionIdx].content}
-                    readOnly
-                    style={{
-                      width: '100%',
-                      minHeight: '260px',
-                      padding: '1rem',
-                      fontSize: '0.9rem',
-                      lineHeight: '1.6',
-                      fontFamily: 'var(--font-body)',
-                      color: 'var(--ink)',
-                      backgroundColor: 'var(--canvas-bg)',
-                      border: '2px solid var(--border-dark)',
-                      boxShadow: '3px 3px 0px var(--border-dark)',
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            /* No draft yet: Trigger Drafting Action */
-            <div style={{ padding: '3rem 2rem', textAlign: 'center' }}>
-              <Sparkles size={36} color="var(--amber-signal)" style={{ margin: '0 auto 1rem' }} />
-              <h3 className="font-heading" style={{ fontSize: '1.8rem', color: 'var(--ink)', marginBottom: '0.5rem' }}>
-                AUTONOMOUS PROPOSAL DRAFTER
-              </h3>
-              <p style={{ color: 'var(--ink-muted)', fontSize: '0.92rem', maxWidth: '480px', margin: '0 auto 1.5rem', lineHeight: '1.5' }}>
-                Generate a multi-section proposal draft pre-populated with organization facts, budget calculations, and RAG-verified citations.
-              </p>
-
-              {draftError && (
-                <div className="brutalist-card" style={{ padding: '0.75rem 1rem', marginBottom: '1.25rem', borderLeft: '4px solid #EF4444', maxWidth: '480px', margin: '0 auto 1.25rem' }}>
-                  <div style={{ fontSize: '0.82rem', color: '#EF4444' }}>
-                    {draftError}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={handleGenerateDraft}
-                disabled={isDrafting}
-                className="brutalist-btn btn-primary"
-                style={{ padding: '0.75rem 1.75rem', fontSize: '1rem' }}
-              >
-                {isDrafting ? 'GENERATING PROPOSAL DRAFT...' : 'GENERATE APPLICATION DRAFT'}
-              </button>
-            </div>
-          )}
+      ) : activeViewMode === 'draft' ? (
+        <div className="workstation-container layout-single">
+          {renderDraftWorkstation(true)}
         </div>
-      </div>
+      ) : (
+        /* Split View: Side by Side */
+        <div className="workstation-container layout-split">
+          {renderRubricPanel(false)}
+          {renderDraftWorkstation(false)}
+        </div>
+      )}
     </div>
   );
 }
