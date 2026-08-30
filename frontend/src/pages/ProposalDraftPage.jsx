@@ -5,10 +5,9 @@ import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft } from '../services/api';
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
 
-const REAL_GRANTS_GOV_OPPS = new Set(['359104', '345938', '362422', '363347']);
-
 /**
  * Returns the direct official URL to the federal opportunity / application portal.
+ * Any numeric opportunity ID maps directly to its official Grants.gov notice.
  */
 export function getOfficialGrantUrl(grant) {
   if (!grant) return 'https://www.grants.gov/search-grants';
@@ -19,14 +18,15 @@ export function getOfficialGrantUrl(grant) {
   const id = String(grant.grant_id || grant.id || '');
   const numMatch = id.replace('grants-gov-', '').trim();
 
-  // If it's a verified Grants.gov Opportunity ID, link directly to its detail page
-  if (REAL_GRANTS_GOV_OPPS.has(numMatch)) {
+  // If there's a numeric opportunity ID, link directly to its live official Grants.gov page
+  if (/^\d+$/.test(numMatch)) {
     return `https://www.grants.gov/search-results-detail/${numMatch}`;
   }
 
-  // Otherwise, link to live Grants.gov search with title keywords
+  // Otherwise, link to live Grants.gov search
   if (grant.title) {
-    return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(grant.title)}`;
+    const cleanTitle = grant.title.replace(/&amp;/g, '&').replace(/&ndash;/g, '-').replace(/&quot;/g, '"');
+    return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(cleanTitle)}`;
   }
 
   return 'https://www.grants.gov/search-grants';
@@ -58,35 +58,34 @@ export default function ProposalDraftPage() {
   const backLabel = getBackLabel(fromPath);
 
   const handleBack = () => {
-    if (window.history.state && window.history.state.idx > 0) {
-      navigate(-1);
-    } else {
-      navigate(fromPath);
-    }
+    navigate(fromPath);
   };
 
-  // Fetch drafted application for this grant from API
   useEffect(() => {
-    const loadDraft = async () => {
-      if (!grant) return;
+    async function loadDraft() {
+      if (!grant) {
+        setLoadingDraft(false);
+        return;
+      }
       setLoadingDraft(true);
+      setDraftError(null);
       try {
-        const data = await fetchApplications();
+        const apps = await fetchApplications();
         const grantId = grant.grant_id || grant.id;
-        const matchingDraft = (data.applications || []).find(
-          a => String(a.grant_id) === String(grantId) || String(a.grant_id) === String(grant.id)
-        );
-        if (matchingDraft) {
-          setDraft(matchingDraft);
+        const matchingApp = apps.find(a => (a.grant_id === grantId || a.id === grantId));
+        if (matchingApp) {
+          setDraft(matchingApp);
+        } else {
+          setDraft(null);
         }
       } catch (err) {
-        console.warn('Could not fetch drafts for grant:', err.message);
+        console.error('Failed to fetch draft:', err);
       } finally {
         setLoadingDraft(false);
       }
-    };
+    }
     loadDraft();
-  }, [grant]);
+  }, [grant, id]);
 
   const handleGenerateDraft = async () => {
     if (!grant) return;
@@ -95,311 +94,352 @@ export default function ProposalDraftPage() {
     try {
       const grantId = grant.grant_id || grant.id;
       const res = await triggerDraft(grantId);
-      if (res.application) {
-        setDraft(res.application);
+      if (res && res.sections) {
+        setDraft(res);
       } else {
-        const appsData = await fetchApplications();
-        const found = (appsData.applications || []).find(
-          a => String(a.grant_id) === String(grantId)
-        );
-        if (found) setDraft(found);
+        const apps = await fetchApplications();
+        const updated = apps.find(a => (a.grant_id === grantId || a.id === grantId));
+        if (updated) setDraft(updated);
       }
-      refreshGrants();
+      if (refreshGrants) refreshGrants();
     } catch (err) {
-      console.error('Draft generation failed:', err.message);
-      setDraftError(err.message);
+      console.error('Drafting failed:', err);
+      setDraftError(err.message || 'Failed to generate draft proposal.');
     } finally {
       setIsDrafting(false);
     }
   };
 
+  const handleCopySection = (content) => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadMarkdown = () => {
+    if (!draft || !draft.sections) return;
+    const docTitle = draft.grant_title || grant?.title || 'Grant_Proposal_Draft';
+    let md = `# Grant Proposal Draft: ${docTitle}\n\n`;
+    md += `**Target Grant ID**: ${draft.grant_id || grant?.grant_id}\n`;
+    md += `**Generated**: ${draft.generated_at || new Date().toISOString()}\n`;
+    md += `**Completeness**: ${draft.completion_percentage || 100}%\n\n`;
+    md += `---\n\n`;
+
+    draft.sections.forEach((sec, idx) => {
+      md += `## Section ${idx + 1}: ${sec.section_title}\n\n`;
+      md += `${sec.content}\n\n`;
+      if (sec.citations && sec.citations.length > 0) {
+        md += `*Sources & Citations:*\n`;
+        sec.citations.forEach(c => {
+          md += `- ${c}\n`;
+        });
+        md += `\n`;
+      }
+      md += `---\n\n`;
+    });
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${docTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_draft.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!grant) {
     return (
-      <div className="page-container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
-        <h2 className="font-heading" style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>
-          GRANT APPLICATION NOT FOUND
-        </h2>
+      <div className="brutalist-card" style={{ padding: '3rem', textAlign: 'center' }}>
+        <h2 className="font-heading" style={{ fontSize: '2rem', marginBottom: '1rem' }}>OPPORTUNITY NOT FOUND</h2>
         <p style={{ color: 'var(--ink-muted)', marginBottom: '1.5rem' }}>
-          The requested proposal draft could not be located.
+          No grant opportunity was found matching ID: <code>{id}</code>.
         </p>
-        <button onClick={handleBack} className="brutalist-btn btn-primary">
-          <ArrowLeft size={18} /> {backLabel}
+        <button onClick={handleBack} className="brutalist-btn btn-outline">
+          <ArrowLeft size={16} />
+          {backLabel}
         </button>
       </div>
     );
   }
 
-  const scoreTotal = calculateFitScore(grant) ?? 0;
-  const badgeInfo = getScoreBadgeProps(scoreTotal);
+  const fitScore = calculateFitScore(grant);
+  const badgeInfo = getScoreBadgeProps(fitScore);
+  const sections = draft?.sections || [];
+  const activeSection = sections[activeSectionIdx] || sections[0];
   const grantId = grant.grant_id || grant.id;
-  const sections = draft?.sections && draft.sections.length > 0 ? draft.sections : [];
   const officialUrl = getOfficialGrantUrl(grant);
 
-  const handleExportMarkdown = () => {
-    if (sections.length === 0) return;
-    const md = `# Grant Application Draft\n## ${grant.title}\n**Agency**: ${grant.agency}\n**Grant ID**: ${grantId}\n**Official URL**: ${officialUrl}\n**Match Score**: ${scoreTotal}/100\n\n---\n\n` +
-      sections.map(s => `### ${s.title}\n\n${s.content}\n\n`).join('\n---\n\n');
-    
-    const blob = new Blob([md], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Application_Draft_${grantId.replace(/\s+/g, '_')}.md`;
-    a.click();
-  };
-
-  const handleCopy = () => {
-    if (sections.length === 0) return;
-    const text = sections.map(s => `${s.title}\n\n${s.content}`).join('\n\n====================\n\n');
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
-    <div className="page-container">
-      {/* Top Action Toolbar */}
-      <div style={{ marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <button onClick={handleBack} className="brutalist-btn btn-outline" style={{ padding: '0.45rem 0.95rem', fontSize: '0.9rem', cursor: 'pointer' }}>
-          <ArrowLeft size={16} /> {backLabel}
+    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Top Breadcrumb Navigation */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <button
+          onClick={handleBack}
+          className="brutalist-btn btn-outline"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+        >
+          <ArrowLeft size={16} />
+          {backLabel}
         </button>
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="brutalist-btn btn-outline"
+            style={{ fontSize: '0.85rem', padding: '0.45rem 0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--ink)' }}
+            title="Open official opportunity page in Grants.gov"
+          >
+            <ExternalLink size={15} />
+            OPEN IN GRANTS.GOV ↗
+          </a>
+
           <Link
             to={`/rubrics/${grantId}`}
-            state={{ from: location.pathname }}
+            state={{ from: fromPath }}
             className="brutalist-btn btn-outline"
-            style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}
+            style={{ fontSize: '0.85rem', padding: '0.45rem 0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
           >
-            <Target size={16} /> INSPECT RUBRIC ({scoreTotal}/100)
+            <Target size={15} />
+            INSPECT 5-DIMENSION RUBRIC
           </Link>
-
-          {/* Official Federal Opportunity Portal Direct Link */}
-          <a
-            href={officialUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="brutalist-btn btn-amber"
-            style={{ padding: '0.45rem 1.15rem', fontSize: '0.95rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-          >
-            <ExternalLink size={16} /> OPEN IN GRANTS.GOV ↗
-          </a>
-
-          {sections.length > 0 && (
-            <>
-              <button onClick={handleExportMarkdown} className="brutalist-btn btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
-                <Download size={16} /> EXPORT .MD
-              </button>
-              <button onClick={handleCopy} className="brutalist-btn btn-outline" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
-                {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'COPIED' : 'COPY ALL'}
-              </button>
-            </>
-          )}
         </div>
       </div>
 
-      {/* Header Banner */}
-      <div className="brutalist-card workstation-header-card" style={{ padding: '1.75rem 2rem', marginBottom: '1.75rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-          <span className="tag-badge tag-green">6-SECTION PROPOSAL WORKSTATION</span>
-          <span className={badgeInfo.className}>
-            {badgeInfo.label}
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
-            {grant.agency || 'Federal Agency'} • ID: {grantId}
-          </span>
-          <a
-            href={officialUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="tag-badge tag-dark"
-            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}
-          >
-            <span>OFFICIAL FORM LINK</span>
-            <ExternalLink size={12} />
-          </a>
-        </div>
-
-        <h1 className="font-heading workstation-title" style={{ fontSize: '2.6rem', lineHeight: '1.05', color: 'var(--ink)', marginBottom: '0.65rem' }}>
-          {grant.title}
-        </h1>
-
-        <p style={{ color: 'var(--ink-muted)', fontSize: '0.92rem', lineHeight: '1.5', maxWidth: '960px' }}>
-          {grant.synopsis || 'Autonomous grant application draft pre-filled with verified 501(c)(3) organizational facts, budget calculations, and measurable outcomes.'}
-        </p>
-
-        {grant.award_ceiling && (
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '1.25rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-            <span className="tag-badge tag-dark">
-              AWARD CEILING: ${grant.award_ceiling.toLocaleString()}
-            </span>
-            {grant.close_date && (
-              <span className="tag-badge tag-neutral">
-                DEADLINE: {grant.close_date}
+      {/* Grant Opportunity Header Banner */}
+      <div className="brutalist-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', background: 'var(--card-bg)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.75rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <span className="tag-badge tag-dark" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Building2 size={12} /> {grant.agency || 'Federal Agency'}
               </span>
-            )}
+              <span className={badgeInfo.className}>
+                {badgeInfo.label}
+              </span>
+              <span className="tag-badge tag-neutral">
+                ID: {grantId}
+              </span>
+            </div>
+            <h1 className="font-heading" style={{ fontSize: '2.2rem', lineHeight: '1.05', color: 'var(--ink)' }}>
+              {grant.title}
+            </h1>
           </div>
-        )}
+
+          <div style={{ display: 'flex', gap: '1.25rem', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+            <div>
+              <div style={{ color: 'var(--ink-faint)', fontSize: '0.7rem' }}>AWARD CEILING</div>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                {grant.award_ceiling ? `$${(grant.award_ceiling).toLocaleString()}` : 'Funding Varies'}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--ink-faint)', fontSize: '0.7rem' }}>DEADLINE</div>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+                {grant.close_date || 'Ongoing'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Federal Application Gateway Notice */}
+        <div style={{
+          marginTop: '1rem',
+          padding: '0.75rem 1rem',
+          background: 'rgba(255, 107, 0, 0.06)',
+          border: '1px dashed var(--accent)',
+          fontSize: '0.82rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.5rem'
+        }}>
+          <div>
+            <strong>💡 Ready to Submit?</strong> Review and refine your generated proposal sections below, copy or export to Markdown, and paste into the official application form on Grants.gov.
+          </div>
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontWeight: 700, color: 'var(--accent)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+          >
+            Launch Official Form Portal <ExternalLink size={13} />
+          </a>
+        </div>
       </div>
 
-      {/* Main Proposal Editor Card */}
-      <div className="brutalist-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
-        {loadingDraft ? (
-          <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--ink-muted)' }}>
-            <Loader2 className="animate-spin" size={32} style={{ margin: '0 auto 1rem' }} />
-            <div className="font-heading" style={{ fontSize: '1.5rem' }}>LOADING APPLICATION DRAFT...</div>
-          </div>
-        ) : sections.length > 0 ? (
-          <>
-            {/* Section Tabs Strip */}
-            <div style={{
-              display: 'flex',
-              overflowX: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              borderBottom: '2px solid var(--border-dark)',
-              backgroundColor: 'var(--card-alt-bg)',
-              whiteSpace: 'nowrap'
-            }}>
-              {sections.map((s, idx) => {
-                const isActive = activeSectionIdx === idx;
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => setActiveSectionIdx(idx)}
-                    className="font-heading"
-                    style={{
-                      padding: '1rem 1.35rem',
-                      fontSize: '1.05rem',
-                      whiteSpace: 'nowrap',
-                      borderRight: '1px solid var(--border-dashed)',
-                      borderTop: 'none',
-                      borderLeft: 'none',
-                      borderBottom: isActive ? '3px solid var(--amber-signal)' : 'none',
-                      backgroundColor: isActive ? '#FFFFFF' : 'transparent',
-                      color: isActive ? 'var(--amber-signal)' : 'var(--ink)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {s.title}
-                  </button>
-                );
-              })}
+      {/* Main Drafting Section */}
+      {loadingDraft ? (
+        <div className="brutalist-card" style={{ padding: '3.5rem', textAlign: 'center' }}>
+          <Loader2 size={32} className="spin" style={{ margin: '0 auto 1rem auto', color: 'var(--accent)' }} />
+          <h3 className="font-heading" style={{ fontSize: '1.4rem' }}>LOADING PROPOSAL WORKSTATION...</h3>
+          <p style={{ color: 'var(--ink-muted)', fontSize: '0.9rem' }}>Retrieving structured draft sections from local storage.</p>
+        </div>
+      ) : draft && sections.length > 0 ? (
+        /* Workstation with Section Tabs & Editor */
+        <div className="brutalist-card" style={{ padding: '0', overflow: 'hidden' }}>
+          {/* Action Toolbar */}
+          <div style={{
+            padding: '1rem 1.5rem',
+            background: 'var(--card-alt-bg)',
+            borderBottom: '2px solid var(--border-dark)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.75rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className="tag-badge tag-green">✓ 6-SECTION SCHEMA READY</span>
+              <span style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)' }}>
+                {draft.completion_percentage || 100}% AUTO-COMPLETED
+              </span>
             </div>
 
-            {/* Active Section Content Pane */}
-            {sections[activeSectionIdx] && (
-              <div className="workstation-editor-pane" style={{ padding: '2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div>
-                    <span className="tag-badge tag-green" style={{ marginBottom: '0.35rem', display: 'inline-block' }}>
-                      {sections[activeSectionIdx].is_auto_filled ? 'AUTONOMOUSLY PRE-FILLED (RAG GROUNDED)' : 'PYDANTIC SCHEMA ENFORCED'}
-                    </span>
-                    <h3 className="font-heading" style={{ fontSize: '1.9rem', color: 'var(--ink)', lineHeight: '1.1' }}>
-                      {sections[activeSectionIdx].title}
-                    </h3>
-                  </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => handleCopySection(activeSection.content)}
+                className="brutalist-btn btn-outline"
+                style={{ fontSize: '0.85rem', padding: '0.45rem 0.85rem' }}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? 'COPIED SECTION' : 'COPY SECTION'}
+              </button>
 
-                  <span className="tag-badge tag-dark" style={{ fontSize: '0.82rem' }}>
-                    {sections[activeSectionIdx].word_count || sections[activeSectionIdx].content?.split(/\s+/).filter(Boolean).length || 0} WORDS
-                  </span>
-                </div>
+              <button
+                onClick={handleDownloadMarkdown}
+                className="brutalist-btn btn-primary"
+                style={{ fontSize: '0.85rem', padding: '0.45rem 0.85rem' }}
+              >
+                <Download size={14} />
+                EXPORT FULL MARKDOWN
+              </button>
+            </div>
+          </div>
 
-                <textarea
-                  value={sections[activeSectionIdx].content}
-                  readOnly
+          {/* 2-Column Section Layout */}
+          <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', minHeight: '520px' }}>
+            {/* Left Column: Section Index */}
+            <div style={{
+              background: 'var(--card-alt-bg)',
+              borderRight: '2px solid var(--border-dark)',
+              padding: '1rem 0'
+            }}>
+              <div style={{ padding: '0 1rem 0.75rem 1rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink-faint)' }}>
+                PROPOSAL SECTIONS ({sections.length})
+              </div>
+              {sections.map((sec, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveSectionIdx(idx)}
                   style={{
                     width: '100%',
-                    minHeight: '380px',
-                    padding: '1.25rem',
-                    fontSize: '0.95rem',
-                    lineHeight: '1.7',
-                    fontFamily: 'var(--font-body)',
-                    color: 'var(--ink)',
-                    backgroundColor: 'var(--canvas-bg)',
-                    border: '2px solid var(--border-dark)',
-                    boxShadow: '3px 3px 0px var(--border-dark)',
-                    resize: 'vertical'
+                    textAlign: 'left',
+                    padding: '0.85rem 1rem',
+                    background: activeSectionIdx === idx ? 'var(--card-bg)' : 'transparent',
+                    borderLeft: activeSectionIdx === idx ? '4px solid var(--accent)' : '4px solid transparent',
+                    borderTop: 'none',
+                    borderRight: 'none',
+                    borderBottom: '1px solid var(--border-dark)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.2rem',
+                    transition: 'all 0.1s ease'
                   }}
-                />
-
-                {/* Footer Section Navigation Info */}
-                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-dashed)' }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--ink-muted)' }}>
-                    Section <strong>{activeSectionIdx + 1}</strong> of <strong>{sections.length}</strong> • Ready for staff review & submission
+                >
+                  <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)', fontWeight: 600 }}>
+                    SECTION {idx + 1}
                   </div>
-
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {activeSectionIdx > 0 && (
-                      <button
-                        onClick={() => setActiveSectionIdx(prev => prev - 1)}
-                        className="brutalist-btn btn-outline"
-                        style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem' }}
-                      >
-                        ← PREVIOUS SECTION
-                      </button>
-                    )}
-                    {activeSectionIdx < sections.length - 1 && (
-                      <button
-                        onClick={() => setActiveSectionIdx(prev => prev + 1)}
-                        className="brutalist-btn btn-primary"
-                        style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem' }}
-                      >
-                        NEXT SECTION →
-                      </button>
-                    )}
+                  <div style={{ fontSize: '0.9rem', fontWeight: activeSectionIdx === idx ? 700 : 500, color: 'var(--ink)' }}>
+                    {sec.section_title}
                   </div>
-                </div>
-
-                {/* Callout Card: Direct Federal Submission Link */}
-                <div style={{
-                  marginTop: '2rem',
-                  padding: '1.5rem',
-                  background: 'var(--card-alt-bg)',
-                  border: '2px solid var(--border-dark)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '1rem'
-                }}>
-                  <div>
-                    <div className="font-heading" style={{ fontSize: '1.35rem', color: 'var(--ink)' }}>
-                      READY TO SUBMIT TO {grant.agency ? grant.agency.toUpperCase() : 'FEDERAL AGENCY'}?
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--ink-muted)', marginTop: '0.2rem' }}>
-                      Review complete? Open the official Grants.gov opportunity workspace to submit your pre-filled proposal package.
-                    </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
+                    {sec.word_count || (sec.content ? sec.content.split(/\s+/).length : 0)} words
                   </div>
+                </button>
+              ))}
+            </div>
 
-                  <a
-                    href={officialUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="brutalist-btn btn-amber"
-                    style={{ padding: '0.65rem 1.4rem', fontSize: '0.95rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-                  >
-                    <ExternalLink size={16} /> OPEN OFFICIAL GRANTS.GOV FORM ↗
-                  </a>
-                </div>
+            {/* Right Column: Active Section Viewer */}
+            <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                <h3 className="font-heading" style={{ fontSize: '1.6rem', color: 'var(--ink)' }}>
+                  {activeSectionIdx + 1}. {activeSection.section_title}
+                </h3>
+                <span className="tag-badge tag-dark" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                  {activeSection.content ? activeSection.content.split(/\s+/).length : 0} WORDS
+                </span>
               </div>
-            )}
-          </>
-        ) : (
-          /* Empty / Trigger Drafter Agent State */
-          <div style={{ padding: '4.5rem 2rem', textAlign: 'center' }}>
-            <Sparkles size={44} color="var(--amber-signal)" style={{ margin: '0 auto 1.25rem' }} />
-            <h3 className="font-heading" style={{ fontSize: '2.2rem', color: 'var(--ink)', marginBottom: '0.5rem' }}>
-              AUTONOMOUS PROPOSAL DRAFTER
-            </h3>
-            <p style={{ color: 'var(--ink-muted)', fontSize: '0.95rem', maxWidth: '540px', margin: '0 auto 1.75rem', lineHeight: '1.6' }}>
-              The Drafter Agent will construct a 6-section proposal package pre-populated with Youth Education Alliance organizational facts, audited financial ratios, and RAG citations.
+
+              <div style={{
+                background: 'var(--card-alt-bg)',
+                border: '2px solid var(--border-dark)',
+                padding: '1.5rem',
+                fontSize: '0.95rem',
+                lineHeight: '1.65',
+                whiteSpace: 'pre-wrap',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                color: 'var(--ink)',
+                flex: 1,
+                marginBottom: '1.5rem'
+              }}>
+                {activeSection.content}
+              </div>
+
+              {/* Citations & Evidence Base */}
+              {activeSection.citations && activeSection.citations.length > 0 && (
+                <div style={{
+                  padding: '1rem',
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border-dark)',
+                  fontSize: '0.82rem'
+                }}>
+                  <strong style={{ color: 'var(--ink-faint)', fontSize: '0.72rem', textTransform: 'uppercase' }}>
+                    RAG Knowledge Base Citations & Grounding:
+                  </strong>
+                  <ul style={{ margin: '0.4rem 0 0 1.2rem', padding: 0 }}>
+                    {activeSection.citations.map((c, cIdx) => (
+                      <li key={cIdx} style={{ color: 'var(--ink-muted)', marginBottom: '0.2rem' }}>
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Empty State: Pre-fill Call to Action */
+        <div className="brutalist-card" style={{ padding: '3.5rem', textAlign: 'center' }}>
+          <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              background: 'rgba(255, 107, 0, 0.1)',
+              border: '2px solid var(--accent)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1.5rem auto'
+            }}>
+              <Sparkles size={32} color="var(--accent)" />
+            </div>
+
+            <h2 className="font-heading" style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>
+              NO PROPOSAL DRAFT CREATED YET
+            </h2>
+            <p style={{ color: 'var(--ink-muted)', fontSize: '0.95rem', lineHeight: '1.5', marginBottom: '2rem' }}>
+              Generate a complete, 6-section grant proposal grounded in Youth Education Alliance's RAG knowledge corpus, structured budget figures, and proven track record.
             </p>
 
             {draftError && (
-              <div className="brutalist-card" style={{ padding: '0.85rem 1.25rem', marginBottom: '1.5rem', borderLeft: '4px solid #EF4444', maxWidth: '520px', margin: '0 auto 1.5rem' }}>
-                <div style={{ fontSize: '0.85rem', color: '#EF4444' }}>
-                  {draftError}
-                </div>
+              <div style={{ padding: '0.75rem', background: '#ffebee', border: '1px solid #c62828', color: '#c62828', marginBottom: '1.5rem', fontSize: '0.85rem' }}>
+                {draftError}
               </div>
             )}
 
@@ -407,13 +447,23 @@ export default function ProposalDraftPage() {
               onClick={handleGenerateDraft}
               disabled={isDrafting}
               className="brutalist-btn btn-primary"
-              style={{ padding: '0.9rem 2.25rem', fontSize: '1.1rem' }}
+              style={{ padding: '0.85rem 2rem', fontSize: '1.1rem', display: 'inline-flex', alignItems: 'center', gap: '0.6rem' }}
             >
-              {isDrafting ? 'GENERATING 6-SECTION PROPOSAL DRAFT...' : 'GENERATE APPLICATION DRAFT NOW'}
+              {isDrafting ? (
+                <>
+                  <Loader2 size={18} className="spin" />
+                  ORCHESTRATING 6-SECTION PROPOSAL...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={18} />
+                  GENERATE APPLICATION DRAFT NOW
+                </>
+              )}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

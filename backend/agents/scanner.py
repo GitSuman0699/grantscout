@@ -99,10 +99,13 @@ async def run_scan() -> str:
         from backend.optimization import token_tracker
 
         keywords = [
-            "STEM education youth",
-            "robotics computer science student",
+            "Louis Stokes Alliances for Minority Participation",
+            "NDEP STEM Open NFO",
+            "EDU Core Research STEM Learning",
+            "Regional Workforce Skills STEM",
+            "STEM education youth robotics",
             "minority education science technology",
-            "after-school coding curriculum"
+            "after-school coding computer science"
         ]
         discovered_count = 0
         

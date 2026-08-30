@@ -7,6 +7,7 @@ The API is public and requires no authentication.
 
 from __future__ import annotations
 
+import html
 import logging
 from typing import Any
 
@@ -168,13 +169,22 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
         opp = data.get("data", {})
         synopsis = opp.get("synopsis", {})
 
+        raw_title = opp.get("opportunityTitle", "Unknown Title")
+        clean_title = html.unescape(raw_title) if raw_title else "Unknown Title"
+
+        raw_synopsis = synopsis.get("synopsisDesc", "")
+        clean_synopsis = html.unescape(raw_synopsis) if raw_synopsis else ""
+
+        raw_agency = synopsis.get("agencyName", "")
+        clean_agency = html.unescape(raw_agency) if raw_agency else ""
+
         grant_details = {
             "id": opp.get("id"),
             "opportunity_number": opp.get("opportunityNumber", ""),
-            "title": opp.get("opportunityTitle", "Unknown Title"),
-            "agency": synopsis.get("agencyName", ""),
+            "title": clean_title,
+            "agency": clean_agency,
             "agency_code": synopsis.get("agencyCode", ""),
-            "synopsis_description": synopsis.get("synopsisDesc", ""),
+            "synopsis_description": clean_synopsis,
             "award_ceiling": synopsis.get("awardCeiling", "0"),
             "award_floor": synopsis.get("awardFloor", "0"),
             "post_date": synopsis.get("postingDate", ""),
