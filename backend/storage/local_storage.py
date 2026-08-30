@@ -201,6 +201,13 @@ class LocalStorage:
                 except Exception:
                     pass
 
+        active_grant_ids = {g.get("grant_id") for g in grants if g.get("grant_id")}
+        unique_drafted = {
+            app.get("grant_id")
+            for app in apps
+            if app.get("grant_id") in active_grant_ids
+        }
+
         return {
             "grants_discovered": len(grants),
             "grants_this_week": len([
@@ -208,7 +215,7 @@ class LocalStorage:
                 if g.get("discovered_at", "")[:10] >= datetime.utcnow().strftime("%Y-%m-%d")
             ]),
             "high_matches": len(high_matches),
-            "applications_drafted": len(apps),
+            "applications_drafted": len(unique_drafted),
             "next_deadline": next_deadline,
             "days_until_deadline": days_until,
         }
