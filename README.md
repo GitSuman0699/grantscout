@@ -220,8 +220,7 @@ grantscout/
 │   ├── test_mcp_server.py   # MCP server tests (8 tests)
 │   └── test_optimization.py # Optimization & eval tests (21 tests)
 ├── scripts/
-│   ├── seed_org_profile.py  # Seed demo nonprofit profile
-│   ├── seed_sample_grants.py # Seed sample grant opportunities
+│   ├── seed_org_profile.py  # Seed nonprofit profile
 │   └── test_grants_api.py   # Live Grants.gov API probe
 ├── data/                    # Local storage & RAG documents
 ├── run_mcp_server.py        # MCP server entry point
@@ -273,11 +272,10 @@ Key environment variables:
 | `SECRET_KEY` | (default) | JWT signing key |
 | `MASTER_API_KEY` | (default) | API key for service auth |
 
-### 4. Seed Demo Data & Start Backend
+### 4. Initialize Profile & Start Backend
 ```bash
-# Seed initial nonprofit profile and sample opportunities
+# Seed initial nonprofit profile
 python scripts/seed_org_profile.py
-python scripts/seed_sample_grants.py
 
 # Start FastAPI server
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload

@@ -198,7 +198,7 @@ def evaluate_single_case(test_case: dict) -> TestCaseResult:
 
     start = time.perf_counter()
     try:
-        evaluation: GrantEvaluationResult = evaluate_grant_structured(grant)
+        evaluation: GrantEvaluationResult = evaluate_grant_structured(grant, persist=False)
         result.latency_ms = (time.perf_counter() - start) * 1000
 
         actual_score = evaluation.match_score.total

@@ -81,32 +81,36 @@ def create_matcher_agent() -> Agent:
     return agent
 
 
-def evaluate_grant_structured(grant_details: dict) -> GrantEvaluationResult:
-    """Evaluate a grant opportunity and return a type-safe GrantEvaluationResult.
-
-    Uses Strands SDK's structured_output mechanism to guarantee schema adherence.
+def evaluate_grant_structured(grant_details: dict[str, Any], persist: bool = True) -> GrantEvaluationResult:
+    """Evaluate a grant against the org profile with structured Pydantic output.
 
     Args:
-        grant_details: Grant data dictionary.
+        grant_details: Dictionary containing grant opportunity fields.
+        persist: Whether to save the scored grant to persistent storage. Default True.
 
     Returns:
         Validated GrantEvaluationResult Pydantic model instance.
     """
     gid = grant_details.get("grant_id") or f"grants-gov-{grant_details.get('id', 'unknown')}"
-    prompt = f"""Evaluate this grant opportunity against our organization's profile:
+    title = grant_details.get("title", "Grant Opportunity")
+    agency = grant_details.get("agency", "Federal Agency")
+    synopsis = grant_details.get("synopsis_description", grant_details.get("synopsis", ""))
+    award_ceiling = grant_details.get("award_ceiling", 0)
+    close_date = grant_details.get("close_date", "TBD")
+    applicant_types = grant_details.get("applicant_types", "")
 
-GRANT DETAILS:
-- Title: {grant_details.get('title', 'Unknown')}
-- Agency: {grant_details.get('agency', 'Unknown')}
-- Grant ID: {gid}
-- Synopsis: {grant_details.get('synopsis_description', grant_details.get('synopsis', 'Not available'))}
-- Award Ceiling: ${grant_details.get('award_ceiling', 0)}
-- Award Floor: ${grant_details.get('award_floor', 0)}
-- Deadline: {grant_details.get('close_date', 'Not specified')}
-- Eligible Applicants: {grant_details.get('applicant_types', 'Not specified')}
-- Funding Category: {grant_details.get('category_of_funding', 'Not specified')}
+    prompt = f"""Evaluate this federal grant opportunity against our organization profile:
 
-Score this grant across all 5 dimensions and return a complete, validated GrantEvaluationResult.
+TARGET OPPORTUNITY:
+- ID: {gid}
+- Title: {title}
+- Agency: {agency}
+- Award Ceiling: ${award_ceiling}
+- Deadline: {close_date}
+- Eligible Applicants: {applicant_types}
+- Synopsis: {synopsis}
+
+Retrieve our org profile and return a fully formulated GrantEvaluationResult.
 """
 
     agent = create_matcher_agent()
@@ -125,7 +129,7 @@ Score this grant across all 5 dimensions and return a complete, validated GrantE
         title_lower = str(grant_details.get("title", "")).lower()
         applicant_types_raw = str(grant_details.get("applicant_types", "")).lower()
         category_raw = str(grant_details.get("category_of_funding", "")).lower()
-        award_ceiling = float(grant_details.get("award_ceiling") or 0)
+        raw_ceiling = float(grant_details.get("award_ceiling") or 0)
 
         # Mission alignment: keyword-based
         stem_keywords = ["stem", "robotics", "coding", "education", "youth", "after-school", "k-12", "student"]
@@ -145,9 +149,9 @@ Score this grant across all 5 dimensions and return a complete, validated GrantE
 
         # Capacity match: check award ceiling against org budget ($450K)
         org_budget = 450000
-        if award_ceiling > org_budget * 3:
+        if raw_ceiling > org_budget * 3:
             capacity_pts = 3
-        elif award_ceiling > org_budget:
+        elif raw_ceiling > org_budget:
             capacity_pts = 10
         else:
             capacity_pts = 17
@@ -203,19 +207,20 @@ Score this grant across all 5 dimensions and return a complete, validated GrantE
             recommended_action=rec_action,
         )
 
-    # Persist the evaluated result
-    save_matched_grant(
-        grant_id=evaluation.grant_id,
-        title=grant_details.get("title", "Grant Opportunity"),
-        agency=grant_details.get("agency", "Federal Agency"),
-        synopsis=grant_details.get("synopsis_description", grant_details.get("synopsis", "")),
-        award_ceiling=float(grant_details.get("award_ceiling") or 0),
-        award_floor=float(grant_details.get("award_floor") or 0),
-        close_date=grant_details.get("close_date", "TBD"),
-        status=evaluation.status.value,
-        match_score=evaluation.match_score.model_dump(),
-        match_reasoning=evaluation.match_reasoning,
-    )
+    # Persist the evaluated result only if persist is True
+    if persist:
+        save_matched_grant(
+            grant_id=evaluation.grant_id,
+            title=grant_details.get("title", "Grant Opportunity"),
+            agency=grant_details.get("agency", "Federal Agency"),
+            synopsis=grant_details.get("synopsis_description", grant_details.get("synopsis", "")),
+            award_ceiling=float(grant_details.get("award_ceiling") or 0),
+            award_floor=float(grant_details.get("award_floor") or 0),
+            close_date=grant_details.get("close_date", "TBD"),
+            status=evaluation.status.value,
+            match_score=evaluation.match_score.model_dump(),
+            match_reasoning=evaluation.match_reasoning,
+        )
 
     return evaluation
 
