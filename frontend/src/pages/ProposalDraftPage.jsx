@@ -5,21 +5,31 @@ import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft } from '../services/api';
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
 
+const REAL_GRANTS_GOV_OPPS = new Set(['359104', '345938', '362422', '363347']);
+
 /**
  * Returns the direct official URL to the federal opportunity / application portal.
  */
 export function getOfficialGrantUrl(grant) {
-  if (!grant) return 'https://www.grants.gov';
+  if (!grant) return 'https://www.grants.gov/search-grants';
   if (grant.application_url) return grant.application_url;
   if (grant.additional_info_url) return grant.additional_info_url;
   if (grant.url) return grant.url;
   
   const id = String(grant.grant_id || grant.id || '');
   const numMatch = id.replace('grants-gov-', '').trim();
-  if (/^\d+$/.test(numMatch)) {
+
+  // If it's a verified Grants.gov Opportunity ID, link directly to its detail page
+  if (REAL_GRANTS_GOV_OPPS.has(numMatch)) {
     return `https://www.grants.gov/search-results-detail/${numMatch}`;
   }
-  return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(grant.title || id)}`;
+
+  // Otherwise, link to live Grants.gov search with title keywords
+  if (grant.title) {
+    return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(grant.title)}`;
+  }
+
+  return 'https://www.grants.gov/search-grants';
 }
 
 export default function ProposalDraftPage() {
