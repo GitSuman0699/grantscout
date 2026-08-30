@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import GrantCard, { calculateFitScore } from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
-import { FileText, CheckCircle2, Search, Sparkles, ArrowRight } from 'lucide-react';
+import { FileText, CheckCircle2, Search, Sparkles, ArrowRight, ArrowDownWideNarrow } from 'lucide-react';
 
 export default function DraftsPage() {
   const { grants, isLoading } = useGrants();
@@ -15,10 +15,17 @@ export default function DraftsPage() {
 
   const agencies = ['ALL', ...Array.from(new Set(draftedGrants.map(g => g.agency).filter(Boolean)))];
 
-  const displayedDrafts = draftedGrants.filter(g => {
-    if (filterAgency === 'ALL') return true;
-    return g.agency === filterAgency;
-  });
+  // Filter and sort Max to Low score
+  const displayedDrafts = [...draftedGrants]
+    .filter(g => {
+      if (filterAgency === 'ALL') return true;
+      return g.agency === filterAgency;
+    })
+    .sort((a, b) => {
+      const scoreA = calculateFitScore(a) ?? -1;
+      const scoreB = calculateFitScore(b) ?? -1;
+      return scoreB - scoreA;
+    });
 
   return (
     <div className="page-container">
@@ -38,7 +45,7 @@ export default function DraftsPage() {
           PRE-FILLED PROPOSAL DRAFTS ({draftedGrants.length})
         </h1>
         <p style={{ color: 'var(--ink-muted)', fontSize: '0.95rem', marginTop: '0.4rem', maxWidth: '750px' }}>
-          Opportunities scoring ≥80% fit are automatically pre-drafted across Executive Summary, Budget, Narrative, and Metrics sections. Click any card to enter the full-screen workstation editor.
+          Opportunities scoring ≥80% fit are automatically pre-drafted across Executive Summary, Budget, Narrative, and Metrics sections. Ranked highest to lowest fit.
         </p>
       </div>
 
