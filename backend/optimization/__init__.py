@@ -216,41 +216,6 @@ class TokenTracker:
     def __init__(self):
         self._entries: list[TokenUsageEntry] = []
         self._session_start = datetime.utcnow().isoformat()
-        self._ensure_initialized()
-
-    def _ensure_initialized(self) -> None:
-        """Seed baseline telemetry from stored pipeline grants and drafts if empty."""
-        if self._entries:
-            return
-
-        try:
-            from backend.storage.local_storage import storage
-            grants = storage.list_grants()
-            apps = storage.list_applications()
-            
-            # 1. Scanner Invocations (~450 in, ~120 out on Fast tier)
-            for g in grants[:12]:
-                self.log_usage("scanner", input_tokens=420, output_tokens=115, cached=False)
-            if len(grants) > 2:
-                self.log_usage("scanner", input_tokens=420, output_tokens=115, cached=True)
-
-            # 2. Matcher Invocations (~650 in, ~180 out on Standard tier)
-            for g in grants[:10]:
-                self.log_usage("matcher", input_tokens=680, output_tokens=190, cached=False)
-            if len(grants) > 4:
-                self.log_usage("matcher", input_tokens=680, output_tokens=190, cached=True)
-                self.log_usage("matcher", input_tokens=680, output_tokens=190, cached=True)
-
-            # 3. Drafter Invocations (~1,450 in, ~880 out on Premium tier)
-            for a in apps[:3]:
-                self.log_usage("drafter", input_tokens=1480, output_tokens=890, cached=False)
-
-            # 4. Deadline sweeps (~280 in, ~80 out on Fast tier)
-            self.log_usage("deadline", input_tokens=290, output_tokens=75, cached=False)
-            self.log_usage("deadline", input_tokens=290, output_tokens=75, cached=True)
-
-        except Exception as e:
-            logger.debug(f"Could not auto-seed baseline token tracker: {e}")
 
     def log_usage(
         self,
@@ -297,9 +262,6 @@ class TokenTracker:
     @property
     def summary(self) -> dict[str, Any]:
         """Generate a summary of token usage and costs."""
-        if not self._entries:
-            self._ensure_initialized()
-
         total_input = sum(e.input_tokens for e in self._entries)
         total_output = sum(e.output_tokens for e in self._entries)
         total_cost = sum(e.estimated_cost_usd for e in self._entries)
