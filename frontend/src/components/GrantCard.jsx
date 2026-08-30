@@ -2,10 +2,32 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Building2, Sparkles, Target } from 'lucide-react';
 
+/**
+ * Universal calculation of grant fit percentage score.
+ * Handles match_score.total, match_score 5-dimension objects, numbers, and raw score fields.
+ */
+export function calculateFitScore(grant) {
+  if (!grant) return null;
+  const ms = grant.match_score;
+  if (typeof ms === 'number') return ms;
+  if (ms && typeof ms.total === 'number') return ms.total;
+  if (ms && typeof ms === 'object') {
+    const sum = (ms.mission_alignment || 0) +
+                (ms.eligibility_fit || 0) +
+                (ms.capacity_match || 0) +
+                (ms.geographic_fit || 0) +
+                (ms.track_record || 0);
+    if (sum > 0) return sum;
+  }
+  if (typeof grant.score === 'number') return grant.score;
+  return null;
+}
+
 export default function GrantCard({ grant }) {
   const location = useLocation();
-  const isHighFit = grant.match_score?.total >= 80;
-  const isReview = grant.match_score?.total >= 50 && grant.match_score?.total < 80;
+  const fitScore = calculateFitScore(grant);
+  const isHighFit = fitScore != null && fitScore >= 80;
+  const isReview = fitScore != null && fitScore >= 50 && fitScore < 80;
   
   // Format award
   const awardText = grant.award_ceiling 
@@ -43,9 +65,13 @@ export default function GrantCard({ grant }) {
           <span>{grant.agency || 'Federal Agency'}</span>
         </div>
 
-        {grant.match_score?.total != null && (
+        {fitScore != null ? (
           <span className={`tag-badge ${isHighFit ? 'tag-amber' : isReview ? 'tag-green' : 'tag-neutral'}`}>
-            {grant.match_score.total}% FIT {isHighFit ? '• AUTO-DRAFT' : ''}
+            {fitScore}% FIT {isHighFit ? '• AUTO-DRAFT' : ''}
+          </span>
+        ) : (
+          <span className="tag-badge tag-neutral">
+            DISCOVERED • SCORING QUEUED
           </span>
         )}
       </div>

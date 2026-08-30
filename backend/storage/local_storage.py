@@ -74,11 +74,26 @@ class LocalStorage:
         logger.info(f"Saved grant: {grant_id}")
         return grant_id
 
+    def _normalize_grant(self, grant: dict) -> dict:
+        """Ensure match_score has total computed and present."""
+        ms = grant.get("match_score")
+        if isinstance(ms, dict):
+            if "total" not in ms:
+                ms["total"] = (
+                    ms.get("mission_alignment", 0)
+                    + ms.get("eligibility_fit", 0)
+                    + ms.get("capacity_match", 0)
+                    + ms.get("geographic_fit", 0)
+                    + ms.get("track_record", 0)
+                )
+        return grant
+
     def get_grant(self, grant_id: str) -> Optional[dict]:
         """Retrieve a grant opportunity."""
         filepath = self.base_path / "grants" / f"{grant_id}.json"
         if filepath.exists():
-            return json.loads(filepath.read_text(encoding="utf-8"))
+            grant = json.loads(filepath.read_text(encoding="utf-8"))
+            return self._normalize_grant(grant)
         return None
 
     def list_grants(self, status: str = "") -> list[dict]:
@@ -89,7 +104,7 @@ class LocalStorage:
             try:
                 grant = json.loads(filepath.read_text(encoding="utf-8"))
                 if not status or grant.get("status") == status:
-                    grants.append(grant)
+                    grants.append(self._normalize_grant(grant))
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read grant file {filepath}: {e}")
         return sorted(grants, key=lambda g: g.get("discovered_at", ""), reverse=True)

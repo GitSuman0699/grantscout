@@ -1,13 +1,16 @@
 import React from 'react';
 import MetricsBar from '../components/MetricsBar';
-import GrantCard from '../components/GrantCard';
+import GrantCard, { calculateFitScore } from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
 import { Layers, Sparkles, AlertTriangle } from 'lucide-react';
 
 export default function PipelinePage() {
   const { grants, dashboardStats, sectorFilter, setSectorFilter, isLoading } = useGrants();
 
-  const highFitCount = grants.filter(g => g.match_score?.total >= 80).length;
+  const highFitCount = grants.filter(g => {
+    const score = calculateFitScore(g);
+    return score != null && score >= 80;
+  }).length;
 
   const filters = [
     { id: 'ALL', label: 'ALL OPPORTUNITIES' },
@@ -18,7 +21,10 @@ export default function PipelinePage() {
 
   const filteredGrants = grants.filter(g => {
     if (sectorFilter === 'ALL') return true;
-    if (sectorFilter === 'HIGH_FIT') return g.match_score?.total >= 80;
+    if (sectorFilter === 'HIGH_FIT') {
+      const score = calculateFitScore(g);
+      return score != null && score >= 80;
+    }
     return g.category === sectorFilter;
   });
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import GrantCard from '../components/GrantCard';
+import GrantCard, { calculateFitScore } from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
 import { FileText, CheckCircle2, Search, Sparkles, ArrowRight } from 'lucide-react';
 
@@ -8,7 +8,10 @@ export default function DraftsPage() {
   const { grants, isLoading } = useGrants();
   const [filterAgency, setFilterAgency] = useState('ALL');
   
-  const draftedGrants = grants.filter(g => g.match_score?.total >= 80);
+  const draftedGrants = grants.filter(g => {
+    const score = calculateFitScore(g);
+    return score != null && score >= 80;
+  });
 
   const agencies = ['ALL', ...Array.from(new Set(draftedGrants.map(g => g.agency).filter(Boolean)))];
 

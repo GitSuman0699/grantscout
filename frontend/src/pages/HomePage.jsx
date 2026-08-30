@@ -2,12 +2,16 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import MissionLoopBanner from '../components/MissionLoopBanner';
 import MetricsBar from '../components/MetricsBar';
+import { calculateFitScore } from '../components/GrantCard';
 import { Compass, ArrowRight, ShieldCheck, Cpu, Database, Sparkles, Target, Zap } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 
 export default function HomePage() {
   const { grants, dashboardStats } = useGrants();
-  const highFitCount = grants.filter(g => g.match_score?.total >= 80).length;
+  const highFitCount = grants.filter(g => {
+    const score = calculateFitScore(g);
+    return score != null && score >= 80;
+  }).length;
 
   // Derive stats from context
   const stats = dashboardStats ? {
