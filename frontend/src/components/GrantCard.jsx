@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Building2, Sparkles, Target } from 'lucide-react';
+import { Building2, Sparkles, Target, ExternalLink } from 'lucide-react';
 
 /**
  * Universal calculation of grant fit percentage score.
@@ -21,6 +21,23 @@ export function calculateFitScore(grant) {
   }
   if (typeof grant.score === 'number') return grant.score;
   return null;
+}
+
+/**
+ * Returns the direct official URL to the federal opportunity / application portal.
+ */
+export function getOfficialGrantUrl(grant) {
+  if (!grant) return 'https://www.grants.gov';
+  if (grant.application_url) return grant.application_url;
+  if (grant.additional_info_url) return grant.additional_info_url;
+  if (grant.url) return grant.url;
+  
+  const id = String(grant.grant_id || grant.id || '');
+  const numMatch = id.replace('grants-gov-', '').trim();
+  if (/^\d+$/.test(numMatch)) {
+    return `https://www.grants.gov/search-results-detail/${numMatch}`;
+  }
+  return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(grant.title || id)}`;
 }
 
 /**
@@ -58,6 +75,7 @@ export default function GrantCard({ grant }) {
   const location = useLocation();
   const fitScore = calculateFitScore(grant);
   const badgeInfo = getScoreBadgeProps(fitScore);
+  const officialUrl = getOfficialGrantUrl(grant);
   
   // Format award
   const awardText = grant.award_ceiling 
@@ -90,10 +108,25 @@ export default function GrantCard({ grant }) {
         gap: '0.5rem',
         flexWrap: 'wrap'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)' }}>
+        <a
+          href={officialUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open official notice on Grants.gov"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            color: 'var(--ink)',
+            textDecoration: 'none'
+          }}
+        >
           <Building2 size={16} />
           <span>{grant.agency || 'Federal Agency'}</span>
-        </div>
+          <ExternalLink size={12} color="var(--ink-muted)" />
+        </a>
 
         <span className={badgeInfo.className}>
           {badgeInfo.label}

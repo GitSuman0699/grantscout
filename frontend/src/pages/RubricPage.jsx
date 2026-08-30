@@ -1,8 +1,9 @@
 import React from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Target, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, ArrowRight, ExternalLink } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
+import { getOfficialGrantUrl } from './ProposalDraftPage';
 
 export default function RubricPage() {
   const { id } = useParams();
@@ -57,6 +58,7 @@ export default function RubricPage() {
   };
 
   const grantId = grant.grant_id || grant.id;
+  const officialUrl = getOfficialGrantUrl(grant);
 
   return (
     <div className="page-container">
@@ -66,14 +68,26 @@ export default function RubricPage() {
           <ArrowLeft size={16} /> {backLabel}
         </button>
 
-        <Link
-          to={`/drafts/${grantId}`}
-          state={{ from: location.pathname }}
-          className="brutalist-btn btn-primary"
-          style={{ padding: '0.45rem 1.15rem', fontSize: '0.95rem' }}
-        >
-          <Sparkles size={16} /> OPEN PROPOSAL DRAFT <ArrowRight size={16} />
-        </Link>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="brutalist-btn btn-outline"
+            style={{ padding: '0.45rem 1rem', fontSize: '0.95rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            <ExternalLink size={16} /> VIEW ON GRANTS.GOV ↗
+          </a>
+
+          <Link
+            to={`/drafts/${grantId}`}
+            state={{ from: location.pathname }}
+            className="brutalist-btn btn-primary"
+            style={{ padding: '0.45rem 1.15rem', fontSize: '0.95rem' }}
+          >
+            <Sparkles size={16} /> OPEN PROPOSAL DRAFT <ArrowRight size={16} />
+          </Link>
+        </div>
       </div>
 
       {/* Grant Overview Header Card */}
@@ -86,6 +100,16 @@ export default function RubricPage() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
             {grant.agency || 'Federal Agency'} • ID: {grantId}
           </span>
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tag-badge tag-dark"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}
+          >
+            <span>OFFICIAL NOTICE</span>
+            <ExternalLink size={12} />
+          </a>
         </div>
 
         <h1 className="font-heading workstation-title" style={{ fontSize: '2.6rem', lineHeight: '1.05', color: 'var(--ink)', marginBottom: '0.65rem' }}>

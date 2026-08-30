@@ -1,8 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Copy, Check, Sparkles, Target, Building2, Calendar, DollarSign, Loader2, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Download, Copy, Check, Sparkles, Target, Building2, Calendar, DollarSign, Loader2, ArrowRight, ExternalLink } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft } from '../services/api';
+import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
+
+/**
+ * Returns the direct official URL to the federal opportunity / application portal.
+ */
+export function getOfficialGrantUrl(grant) {
+  if (!grant) return 'https://www.grants.gov';
+  if (grant.application_url) return grant.application_url;
+  if (grant.additional_info_url) return grant.additional_info_url;
+  if (grant.url) return grant.url;
+  
+  const id = String(grant.grant_id || grant.id || '');
+  const numMatch = id.replace('grants-gov-', '').trim();
+  if (/^\d+$/.test(numMatch)) {
+    return `https://www.grants.gov/search-results-detail/${numMatch}`;
+  }
+  return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(grant.title || id)}`;
+}
 
 export default function ProposalDraftPage() {
   const { id } = useParams();
@@ -101,13 +119,15 @@ export default function ProposalDraftPage() {
     );
   }
 
-  const score = grant.match_score || { total: 0 };
+  const scoreTotal = calculateFitScore(grant) ?? 0;
+  const badgeInfo = getScoreBadgeProps(scoreTotal);
   const grantId = grant.grant_id || grant.id;
   const sections = draft?.sections && draft.sections.length > 0 ? draft.sections : [];
+  const officialUrl = getOfficialGrantUrl(grant);
 
   const handleExportMarkdown = () => {
     if (sections.length === 0) return;
-    const md = `# Grant Application Draft\n## ${grant.title}\n**Agency**: ${grant.agency}\n**Grant ID**: ${grantId}\n**Match Score**: ${score.total}/100\n\n---\n\n` +
+    const md = `# Grant Application Draft\n## ${grant.title}\n**Agency**: ${grant.agency}\n**Grant ID**: ${grantId}\n**Official URL**: ${officialUrl}\n**Match Score**: ${scoreTotal}/100\n\n---\n\n` +
       sections.map(s => `### ${s.title}\n\n${s.content}\n\n`).join('\n---\n\n');
     
     const blob = new Blob([md], { type: 'text/markdown' });
@@ -141,12 +161,23 @@ export default function ProposalDraftPage() {
             className="brutalist-btn btn-outline"
             style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}
           >
-            <Target size={16} /> INSPECT 5-DIMENSION RUBRIC ({score.total}/100)
+            <Target size={16} /> INSPECT RUBRIC ({scoreTotal}/100)
           </Link>
+
+          {/* Official Federal Opportunity Portal Direct Link */}
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="brutalist-btn btn-amber"
+            style={{ padding: '0.45rem 1.15rem', fontSize: '0.95rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            <ExternalLink size={16} /> OPEN IN GRANTS.GOV ↗
+          </a>
 
           {sections.length > 0 && (
             <>
-              <button onClick={handleExportMarkdown} className="brutalist-btn btn-amber" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
+              <button onClick={handleExportMarkdown} className="brutalist-btn btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
                 <Download size={16} /> EXPORT .MD
               </button>
               <button onClick={handleCopy} className="brutalist-btn btn-outline" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
@@ -161,12 +192,22 @@ export default function ProposalDraftPage() {
       <div className="brutalist-card workstation-header-card" style={{ padding: '1.75rem 2rem', marginBottom: '1.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
           <span className="tag-badge tag-green">6-SECTION PROPOSAL WORKSTATION</span>
-          <span className="tag-badge tag-amber">
-            RAG CITATION GROUNDED
+          <span className={badgeInfo.className}>
+            {badgeInfo.label}
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
             {grant.agency || 'Federal Agency'} • ID: {grantId}
           </span>
+          <a
+            href={officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tag-badge tag-dark"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}
+          >
+            <span>OFFICIAL FORM LINK</span>
+            <ExternalLink size={12} />
+          </a>
         </div>
 
         <h1 className="font-heading workstation-title" style={{ fontSize: '2.6rem', lineHeight: '1.05', color: 'var(--ink)', marginBottom: '0.65rem' }}>
@@ -297,6 +338,38 @@ export default function ProposalDraftPage() {
                       </button>
                     )}
                   </div>
+                </div>
+
+                {/* Callout Card: Direct Federal Submission Link */}
+                <div style={{
+                  marginTop: '2rem',
+                  padding: '1.5rem',
+                  background: 'var(--card-alt-bg)',
+                  border: '2px solid var(--border-dark)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '1rem'
+                }}>
+                  <div>
+                    <div className="font-heading" style={{ fontSize: '1.35rem', color: 'var(--ink)' }}>
+                      READY TO SUBMIT TO {grant.agency ? grant.agency.toUpperCase() : 'FEDERAL AGENCY'}?
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--ink-muted)', marginTop: '0.2rem' }}>
+                      Review complete? Open the official Grants.gov opportunity workspace to submit your pre-filled proposal package.
+                    </div>
+                  </div>
+
+                  <a
+                    href={officialUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="brutalist-btn btn-amber"
+                    style={{ padding: '0.65rem 1.4rem', fontSize: '0.95rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                  >
+                    <ExternalLink size={16} /> OPEN OFFICIAL GRANTS.GOV FORM ↗
+                  </a>
                 </div>
               </div>
             )}
