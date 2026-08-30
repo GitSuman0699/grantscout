@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Copy, Check, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Download, Copy, Check, Sparkles, Target, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, Loader2 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft } from '../services/api';
 
 export default function GrantDetailPage() {
   const { id } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { getGrantById, refreshGrants } = useGrants();
   
   const grant = getGrantById(id);
@@ -16,6 +18,21 @@ export default function GrantDetailPage() {
   const [draftError, setDraftError] = useState(null);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  // Read view parameter ('rubric' | 'draft')
+  const initialView = searchParams.get('view') || location.state?.view || 'rubric';
+  const [activeViewTab, setActiveViewTab] = useState(initialView);
+
+  const draftPaneRef = useRef(null);
+  const rubricPaneRef = useRef(null);
+
+  // Sync tab with URL search parameter if changed
+  useEffect(() => {
+    const viewParam = searchParams.get('view') || location.state?.view;
+    if (viewParam && (viewParam === 'rubric' || viewParam === 'draft')) {
+      setActiveViewTab(viewParam);
+    }
+  }, [searchParams, location.state]);
 
   // Determine dynamic origin path and back button label
   const fromPath = location.state?.from || '/pipeline';
@@ -27,6 +44,15 @@ export default function GrantDetailPage() {
   };
 
   const backLabel = getBackLabel(fromPath);
+
+  const handleBackNavigation = () => {
+    // If we have history within the app, use back navigation to maintain scroll position
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate(fromPath);
+    }
+  };
 
   // Fetch drafted application for this grant from API
   useEffect(() => {
@@ -61,7 +87,6 @@ export default function GrantDetailPage() {
       if (res.application) {
         setDraft(res.application);
       } else {
-        // Refetch applications
         const appsData = await fetchApplications();
         const found = (appsData.applications || []).find(
           a => String(a.grant_id) === String(grantId)
@@ -86,9 +111,9 @@ export default function GrantDetailPage() {
         <p style={{ color: 'var(--ink-muted)', marginBottom: '1.5rem' }}>
           The requested federal opportunity could not be located.
         </p>
-        <Link to={fromPath} className="brutalist-btn btn-primary">
+        <button onClick={handleBackNavigation} className="brutalist-btn btn-primary">
           <ArrowLeft size={18} /> {backLabel}
-        </Link>
+        </button>
       </div>
     );
   }
@@ -129,9 +154,9 @@ export default function GrantDetailPage() {
     <div className="page-container">
       {/* Top Dynamic Breadcrumb Bar */}
       <div style={{ marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <Link to={fromPath} className="brutalist-btn btn-outline" style={{ padding: '0.4rem 0.85rem', fontSize: '0.9rem' }}>
+        <button onClick={handleBackNavigation} className="brutalist-btn btn-outline" style={{ padding: '0.4rem 0.85rem', fontSize: '0.9rem', cursor: 'pointer' }}>
           <ArrowLeft size={16} /> {backLabel}
-        </Link>
+        </button>
 
         {sections.length > 0 && (
           <div className="workstation-action-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -178,10 +203,36 @@ export default function GrantDetailPage() {
         )}
       </div>
 
+      {/* Mobile/Tablet Workstation View Switcher Tabs */}
+      <div className="workstation-view-toggle">
+        <button
+          onClick={() => {
+            setActiveViewTab('rubric');
+            setSearchParams({ view: 'rubric' });
+          }}
+          className={`workstation-tab-btn ${activeViewTab === 'rubric' ? 'active' : ''}`}
+        >
+          <Target size={16} /> 5-DIMENSION RUBRIC
+        </button>
+        <button
+          onClick={() => {
+            setActiveViewTab('draft');
+            setSearchParams({ view: 'draft' });
+          }}
+          className={`workstation-tab-btn ${activeViewTab === 'draft' ? 'active' : ''}`}
+        >
+          <Sparkles size={16} /> PROPOSAL WORKSTATION {sections.length > 0 ? `(${sections.length})` : ''}
+        </button>
+      </div>
+
       {/* Workstation 2-Column Responsive Layout */}
       <div className="workstation-container">
         {/* Left Column: 5-Dimension Rubric & Strengths */}
-        <div className="brutalist-card" style={{ padding: '1.25rem' }}>
+        <div
+          ref={rubricPaneRef}
+          className={`brutalist-card workstation-column ${activeViewTab !== 'rubric' ? 'hidden-mobile' : ''}`}
+          style={{ padding: '1.25rem' }}
+        >
           {/* Fit Score Header */}
           <div style={{
             background: 'var(--card-alt-bg)',
@@ -263,7 +314,11 @@ export default function GrantDetailPage() {
         </div>
 
         {/* Right Column: 6-Section Document Editor or Generation CTA */}
-        <div className="brutalist-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div
+          ref={draftPaneRef}
+          className={`brutalist-card workstation-column ${activeViewTab !== 'draft' ? 'hidden-mobile' : ''}`}
+          style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        >
           {loadingDraft ? (
             <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--ink-muted)' }}>
               <Loader2 className="animate-spin" size={28} style={{ margin: '0 auto 0.75rem' }} />

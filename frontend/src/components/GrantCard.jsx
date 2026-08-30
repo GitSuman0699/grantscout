@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Building2, Sparkles, ChevronRight } from 'lucide-react';
+import { Building2, Sparkles, ChevronRight, Target } from 'lucide-react';
 
 export default function GrantCard({ grant }) {
   const location = useLocation();
@@ -12,8 +12,8 @@ export default function GrantCard({ grant }) {
     ? `$${(grant.award_ceiling).toLocaleString()}` 
     : 'Funding Varies';
 
-  const grantUrl = `/grants/${grant.id || grant.grant_id}`;
-  const navigationState = { from: location.pathname };
+  const grantId = grant.id || grant.grant_id;
+  const grantUrl = `/grants/${grantId}`;
 
   return (
     <div
@@ -41,7 +41,7 @@ export default function GrantCard({ grant }) {
           <span>{grant.agency || 'Federal Agency'}</span>
         </div>
 
-        {grant.match_score?.total && (
+        {grant.match_score?.total != null && (
           <span className={`tag-badge ${isHighFit ? 'tag-amber' : isReview ? 'tag-green' : 'tag-neutral'}`}>
             {grant.match_score.total}% FIT {isHighFit ? '• AUTO-DRAFT' : ''}
           </span>
@@ -60,7 +60,11 @@ export default function GrantCard({ grant }) {
         </div>
 
         {/* Title */}
-        <Link to={grantUrl} state={navigationState} style={{ textDecoration: 'none', color: 'inherit' }}>
+        <Link
+          to={`${grantUrl}?view=rubric`}
+          state={{ from: location.pathname, view: 'rubric' }}
+          style={{ textDecoration: 'none', color: 'inherit' }}
+        >
           <h3
             className="font-heading"
             style={{
@@ -110,20 +114,21 @@ export default function GrantCard({ grant }) {
           </div>
         </div>
 
-        {/* Action Button Row with Page Navigation & Origin Tracking */}
+        {/* Action Buttons: INSPECT RUBRIC vs PRE-FILL DRAFT */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <Link
-            to={grantUrl}
-            state={navigationState}
+            to={`${grantUrl}?view=rubric`}
+            state={{ from: location.pathname, view: 'rubric' }}
             className="brutalist-btn btn-outline"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
+            <Target size={16} />
             INSPECT RUBRIC
           </Link>
           
           <Link
-            to={grantUrl}
-            state={navigationState}
+            to={`${grantUrl}?view=draft`}
+            state={{ from: location.pathname, view: 'draft' }}
             className="brutalist-btn btn-primary"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
