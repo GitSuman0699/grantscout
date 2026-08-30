@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Building2, Sparkles, Target, ExternalLink } from 'lucide-react';
+import { Building2, Sparkles, Target } from 'lucide-react';
 
 /**
  * Universal calculation of grant fit percentage score.
@@ -75,7 +75,6 @@ export default function GrantCard({ grant }) {
   const location = useLocation();
   const fitScore = calculateFitScore(grant);
   const badgeInfo = getScoreBadgeProps(fitScore);
-  const officialUrl = getOfficialGrantUrl(grant);
   
   // Format award
   const awardText = grant.award_ceiling 
@@ -108,25 +107,10 @@ export default function GrantCard({ grant }) {
         gap: '0.5rem',
         flexWrap: 'wrap'
       }}>
-        <a
-          href={officialUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open official notice on Grants.gov"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            fontSize: '0.8rem',
-            fontWeight: 700,
-            color: 'var(--ink)',
-            textDecoration: 'none'
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)' }}>
           <Building2 size={16} />
           <span>{grant.agency || 'Federal Agency'}</span>
-          <ExternalLink size={12} color="var(--ink-muted)" />
-        </a>
+        </div>
 
         <span className={badgeInfo.className}>
           {badgeInfo.label}
