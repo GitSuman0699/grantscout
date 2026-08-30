@@ -16,10 +16,10 @@ export default function Header() {
 
   const navItems = [
     { to: '/', label: 'HOME', end: true },
-    { to: '/pipeline', label: 'PIPELINE' },
-    { to: '/drafts', label: 'APPLICATION DRAFTS' },
-    { to: '/knowledge', label: 'RAG KNOWLEDGE BASE' },
-    { to: '/optimization', label: 'COST OPTIMIZATION' }
+    { to: '/pipeline', label: 'PIPELINE', end: true },
+    { to: '/drafts', label: 'APPLICATION DRAFTS', end: true },
+    { to: '/knowledge', label: 'RAG KNOWLEDGE BASE', end: true },
+    { to: '/optimization', label: 'COST OPTIMIZATION', end: true }
   ];
 
   const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH • 5-DIMENSION RUBRIC SCORING • ZERO HALLUCINATION FORM 990 FACTS • GRANTS.GOV REST API • ";
