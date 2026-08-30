@@ -74,8 +74,22 @@ class LocalStorage:
         logger.info(f"Saved grant: {grant_id}")
         return grant_id
 
-    def _normalize_grant(self, grant: dict) -> dict:
-        """Ensure match_score has total computed and present."""
+    def _get_drafted_grant_ids(self) -> set[str]:
+        """Get set of all grant_ids that have an existing draft."""
+        drafted = set()
+        apps_dir = self.base_path / "applications"
+        for filepath in apps_dir.glob("*.json"):
+            try:
+                data = json.loads(filepath.read_text(encoding="utf-8"))
+                gid = data.get("grant_id")
+                if gid:
+                    drafted.add(str(gid))
+            except Exception:
+                pass
+        return drafted
+
+    def _normalize_grant(self, grant: dict, drafted_set: Optional[set[str]] = None) -> dict:
+        """Ensure match_score has total computed and attach is_drafted boolean."""
         ms = grant.get("match_score")
         if isinstance(ms, dict):
             if "total" not in ms:
@@ -86,6 +100,11 @@ class LocalStorage:
                     + ms.get("geographic_fit", 0)
                     + ms.get("track_record", 0)
                 )
+        gid = str(grant.get("grant_id") or grant.get("id") or "")
+        if drafted_set is not None:
+            grant["is_drafted"] = gid in drafted_set
+        else:
+            grant["is_drafted"] = gid in self._get_drafted_grant_ids()
         return grant
 
     def get_grant(self, grant_id: str) -> Optional[dict]:
@@ -100,11 +119,12 @@ class LocalStorage:
         """List all grants, optionally filtered by status."""
         grants = []
         grants_dir = self.base_path / "grants"
+        drafted_set = self._get_drafted_grant_ids()
         for filepath in grants_dir.glob("*.json"):
             try:
                 grant = json.loads(filepath.read_text(encoding="utf-8"))
                 if not status or grant.get("status") == status:
-                    grants.append(self._normalize_grant(grant))
+                    grants.append(self._normalize_grant(grant, drafted_set=drafted_set))
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read grant file {filepath}: {e}")
         return sorted(grants, key=lambda g: g.get("discovered_at", ""), reverse=True)

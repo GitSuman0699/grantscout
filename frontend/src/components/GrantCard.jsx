@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Building2, Sparkles, Target } from 'lucide-react';
+import { Building2, Sparkles, Target, FileCheck, FileText } from 'lucide-react';
 
 /**
  * Universal calculation of grant fit percentage score.
@@ -21,23 +21,6 @@ export function calculateFitScore(grant) {
   }
   if (typeof grant.score === 'number') return grant.score;
   return null;
-}
-
-/**
- * Returns the direct official URL to the federal opportunity / application portal.
- */
-export function getOfficialGrantUrl(grant) {
-  if (!grant) return 'https://www.grants.gov';
-  if (grant.application_url) return grant.application_url;
-  if (grant.additional_info_url) return grant.additional_info_url;
-  if (grant.url) return grant.url;
-  
-  const id = String(grant.grant_id || grant.id || '');
-  const numMatch = id.replace('grants-gov-', '').trim();
-  if (/^\d+$/.test(numMatch)) {
-    return `https://www.grants.gov/search-results-detail/${numMatch}`;
-  }
-  return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(grant.title || id)}`;
 }
 
 /**
@@ -75,6 +58,7 @@ export default function GrantCard({ grant }) {
   const location = useLocation();
   const fitScore = calculateFitScore(grant);
   const badgeInfo = getScoreBadgeProps(fitScore);
+  const isDrafted = Boolean(grant.is_drafted || grant.draft_location || grant.status === 'ready_for_review');
   
   // Format award
   const awardText = grant.award_ceiling 
@@ -112,9 +96,23 @@ export default function GrantCard({ grant }) {
           <span>{grant.agency || 'Federal Agency'}</span>
         </div>
 
-        <span className={badgeInfo.className}>
-          {badgeInfo.label}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {/* Draft Status Indicator Badge */}
+          {isDrafted ? (
+            <span className="tag-badge tag-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem' }}>
+              <FileCheck size={12} /> DRAFTED
+            </span>
+          ) : (
+            <span className="tag-badge tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem' }}>
+              <FileText size={12} /> NOT DRAFTED
+            </span>
+          )}
+
+          {/* Fit Score Badge */}
+          <span className={badgeInfo.className}>
+            {badgeInfo.label}
+          </span>
+        </div>
       </div>
 
       {/* Card Body */}
@@ -198,11 +196,11 @@ export default function GrantCard({ grant }) {
           <Link
             to={draftUrl}
             state={navState}
-            className="brutalist-btn btn-primary"
+            className={`brutalist-btn ${isDrafted ? 'btn-primary' : 'btn-outline'}`}
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
             <Sparkles size={16} />
-            PRE-FILL DRAFT
+            {isDrafted ? 'OPEN DRAFT' : 'PRE-FILL DRAFT'}
           </Link>
         </div>
       </div>
