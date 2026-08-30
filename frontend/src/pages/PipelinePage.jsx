@@ -46,9 +46,9 @@ export default function PipelinePage() {
 
   // Derive stats from API or grants array
   const stats = dashboardStats ? {
-    scanned: String(dashboardStats.total_scanned ?? dashboardStats.grants_scanned ?? grants.length),
-    matched: String(dashboardStats.high_fit_matches ?? highFitCount),
-    drafts: String(dashboardStats.drafts_prepared ?? 0),
+    scanned: String(dashboardStats.grants_discovered ?? dashboardStats.total_scanned ?? dashboardStats.grants_scanned ?? grants.length),
+    matched: String(dashboardStats.high_matches ?? dashboardStats.high_fit_matches ?? highFitCount),
+    drafts: String(dashboardStats.applications_drafted ?? dashboardStats.drafts_prepared ?? 0),
     pipelineValue: dashboardStats.pipeline_value || dashboardStats.total_pipeline_value || `$${(grants.reduce((sum, g) => sum + (g.award_ceiling || 0), 0) / 1000).toFixed(0)}K`,
   } : {
     scanned: String(grants.length),
