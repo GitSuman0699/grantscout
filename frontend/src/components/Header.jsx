@@ -4,7 +4,8 @@ import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare } from 'l
 import { useGrants } from '../context/GrantContext';
 
 export default function Header() {
-  const { isScanning, runScanCycle } = useGrants();
+  const { isScanning, runScanCycle, systemHealth } = useGrants();
+  const isHealthy = systemHealth === 'healthy';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -69,8 +70,8 @@ export default function Header() {
             fontWeight: 800,
             whiteSpace: 'nowrap'
           }}>
-            <span className="live-indicator" style={{ width: '6px', height: '6px' }}></span>
-            <span style={{ color: '#22C55E', letterSpacing: '0.06em' }}>LIVE</span>
+            <span className={isHealthy ? 'live-indicator' : ''} style={{ width: '6px', height: '6px', backgroundColor: isHealthy ? undefined : '#EF4444', borderRadius: '50%' }}></span>
+            <span style={{ color: isHealthy ? '#22C55E' : '#EF4444', letterSpacing: '0.06em' }}>{isHealthy ? 'LIVE' : 'OFFLINE'}</span>
             <span className="desktop-only" style={{ color: '#A1A1AA', fontSize: '0.62rem', fontWeight: 600 }}>
               (PORT 8000)
             </span>

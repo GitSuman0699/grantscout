@@ -6,8 +6,21 @@ import { Compass, ArrowRight, ShieldCheck, Cpu, Database, Sparkles, Target, Zap 
 import { useGrants } from '../context/GrantContext';
 
 export default function HomePage() {
-  const { grants } = useGrants();
+  const { grants, dashboardStats } = useGrants();
   const highFitCount = grants.filter(g => g.match_score?.total >= 80).length;
+
+  // Derive stats from context
+  const stats = dashboardStats ? {
+    scanned: String(dashboardStats.total_scanned ?? dashboardStats.grants_scanned ?? grants.length),
+    matched: String(dashboardStats.high_fit_matches ?? highFitCount),
+    drafts: String(dashboardStats.drafts_prepared ?? 0),
+    pipelineValue: dashboardStats.pipeline_value || dashboardStats.total_pipeline_value || `$${(grants.reduce((sum, g) => sum + (g.award_ceiling || 0), 0) / 1000).toFixed(0)}K`,
+  } : {
+    scanned: String(grants.length),
+    matched: String(highFitCount),
+    drafts: '0',
+    pipelineValue: `$${(grants.reduce((sum, g) => sum + (g.award_ceiling || 0), 0) / 1000).toFixed(0)}K`,
+  };
 
   return (
     <div className="page-container">
@@ -31,7 +44,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <MetricsBar stats={{ scanned: '78', matched: '14', drafts: '6', pipelineValue: '$1.45M' }} />
+        <MetricsBar stats={stats} />
       </div>
 
       {/* Feature Highlights Grid */}
@@ -84,7 +97,7 @@ export default function HomePage() {
             COST & TOKEN OPTIMIZATION
           </h4>
           <p style={{ fontSize: '0.85rem', color: 'var(--ink-muted)', lineHeight: '1.5' }}>
-            Routes high-volume scans to Claude Haiku 4.5 and proposal drafts to Sonnet 4.5 with 82% LRU response caching to maximize AWS credit longevity.
+            Routes high-volume scans to Claude Haiku 4.5 and proposal drafts to Sonnet 4.5 with LRU response caching to maximize AWS credit longevity.
           </p>
           <hr className="dashed-divider" />
           <Link to="/optimization" style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>

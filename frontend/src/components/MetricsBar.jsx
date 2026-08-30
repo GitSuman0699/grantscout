@@ -5,28 +5,28 @@ export default function MetricsBar({ stats }) {
   const items = [
     {
       label: 'GRANTS SCANNED',
-      value: stats?.scanned || '78',
+      value: stats?.scanned ?? '0',
       meta: 'Grants.gov Live REST API',
       icon: Search,
       badge: 'AUTONOMOUS'
     },
     {
       label: 'HIGH FIT MATCHES',
-      value: stats?.matched || '14',
+      value: stats?.matched ?? '0',
       meta: '≥80% Rubric Threshold',
       icon: Target,
       badge: '5-DIMENSION'
     },
     {
       label: 'DRAFTS PREPARED',
-      value: stats?.drafts || '6',
+      value: stats?.drafts ?? '0',
       meta: '6-Section Pydantic Schema',
       icon: FileText,
       badge: 'RAG ENHANCED'
     },
     {
       label: 'TOTAL PIPELINE VALUE',
-      value: stats?.pipelineValue || '$1.45M',
+      value: stats?.pipelineValue ?? '$0',
       meta: 'Active Opportunities',
       icon: DollarSign,
       badge: 'FEDERAL CEILING'

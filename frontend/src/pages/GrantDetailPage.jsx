@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Copy, Check, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign } from 'lucide-react';
+import { ArrowLeft, Download, Copy, Check, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, Loader2 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
+import { fetchApplications, triggerDraft } from '../services/api';
 
 export default function GrantDetailPage() {
   const { id } = useParams();
   const location = useLocation();
-  const { getGrantById } = useGrants();
+  const { getGrantById, refreshGrants } = useGrants();
   
   const grant = getGrantById(id);
+  const [draft, setDraft] = useState(null);
+  const [loadingDraft, setLoadingDraft] = useState(true);
+  const [isDrafting, setIsDrafting] = useState(false);
+  const [draftError, setDraftError] = useState(null);
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -23,6 +28,55 @@ export default function GrantDetailPage() {
 
   const backLabel = getBackLabel(fromPath);
 
+  // Fetch drafted application for this grant from API
+  useEffect(() => {
+    const loadDraft = async () => {
+      if (!grant) return;
+      setLoadingDraft(true);
+      try {
+        const data = await fetchApplications();
+        const grantId = grant.grant_id || grant.id;
+        const matchingDraft = (data.applications || []).find(
+          a => String(a.grant_id) === String(grantId) || String(a.grant_id) === String(grant.id)
+        );
+        if (matchingDraft) {
+          setDraft(matchingDraft);
+        }
+      } catch (err) {
+        console.warn('Could not fetch drafts for grant:', err.message);
+      } finally {
+        setLoadingDraft(false);
+      }
+    };
+    loadDraft();
+  }, [grant]);
+
+  const handleGenerateDraft = async () => {
+    if (!grant) return;
+    setIsDrafting(true);
+    setDraftError(null);
+    try {
+      const grantId = grant.grant_id || grant.id;
+      const res = await triggerDraft(grantId);
+      if (res.application) {
+        setDraft(res.application);
+      } else {
+        // Refetch applications
+        const appsData = await fetchApplications();
+        const found = (appsData.applications || []).find(
+          a => String(a.grant_id) === String(grantId)
+        );
+        if (found) setDraft(found);
+      }
+      refreshGrants();
+    } catch (err) {
+      console.error('Draft generation failed:', err.message);
+      setDraftError(err.message);
+    } finally {
+      setIsDrafting(false);
+    }
+  };
+
   if (!grant) {
     return (
       <div className="page-container" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
@@ -30,7 +84,7 @@ export default function GrantDetailPage() {
           GRANT OPPORTUNITY NOT FOUND
         </h2>
         <p style={{ color: 'var(--ink-muted)', marginBottom: '1.5rem' }}>
-          The requested federal opportunity could not be located in the local cache.
+          The requested federal opportunity could not be located.
         </p>
         <Link to={fromPath} className="brutalist-btn btn-primary">
           <ArrowLeft size={18} /> {backLabel}
@@ -40,48 +94,18 @@ export default function GrantDetailPage() {
   }
 
   const score = grant.match_score || {
-    mission_alignment: 28,
-    eligibility_fit: 24,
-    capacity_match: 18,
-    geographic_fit: 14,
-    track_record: 10,
-    total: 94
+    mission_alignment: 0,
+    eligibility_fit: 0,
+    capacity_match: 0,
+    geographic_fit: 0,
+    track_record: 0,
+    total: 0
   };
 
-  const sections = [
-    {
-      title: "1. Executive Summary",
-      word_count: 245,
-      content: `Youth Education Alliance (YEA) requests $75,000 from the ${grant.agency || 'National Science Foundation'} to expand our proven 'Youth STEM Innovation Labs' initiative. Serving 1,200 underrepresented middle and high school students across underserved urban communities, this multi-faceted project introduces experiential robotics, Python programming, and hardware prototyping. Grounded in a 4-year track record of delivering 85% math grade gains and supported by an IRS 990-validated 88.7% program expenditure ratio, YEA provides the organizational capacity, certified pedagogical staff, and community partnerships necessary to achieve high-impact outcomes.`
-    },
-    {
-      title: "2. Statement of Need & Target Population",
-      word_count: 310,
-      content: `Disadvantaged urban youth face systemic disparities in STEM learning opportunities and hardware access. In our target service area, less than 24% of Title I middle school students test proficient in eighth-grade mathematics, with zero structured after-school computer science programming offered within a 5-mile radius. Without intervention, this compounding gap severely limits post-secondary technical pathways. This project targets 1,200 students (ages 10-17), 78% of whom qualify for free or reduced-price lunch.`
-    },
-    {
-      title: "3. Project Narrative & Program Design",
-      word_count: 420,
-      content: `The Youth STEM Innovation Labs model operates across three core pillars: (1) Hands-on Robotics & Autonomous Systems, utilizing modular hardware kits; (2) Applied Python & Data Literacy, teaching students real-world problem-solving; and (3) Mentorship from professional engineers from regional technology partners. The 28-week curriculum runs twice weekly in 90-minute modules, culminating in a community Capstone Showcase where student teams present working prototypes to civic and industry leaders.`
-    },
-    {
-      title: "4. Budget Justification & Financial Plan",
-      word_count: 285,
-      content: `Total Grant Request: $75,000. \n• Personnel ($38,000): Lead STEM Instructors (2 FTE @ 20 hrs/week) and Curriculum Specialist ($8,000).\n• Materials & Equipment ($22,000): 40 Modular Robotics Kits ($12,000), 20 Dedicated Laptops ($8,000), Prototyping Consumables ($2,000).\n• Program Evaluation & Metrics ($7,500): Independent assessment and longitudinal pre/post surveys.\n• Indirect & Administrative ($7,500): 10% de minimis administrative rate in compliance with federal guidelines.`
-    },
-    {
-      title: "5. Evaluation & Impact Metrics",
-      word_count: 215,
-      content: `Project outcomes will be evaluated against three benchmark metrics: (1) 80%+ of participants demonstrate measurable gains in algorithmic reasoning on standardized pre/post assessments; (2) 90%+ course completion rate with completed capstone projects; and (3) 85%+ expressing increased intent to pursue STEM college majors. Longitudinal metrics will be tracked using automated semester surveys.`
-    },
-    {
-      title: "6. Organizational Capacity & Track Record",
-      word_count: 260,
-      content: `Founded in 2018, Youth Education Alliance is an active 501(c)(3) nonprofit with an annual operating budget of $450,000. Under the leadership of Executive Director Dr. Marcus Vance (PhD in Computer Science Education, Georgia Tech), YEA has successfully executed prior NSF awards (#NSF-EDU-2023-4412 for $25,000 with 100% compliance). With clean annual IRS 990 audits and 14 full-time instructors, YEA possesses both the fiduciary governance and operational scale to execute this grant flawlessly.`
-    }
-  ];
+  const sections = draft?.sections && draft.sections.length > 0 ? draft.sections : [];
 
   const handleExportMarkdown = () => {
+    if (sections.length === 0) return;
     const md = `# Grant Application Draft\n## ${grant.title}\n**Agency**: ${grant.agency}\n**Grant ID**: ${grant.grant_id || grant.id}\n**Match Score**: ${score.total}/100\n\n---\n\n` +
       sections.map(s => `### ${s.title}\n\n${s.content}\n\n`).join('\n---\n\n');
     
@@ -94,6 +118,7 @@ export default function GrantDetailPage() {
   };
 
   const handleCopy = () => {
+    if (sections.length === 0) return;
     const text = sections.map(s => `${s.title}\n\n${s.content}`).join('\n\n====================\n\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -108,20 +133,24 @@ export default function GrantDetailPage() {
           <ArrowLeft size={16} /> {backLabel}
         </Link>
 
-        <div className="workstation-action-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button onClick={handleExportMarkdown} className="brutalist-btn btn-amber" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
-            <Download size={16} /> EXPORT .MD
-          </button>
-          <button onClick={handleCopy} className="brutalist-btn btn-outline" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
-            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'COPIED' : 'COPY ALL'}
-          </button>
-        </div>
+        {sections.length > 0 && (
+          <div className="workstation-action-bar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button onClick={handleExportMarkdown} className="brutalist-btn btn-amber" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
+              <Download size={16} /> EXPORT .MD
+            </button>
+            <button onClick={handleCopy} className="brutalist-btn btn-outline" style={{ padding: '0.45rem 1rem', fontSize: '0.95rem' }}>
+              {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'COPIED' : 'COPY ALL'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Grant Overview Header Card */}
       <div className="brutalist-card workstation-header-card" style={{ padding: '1.5rem 2rem', marginBottom: '1.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-          <span className="tag-badge tag-amber">AUTONOMOUS DRAFT READY</span>
+          <span className={`tag-badge ${score.total >= 80 ? 'tag-amber' : 'tag-neutral'}`}>
+            {score.total >= 80 ? 'HIGH FIT OPPORTUNITY' : 'OPPORTUNITY'}
+          </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
             {grant.agency || 'Federal Agency'} • ID: {grant.grant_id || grant.id}
           </span>
@@ -132,13 +161,26 @@ export default function GrantDetailPage() {
         </h1>
 
         <p style={{ color: 'var(--ink-muted)', fontSize: '0.9rem', lineHeight: '1.45', maxWidth: '960px' }}>
-          {grant.synopsis || 'Pre-filled autonomous proposal package structured across 6 required federal sections with Pydantic schema enforcement and RAG verification.'}
+          {grant.synopsis || 'Federal grant opportunity scanned and analyzed by the GrantScout Autonomous Agent Pipeline.'}
         </p>
+
+        {grant.award_ceiling && (
+          <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+            <span className="tag-badge tag-dark">
+              AWARD CEILING: ${grant.award_ceiling.toLocaleString()}
+            </span>
+            {grant.close_date && (
+              <span className="tag-badge tag-neutral">
+                DEADLINE: {grant.close_date}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Workstation 2-Column Responsive Layout */}
       <div className="workstation-container">
-        {/* Left Column: 5-Dimension Rubric & RAG Knowledge */}
+        {/* Left Column: 5-Dimension Rubric & Strengths */}
         <div className="brutalist-card" style={{ padding: '1.25rem' }}>
           {/* Fit Score Header */}
           <div style={{
@@ -149,12 +191,12 @@ export default function GrantDetailPage() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.4rem' }}>
               <span className="font-heading" style={{ fontSize: '1.25rem' }}>FIT SCORE OVERVIEW</span>
-              <span className="tag-badge tag-amber" style={{ fontSize: '0.85rem' }}>
-                {score.total} / 100 • AUTO-DRAFT
+              <span className={`tag-badge ${score.total >= 80 ? 'tag-amber' : 'tag-neutral'}`} style={{ fontSize: '0.85rem' }}>
+                {score.total} / 100 {score.total >= 80 ? '• AUTO-DRAFT' : ''}
               </span>
             </div>
             <p style={{ fontSize: '0.78rem', color: 'var(--ink-muted)', lineHeight: '1.35' }}>
-              Evaluated against Youth Education Alliance mission profile and 990 financial filings.
+              Evaluated against organization profile and RAG-indexed filings.
             </p>
           </div>
 
@@ -164,11 +206,11 @@ export default function GrantDetailPage() {
           </h4>
 
           {[
-            { label: 'Mission Alignment', score: score.mission_alignment || 28, max: 30, note: 'Direct alignment with youth STEM & robotics' },
-            { label: 'Eligibility Fit', score: score.eligibility_fit || 24, max: 25, note: '501(c)(3) verified via IRS Form 990' },
-            { label: 'Capacity Match', score: score.capacity_match || 18, max: 20, note: '$75k request aligns with $450k budget' },
-            { label: 'Geographic Fit', score: score.geographic_fit || 14, max: 15, note: 'National & regional urban hubs' },
-            { label: 'Past Track Record', score: score.track_record || 10, max: 10, note: 'Prior $25k NSF grant successfully closed' }
+            { label: 'Mission Alignment', score: score.mission_alignment || 0, max: 30 },
+            { label: 'Eligibility Fit', score: score.eligibility_fit || 0, max: 25 },
+            { label: 'Capacity Match', score: score.capacity_match || 0, max: 20 },
+            { label: 'Geographic Fit', score: score.geographic_fit || 0, max: 15 },
+            { label: 'Past Track Record', score: score.track_record || 0, max: 10 }
           ].map((dim, idx) => (
             <div key={idx} style={{ marginBottom: '0.85rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.2rem' }}>
@@ -178,125 +220,153 @@ export default function GrantDetailPage() {
               <div style={{ height: '7px', background: '#E4E4E7', border: '1px solid var(--border-dark)' }}>
                 <div style={{
                   height: '100%',
-                  width: `${(dim.score / dim.max) * 100}%`,
-                  backgroundColor: dim.score / dim.max >= 0.8 ? 'var(--amber-signal)' : 'var(--ink)'
+                  width: `${dim.max > 0 ? (dim.score / dim.max) * 100 : 0}%`,
+                  backgroundColor: (dim.score / (dim.max || 1)) >= 0.8 ? 'var(--amber-signal)' : 'var(--ink)'
                 }} />
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--ink-muted)', marginTop: '0.15rem' }}>
-                {dim.note}
               </div>
             </div>
           ))}
 
-          <hr className="dashed-divider" style={{ margin: '0.85rem 0' }} />
-
-          {/* Cited Knowledge Sources */}
-          <div style={{
-            background: 'var(--canvas-bg)',
-            border: '1px solid var(--border-dark)',
-            padding: '0.85rem 1rem',
-            fontSize: '0.75rem'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, marginBottom: '0.4rem' }}>
-              <BookOpen size={15} />
-              <span>CITED RAG KNOWLEDGE SOURCES</span>
-            </div>
-            <ul style={{ paddingLeft: '1.1rem', color: 'var(--ink-muted)', lineHeight: '1.45' }}>
-              <li><strong>IRS Form 990 (2024)</strong>: 88.7% program expense ratio, $450K annual budget.</li>
-              <li><strong>2025 Impact Report</strong>: 85% math improvement rate across 1,200 students.</li>
-              <li><strong>NSF Award Archive</strong>: Grant #NSF-EDU-2023-4412 ($25K).</li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Right Column: 6-Section Document Editor */}
-        <div className="brutalist-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Section Tabs Strip (Horizontal Scroll on Mobile) */}
-          <div style={{
-            display: 'flex',
-            overflowX: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            borderBottom: '2px solid var(--border-dark)',
-            backgroundColor: 'var(--card-alt-bg)',
-            whiteSpace: 'nowrap'
-          }}>
-            {sections.map((s, idx) => {
-              const isActive = activeSectionIdx === idx;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => setActiveSectionIdx(idx)}
-                  className="font-heading"
-                  style={{
-                    padding: '0.75rem 1rem',
-                    fontSize: '0.92rem',
-                    whiteSpace: 'nowrap',
-                    borderRight: '1px solid var(--border-dashed)',
-                    borderTop: 'none',
-                    borderLeft: 'none',
-                    borderBottom: isActive ? '3px solid var(--amber-signal)' : 'none',
-                    backgroundColor: isActive ? '#FFFFFF' : 'transparent',
-                    color: isActive ? 'var(--amber-signal)' : 'var(--ink)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {s.title}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active Section Content */}
-          <div className="workstation-editor-pane" style={{ padding: '1.75rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-              <h3 className="font-heading" style={{ fontSize: '1.5rem', color: 'var(--ink)' }}>
-                {sections[activeSectionIdx].title}
-              </h3>
-              <span className="tag-badge tag-dark">
-                {sections[activeSectionIdx].word_count} WORDS
-              </span>
-            </div>
-
-            <textarea
-              value={sections[activeSectionIdx].content}
-              readOnly
-              style={{
-                width: '100%',
-                minHeight: '260px',
-                padding: '1rem',
-                fontSize: '0.9rem',
-                lineHeight: '1.6',
-                fontFamily: 'var(--font-body)',
-                color: 'var(--ink)',
-                backgroundColor: 'var(--canvas-bg)',
-                border: '2px solid var(--border-dark)',
-                boxShadow: '3px 3px 0px var(--border-dark)',
-                resize: 'vertical'
-              }}
-            />
-
-            {/* Human Action Items Box */}
-            <div style={{
-              marginTop: '1.25rem',
-              backgroundColor: 'var(--card-alt-bg)',
-              border: '2px solid var(--border-dark)',
-              padding: '0.85rem 1rem',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '0.65rem'
-            }}>
-              <AlertTriangle size={18} color="var(--amber-signal)" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase' }}>
-                  HUMAN REVIEW ACTION ITEMS REQUIRED (2):
+          {/* Key Strengths from Matcher Agent */}
+          {grant.key_strengths && grant.key_strengths.length > 0 && (
+            <>
+              <hr className="dashed-divider" style={{ margin: '0.85rem 0' }} />
+              <div style={{ fontSize: '0.8rem' }}>
+                <div style={{ fontWeight: 700, marginBottom: '0.35rem', textTransform: 'uppercase' }}>
+                  Key Strengths:
                 </div>
-                <ul style={{ fontSize: '0.78rem', color: 'var(--ink-muted)', marginTop: '0.2rem', paddingLeft: '1.1rem', lineHeight: '1.4' }}>
-                  <li>Attach official 501(c)(3) IRS Determination Letter and Board Resolution signature.</li>
-                  <li>Confirm Q3 milestone dates against the final agency calendar before final submission.</li>
+                <ul style={{ paddingLeft: '1.1rem', color: 'var(--ink-muted)', lineHeight: '1.45', fontSize: '0.78rem' }}>
+                  {grant.key_strengths.map((s, idx) => (
+                    <li key={idx}>{s}</li>
+                  ))}
                 </ul>
               </div>
+            </>
+          )}
+
+          {/* Potential Risks */}
+          {grant.potential_risks && grant.potential_risks.length > 0 && (
+            <>
+              <hr className="dashed-divider" style={{ margin: '0.85rem 0' }} />
+              <div style={{ fontSize: '0.8rem' }}>
+                <div style={{ fontWeight: 700, marginBottom: '0.35rem', textTransform: 'uppercase', color: 'var(--amber-signal)' }}>
+                  Potential Considerations:
+                </div>
+                <ul style={{ paddingLeft: '1.1rem', color: 'var(--ink-muted)', lineHeight: '1.45', fontSize: '0.78rem' }}>
+                  {grant.potential_risks.map((r, idx) => (
+                    <li key={idx}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right Column: 6-Section Document Editor or Generation CTA */}
+        <div className="brutalist-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {loadingDraft ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--ink-muted)' }}>
+              <Loader2 className="animate-spin" size={28} style={{ margin: '0 auto 0.75rem' }} />
+              <div>Loading application draft status...</div>
             </div>
-          </div>
+          ) : sections.length > 0 ? (
+            <>
+              {/* Section Tabs Strip */}
+              <div style={{
+                display: 'flex',
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                borderBottom: '2px solid var(--border-dark)',
+                backgroundColor: 'var(--card-alt-bg)',
+                whiteSpace: 'nowrap'
+              }}>
+                {sections.map((s, idx) => {
+                  const isActive = activeSectionIdx === idx;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveSectionIdx(idx)}
+                      className="font-heading"
+                      style={{
+                        padding: '0.75rem 1rem',
+                        fontSize: '0.92rem',
+                        whiteSpace: 'nowrap',
+                        borderRight: '1px solid var(--border-dashed)',
+                        borderTop: 'none',
+                        borderLeft: 'none',
+                        borderBottom: isActive ? '3px solid var(--amber-signal)' : 'none',
+                        backgroundColor: isActive ? '#FFFFFF' : 'transparent',
+                        color: isActive ? 'var(--amber-signal)' : 'var(--ink)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {s.title}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active Section Content */}
+              {sections[activeSectionIdx] && (
+                <div className="workstation-editor-pane" style={{ padding: '1.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    <h3 className="font-heading" style={{ fontSize: '1.5rem', color: 'var(--ink)' }}>
+                      {sections[activeSectionIdx].title}
+                    </h3>
+                    <span className="tag-badge tag-dark">
+                      {sections[activeSectionIdx].word_count || sections[activeSectionIdx].content?.split(/\s+/).filter(Boolean).length || 0} WORDS
+                    </span>
+                  </div>
+
+                  <textarea
+                    value={sections[activeSectionIdx].content}
+                    readOnly
+                    style={{
+                      width: '100%',
+                      minHeight: '260px',
+                      padding: '1rem',
+                      fontSize: '0.9rem',
+                      lineHeight: '1.6',
+                      fontFamily: 'var(--font-body)',
+                      color: 'var(--ink)',
+                      backgroundColor: 'var(--canvas-bg)',
+                      border: '2px solid var(--border-dark)',
+                      boxShadow: '3px 3px 0px var(--border-dark)',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            /* No draft yet: Trigger Drafting Action */
+            <div style={{ padding: '3rem 2rem', textAlign: 'center' }}>
+              <Sparkles size={36} color="var(--amber-signal)" style={{ margin: '0 auto 1rem' }} />
+              <h3 className="font-heading" style={{ fontSize: '1.8rem', color: 'var(--ink)', marginBottom: '0.5rem' }}>
+                AUTONOMOUS PROPOSAL DRAFTER
+              </h3>
+              <p style={{ color: 'var(--ink-muted)', fontSize: '0.92rem', maxWidth: '480px', margin: '0 auto 1.5rem', lineHeight: '1.5' }}>
+                Generate a multi-section proposal draft pre-populated with organization facts, budget calculations, and RAG-verified citations.
+              </p>
+
+              {draftError && (
+                <div className="brutalist-card" style={{ padding: '0.75rem 1rem', marginBottom: '1.25rem', borderLeft: '4px solid #EF4444', maxWidth: '480px', margin: '0 auto 1.25rem' }}>
+                  <div style={{ fontSize: '0.82rem', color: '#EF4444' }}>
+                    {draftError}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleGenerateDraft}
+                disabled={isDrafting}
+                className="brutalist-btn btn-primary"
+                style={{ padding: '0.75rem 1.75rem', fontSize: '1rem' }}
+              >
+                {isDrafting ? 'GENERATING PROPOSAL DRAFT...' : 'GENERATE APPLICATION DRAFT'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

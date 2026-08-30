@@ -1,152 +1,133 @@
-import React, { createContext, useContext, useState } from 'react';
-
-const INITIAL_GRANTS = [
-  {
-    id: 900001,
-    grant_id: 'NSF-2026-STEM-0982',
-    title: 'Youth STEM Innovation Labs for Underserved Communities',
-    agency: 'National Science Foundation',
-    synopsis: 'Funding for 501(c)(3) nonprofits to deliver hands-on robotics, coding, and science workshops to low-income students ages 8-18 in urban settings.',
-    award_ceiling: 75000,
-    award_floor: 25000,
-    close_date: '2026-11-15',
-    category: 'STEM',
-    applicant_types: 'Nonprofits having a 501(c)(3) status',
-    tags: ['EDUCATION', 'YOUTH STEM', '501(c)(3)', 'ROBOTICS'],
-    match_score: {
-      mission_alignment: 28,
-      eligibility_fit: 24,
-      capacity_match: 18,
-      geographic_fit: 14,
-      track_record: 10,
-      total: 94
-    },
-    key_strengths: [
-      'Direct mission alignment with youth STEM & robotics curriculum',
-      'Eligible 501(c)(3) applicant type with clean Form 990 audit',
-      'Requested $75K matches organizational capacity ($450K annual budget)'
-    ],
-    potential_risks: [
-      'Quarterly milestone reporting requires structured outcome tracking'
-    ],
-    recommended_action: 'auto_draft'
-  },
-  {
-    id: 900004,
-    grant_id: 'ED-GRANTS-2026-041',
-    title: 'After-School Coding Academies for K-12 Title I Schools',
-    agency: 'Department of Education',
-    synopsis: 'Competitive federal grants supporting structured after-school coding and computer science programs for elementary and secondary school students.',
-    award_ceiling: 50000,
-    award_floor: 15000,
-    close_date: '2026-12-01',
-    category: 'STEM',
-    applicant_types: 'Nonprofits having a 501(c)(3) status',
-    tags: ['K-12', 'AFTER-SCHOOL', 'CODING', '501(c)(3)'],
-    match_score: {
-      mission_alignment: 27,
-      eligibility_fit: 23,
-      capacity_match: 17,
-      geographic_fit: 13,
-      track_record: 8,
-      total: 88
-    },
-    key_strengths: [
-      'Focus on Title I school partnerships matches existing YEA after-school hubs',
-      'Prior curriculum templates can be directly redeployed'
-    ],
-    potential_risks: [
-      'Strict 30-day post-award implementation window'
-    ],
-    recommended_action: 'auto_draft'
-  },
-  {
-    id: 900003,
-    grant_id: 'DOL-ETA-2026-883',
-    title: 'Community Digital Literacy & Workforce Readiness Initiative',
-    agency: 'Department of Labor',
-    synopsis: 'Grants for community-based organizations to provide computer literacy training, digital skills, and workforce development for disadvantaged populations.',
-    award_ceiling: 100000,
-    award_floor: 30000,
-    close_date: '2027-01-20',
-    category: 'WORKFORCE',
-    applicant_types: 'Nonprofits (other than institutions of higher education)',
-    tags: ['WORKFORCE', 'DIGITAL EQUITY', 'COMMUNITY'],
-    match_score: {
-      mission_alignment: 20,
-      eligibility_fit: 22,
-      capacity_match: 14,
-      geographic_fit: 11,
-      track_record: 5,
-      total: 72
-    },
-    key_strengths: [
-      'Tech literacy focus aligns with digital education competencies',
-      'High award ceiling ($100,000)'
-    ],
-    potential_risks: [
-      'Adult workforce focus requires slight adaptation from pure youth K-12 model'
-    ],
-    recommended_action: 'manual_review'
-  },
-  {
-    id: 900006,
-    grant_id: 'NASA-EXP-2026-119',
-    title: 'Aerospace & Robotics Hands-on Discovery for High Schoolers',
-    agency: 'NASA Office of STEM Engagement',
-    synopsis: 'Supports hands-on rocketry, robotics kits, and aerospace engineering challenges for high school students in underrepresented STEM districts.',
-    award_ceiling: 65000,
-    award_floor: 20000,
-    close_date: '2026-10-30',
-    category: 'STEM',
-    applicant_types: '501(c)(3) Nonprofits and Community Organizations',
-    tags: ['ROBOTICS', 'AEROSPACE', 'HIGH SCHOOL'],
-    match_score: {
-      mission_alignment: 26,
-      eligibility_fit: 24,
-      capacity_match: 18,
-      geographic_fit: 13,
-      track_record: 9,
-      total: 90
-    },
-    key_strengths: [
-      'High school robotics competition track record aligns with NASA criteria',
-      'Eligible nonprofit applicant profile'
-    ],
-    potential_risks: [
-      'Requires specialist aeronautics safety protocols'
-    ],
-    recommended_action: 'auto_draft'
-  }
-];
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import {
+  fetchGrants as apiFetchGrants,
+  fetchDashboardStats as apiFetchStats,
+  fetchHealthCheck as apiFetchHealth,
+  triggerScan as apiTriggerScan,
+  createSSEStream,
+} from '../services/api';
 
 const GrantContext = createContext();
 
 export function GrantProvider({ children }) {
-  const [grants, setGrants] = useState(INITIAL_GRANTS);
+  const [grants, setGrants] = useState([]);
+  const [dashboardStats, setDashboardStats] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [sectorFilter, setSectorFilter] = useState('ALL');
+  const [systemHealth, setSystemHealth] = useState('checking'); // 'healthy' | 'unhealthy' | 'checking'
+  const sseRef = useRef(null);
 
-  const runScanCycle = () => {
+  // ── Fetch grants from backend ──
+  const loadGrants = useCallback(async () => {
+    try {
+      const data = await apiFetchGrants();
+      setGrants(data.grants || []);
+      setError(null);
+    } catch (err) {
+      console.warn('Failed to fetch grants from API, keeping current state:', err.message);
+      setError(err.message);
+    }
+  }, []);
+
+  // ── Fetch dashboard stats from backend ──
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await apiFetchStats();
+      setDashboardStats(data);
+    } catch (err) {
+      console.warn('Failed to fetch dashboard stats:', err.message);
+    }
+  }, []);
+
+  // ── Check backend health ──
+  const checkHealth = useCallback(async () => {
+    try {
+      const data = await apiFetchHealth();
+      setSystemHealth(data.status === 'healthy' ? 'healthy' : 'unhealthy');
+    } catch {
+      setSystemHealth('unhealthy');
+    }
+  }, []);
+
+  // ── Run Discovery Cycle (real API call) ──
+  const runScanCycle = useCallback(async () => {
     setIsScanning(true);
-    setTimeout(() => {
+    try {
+      await apiTriggerScan();
+      // Refresh grants and stats after scan completes
+      await Promise.all([loadGrants(), loadStats()]);
+    } catch (err) {
+      console.error('Scan cycle failed:', err.message);
+      setError(`Scan failed: ${err.message}`);
+    } finally {
       setIsScanning(false);
-    }, 1600);
-  };
+    }
+  }, [loadGrants, loadStats]);
 
-  const getGrantById = (id) => {
+  // ── Find grant by ID ──
+  const getGrantById = useCallback((id) => {
     return grants.find(g => String(g.id) === String(id) || String(g.grant_id) === String(id));
-  };
+  }, [grants]);
+
+  // ── Initial data fetch on mount ──
+  useEffect(() => {
+    const init = async () => {
+      setIsLoading(true);
+      await Promise.all([loadGrants(), loadStats(), checkHealth()]);
+      setIsLoading(false);
+    };
+    init();
+
+    // Health check interval (every 30s)
+    const healthInterval = setInterval(checkHealth, 30000);
+
+    return () => clearInterval(healthInterval);
+  }, [loadGrants, loadStats, checkHealth]);
+
+  // ── SSE Real-Time Stream ──
+  useEffect(() => {
+    // Connect to SSE only if backend is healthy
+    if (systemHealth !== 'healthy') return;
+
+    const sse = createSSEStream(
+      (event) => {
+        // Auto-refresh data on relevant events
+        if (event.type === 'scan_completed' || event.type === 'application_drafted' || event.type === 'orchestration_completed') {
+          loadGrants();
+          loadStats();
+        }
+      },
+      (err) => {
+        console.warn('SSE stream error, will reconnect:', err);
+      }
+    );
+    sseRef.current = sse;
+
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+    };
+  }, [systemHealth, loadGrants, loadStats]);
 
   return (
     <GrantContext.Provider value={{
       grants,
       setGrants,
+      dashboardStats,
       isScanning,
+      isLoading,
+      error,
+      systemHealth,
       runScanCycle,
       sectorFilter,
       setSectorFilter,
-      getGrantById
+      getGrantById,
+      refreshGrants: loadGrants,
+      refreshStats: loadStats,
     }}>
       {children}
     </GrantContext.Provider>

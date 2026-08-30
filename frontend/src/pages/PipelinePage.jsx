@@ -2,10 +2,12 @@ import React from 'react';
 import MetricsBar from '../components/MetricsBar';
 import GrantCard from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
-import { Layers, Sparkles } from 'lucide-react';
+import { Layers, Sparkles, AlertTriangle } from 'lucide-react';
 
 export default function PipelinePage() {
-  const { grants, sectorFilter, setSectorFilter } = useGrants();
+  const { grants, dashboardStats, sectorFilter, setSectorFilter, isLoading } = useGrants();
+
+  const highFitCount = grants.filter(g => g.match_score?.total >= 80).length;
 
   const filters = [
     { id: 'ALL', label: 'ALL OPPORTUNITIES' },
@@ -19,6 +21,19 @@ export default function PipelinePage() {
     if (sectorFilter === 'HIGH_FIT') return g.match_score?.total >= 80;
     return g.category === sectorFilter;
   });
+
+  // Derive stats from API or grants array
+  const stats = dashboardStats ? {
+    scanned: String(dashboardStats.total_scanned ?? dashboardStats.grants_scanned ?? grants.length),
+    matched: String(dashboardStats.high_fit_matches ?? highFitCount),
+    drafts: String(dashboardStats.drafts_prepared ?? 0),
+    pipelineValue: dashboardStats.pipeline_value || dashboardStats.total_pipeline_value || `$${(grants.reduce((sum, g) => sum + (g.award_ceiling || 0), 0) / 1000).toFixed(0)}K`,
+  } : {
+    scanned: String(grants.length),
+    matched: String(highFitCount),
+    drafts: '0',
+    pipelineValue: `$${(grants.reduce((sum, g) => sum + (g.award_ceiling || 0), 0) / 1000).toFixed(0)}K`,
+  };
 
   return (
     <div className="page-container">
@@ -52,7 +67,7 @@ export default function PipelinePage() {
       </div>
 
       {/* Metrics Bar */}
-      <MetricsBar stats={{ scanned: '78', matched: '14', drafts: '6', pipelineValue: '$1.45M' }} />
+      <MetricsBar stats={stats} />
 
       {/* Sector Filter Bar */}
       <div style={{
@@ -79,12 +94,33 @@ export default function PipelinePage() {
         ))}
       </div>
 
-      {/* Grant Cards Grid */}
-      <div className="grants-grid">
-        {filteredGrants.map(grant => (
-          <GrantCard key={grant.id} grant={grant} />
-        ))}
-      </div>
+      {/* Grant Cards Grid or Empty State */}
+      {isLoading ? (
+        <div className="brutalist-card" style={{ padding: '3rem', textAlign: 'center' }}>
+          <div className="font-heading" style={{ fontSize: '1.5rem', color: 'var(--ink-muted)' }}>
+            LOADING PIPELINE DATA...
+          </div>
+          <p style={{ color: 'var(--ink-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+            Connecting to GrantScout backend API
+          </p>
+        </div>
+      ) : filteredGrants.length === 0 ? (
+        <div className="brutalist-card" style={{ padding: '3rem', textAlign: 'center' }}>
+          <AlertTriangle size={32} color="var(--amber-signal)" style={{ marginBottom: '0.75rem' }} />
+          <div className="font-heading" style={{ fontSize: '1.5rem', color: 'var(--ink)' }}>
+            NO GRANTS AVAILABLE
+          </div>
+          <p style={{ color: 'var(--ink-muted)', fontSize: '0.9rem', marginTop: '0.5rem', maxWidth: '500px', margin: '0.5rem auto 0' }}>
+            No federal opportunities match the current filter. Try running a Discovery Cycle or adjusting the sector filter above.
+          </p>
+        </div>
+      ) : (
+        <div className="grants-grid">
+          {filteredGrants.map(grant => (
+            <GrantCard key={grant.id || grant.grant_id} grant={grant} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

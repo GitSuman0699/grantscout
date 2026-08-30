@@ -483,6 +483,58 @@ body {
     padding: 0.5rem 0.65rem !important;
     font-size: 0.85rem !important;
   }
+
+  .knowledge-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+}
+
+/* Knowledge Base Cards & Grid */
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 1.5rem;
+}
+
+.knowledge-card {
+  min-width: 0;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-card-title {
+  font-size: 1.35rem;
+  line-height: 1.15;
+  margin-bottom: 0.4rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  color: var(--ink);
+}
+
+.knowledge-card-filename {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  margin-bottom: 0.75rem;
+  background: var(--card-alt-bg);
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-dark);
+  display: inline-block;
+  max-width: 100%;
+}
+
+.knowledge-card-meta {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  margin-bottom: 0.4rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* Custom Scrollbars */

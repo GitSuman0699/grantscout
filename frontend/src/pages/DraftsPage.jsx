@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import GrantCard from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
-import { FileText, CheckCircle2, Search, Sparkles } from 'lucide-react';
+import { FileText, CheckCircle2, Search, Sparkles, ArrowRight } from 'lucide-react';
 
 export default function DraftsPage() {
-  const { grants } = useGrants();
+  const { grants, isLoading } = useGrants();
   const [filterAgency, setFilterAgency] = useState('ALL');
   
   const draftedGrants = grants.filter(g => g.match_score?.total >= 80);
 
-  const agencies = ['ALL', ...Array.from(new Set(draftedGrants.map(g => g.agency)))];
+  const agencies = ['ALL', ...Array.from(new Set(draftedGrants.map(g => g.agency).filter(Boolean)))];
 
   const displayedDrafts = draftedGrants.filter(g => {
     if (filterAgency === 'ALL') return true;
@@ -65,12 +66,33 @@ export default function DraftsPage() {
         </div>
       )}
 
-      {/* Grid of Draft Cards */}
-      <div className="grants-grid">
-        {displayedDrafts.map(grant => (
-          <GrantCard key={grant.id} grant={grant} />
-        ))}
-      </div>
+      {/* Grid of Draft Cards or Empty State */}
+      {isLoading ? (
+        <div className="brutalist-card" style={{ padding: '3rem', textAlign: 'center' }}>
+          <div className="font-heading" style={{ fontSize: '1.5rem', color: 'var(--ink-muted)' }}>
+            LOADING APPLICATION DRAFTS...
+          </div>
+        </div>
+      ) : draftedGrants.length === 0 ? (
+        <div className="brutalist-card" style={{ padding: '3.5rem 2rem', textAlign: 'center' }}>
+          <FileText size={36} color="var(--ink-muted)" style={{ margin: '0 auto 1rem' }} />
+          <div className="font-heading" style={{ fontSize: '1.6rem', color: 'var(--ink)', marginBottom: '0.5rem' }}>
+            NO APPLICATION DRAFTS PREPARED YET
+          </div>
+          <p style={{ color: 'var(--ink-muted)', fontSize: '0.92rem', maxWidth: '520px', margin: '0 auto 1.5rem', lineHeight: '1.5' }}>
+            When grant opportunities achieve an autonomous match score of ≥80%, the Drafter Agent will automatically generate 6-section proposal packages.
+          </p>
+          <Link to="/pipeline" className="brutalist-btn btn-primary" style={{ padding: '0.65rem 1.4rem' }}>
+            BROWSE ACTIVE PIPELINE <ArrowRight size={18} />
+          </Link>
+        </div>
+      ) : (
+        <div className="grants-grid">
+          {displayedDrafts.map(grant => (
+            <GrantCard key={grant.id || grant.grant_id} grant={grant} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

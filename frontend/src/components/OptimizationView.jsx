@@ -1,36 +1,82 @@
-import React from 'react';
-import { Cpu, DollarSign, Zap, Archive, Shield, CheckCircle2, Layers } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Cpu, DollarSign, Zap, Archive, Shield, CheckCircle2, Layers, AlertTriangle } from 'lucide-react';
+import { fetchModelTiers, fetchCacheStats, fetchTokenUsage } from '../services/api';
 
 export default function OptimizationView() {
-  const modelTiers = [
-    {
-      tier: 'FAST TIER',
-      model: 'Claude Haiku 4.5',
-      agents: 'Scanner Agent, Deadline Agent',
-      costIn: '$0.0008 / 1K in',
-      costOut: '$0.004 / 1K out',
-      role: 'High-frequency opportunity filtering, Grants.gov pagination, and deadline date arithmetic.',
-      speed: '<400ms'
-    },
-    {
-      tier: 'STANDARD TIER',
-      model: 'Claude Sonnet 4.5',
-      agents: 'Matcher Agent, Orchestrator',
-      costIn: '$0.003 / 1K in',
-      costOut: '$0.015 / 1K out',
-      role: '5-Dimension fit evaluation, 100-point rubric calculation, and Graph routing decisions.',
-      speed: '~1,200ms'
-    },
-    {
-      tier: 'PREMIUM TIER',
-      model: 'Claude Sonnet 4.5 (8K Context)',
-      agents: 'Drafter Agent (Narrative, Budget, Metrics)',
-      costIn: '$0.003 / 1K in',
-      costOut: '$0.015 / 1K out',
-      role: 'Multi-section proposal drafting, financial plan calculations, and compliance verification.',
-      speed: '~2,400ms'
-    }
-  ];
+  const [modelTiers, setModelTiers] = useState([]);
+  const [cacheStats, setCacheStats] = useState(null);
+  const [tokenUsage, setTokenUsage] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      let hasError = false;
+
+      // Fetch model tiers
+      try {
+        const tiersData = await fetchModelTiers();
+        if (tiersData.tiers && Object.keys(tiersData.tiers).length > 0) {
+          const mapped = Object.entries(tiersData.tiers).map(([tierName, cfg]) => {
+            const assignedAgents = tiersData.agent_routing
+              ? Object.entries(tiersData.agent_routing)
+                  .filter(([, tier]) => tier === tierName)
+                  .map(([agent]) => agent.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))
+                  .join(', ')
+              : '—';
+
+            return {
+              tier: tierName.toUpperCase().replace(/_/g, ' ') + ' TIER',
+              model: cfg.model_id || '—',
+              agents: assignedAgents || '—',
+              costIn: `$${cfg.cost_per_1k_input} / 1K in`,
+              costOut: `$${cfg.cost_per_1k_output} / 1K out`,
+              role: cfg.description || '',
+              speed: cfg.max_tokens ? `${cfg.max_tokens} max tokens` : '—'
+            };
+          });
+          setModelTiers(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to fetch model tiers:', err.message);
+        hasError = true;
+      }
+
+      // Fetch cache stats
+      try {
+        const cache = await fetchCacheStats();
+        setCacheStats(cache);
+      } catch (err) {
+        console.error('Failed to fetch cache stats:', err.message);
+        hasError = true;
+      }
+
+      // Fetch token usage
+      try {
+        const tokens = await fetchTokenUsage();
+        setTokenUsage(tokens);
+      } catch (err) {
+        console.error('Failed to fetch token usage:', err.message);
+        hasError = true;
+      }
+
+      if (hasError) setError('Some data could not be loaded. Ensure the backend is running on port 8000.');
+      setIsLoading(false);
+    };
+    loadData();
+  }, []);
+
+  // Derive display values from live data — no fallbacks
+  const hitRate = cacheStats?.hit_rate_pct != null ? `${cacheStats.hit_rate_pct}%` : '—';
+  const cacheSize = cacheStats ? `${cacheStats.size ?? 0} / ${cacheStats.max_size ?? 256} slots` : '—';
+  const cacheMeta = cacheStats ? `${cacheStats.hits ?? 0} hits / ${cacheStats.misses ?? 0} misses • TTL ${cacheStats.ttl_seconds ?? 3600}s` : 'No cache data available';
+
+  const totalCost = tokenUsage?.total_estimated_cost_usd != null ? `$${tokenUsage.total_estimated_cost_usd.toFixed(6)}` : '—';
+  const totalTokens = tokenUsage?.total_tokens != null ? tokenUsage.total_tokens.toLocaleString() : '—';
+  const tokenMeta = tokenUsage ? `${tokenUsage.total_invocations ?? 0} invocations • ${tokenUsage.cache_hits ?? 0} cached` : 'No token data available';
+
+  const savingsPct = tokenUsage?.savings_from_cache_pct != null ? `${tokenUsage.savings_from_cache_pct}%` : '—';
 
   return (
     <div>
@@ -51,6 +97,16 @@ export default function OptimizationView() {
         </p>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="brutalist-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', borderLeft: '4px solid var(--amber-signal)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--ink)' }}>
+            <AlertTriangle size={16} color="var(--amber-signal)" />
+            {error}
+          </div>
+        </div>
+      )}
+
       {/* Summary Cards Grid — Responsive */}
       <div className="opt-summary-grid">
         <div className="brutalist-card" style={{ padding: '1.25rem 1.5rem' }}>
@@ -59,86 +115,121 @@ export default function OptimizationView() {
             <Archive size={18} />
           </div>
           <div className="font-heading" style={{ fontSize: '2.4rem', lineHeight: '1', color: 'var(--ink)' }}>
-            82.4%
+            {hitRate}
           </div>
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink-muted)' }}>
             CACHE HIT RATE
           </div>
           <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)', marginTop: '0.35rem' }}>
-            LRU Cache with 1-Hour TTL (256 slots)
+            {cacheMeta}
           </div>
         </div>
 
         <div className="brutalist-card" style={{ padding: '1.25rem 1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span className="tag-badge tag-amber">SAVINGS</span>
+            <span className="tag-badge tag-amber">TOTAL COST</span>
             <DollarSign size={18} />
           </div>
           <div className="font-heading" style={{ fontSize: '2.4rem', lineHeight: '1', color: 'var(--ink)' }}>
-            $0.0024
+            {totalCost}
           </div>
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink-muted)' }}>
-            AVG COST PER MATCHED GRANT
+            ESTIMATED INFERENCE COST
           </div>
           <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)', marginTop: '0.35rem' }}>
-            ~88% cheaper than single-Opus setup
+            {tokenMeta}
           </div>
         </div>
 
         <div className="brutalist-card" style={{ padding: '1.25rem 1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span className="tag-badge tag-dark">COMPRESSION</span>
+            <span className="tag-badge tag-dark">CACHE SAVINGS</span>
             <Zap size={18} />
           </div>
           <div className="font-heading" style={{ fontSize: '2.4rem', lineHeight: '1', color: 'var(--ink)' }}>
-            -42%
+            {savingsPct}
           </div>
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--ink-muted)' }}>
-            INPUT TOKEN REDUCTION
+            RESPONSES SERVED FROM CACHE
           </div>
           <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)', marginTop: '0.35rem' }}>
-            Boilerplate stripping on Federal Synopses
+            {totalTokens !== '—' ? `${totalTokens} total tokens processed` : 'No invocations yet'}
           </div>
         </div>
       </div>
 
-      {/* Model Tiers List — Responsive Card Stacking on Mobile */}
+      {/* Model Tiers List */}
       <div className="brutalist-card" style={{ padding: '1.5rem' }}>
         <h3 className="font-heading" style={{ fontSize: '1.6rem', marginBottom: '1.25rem' }}>
           TIERED MULTI-MODEL ROUTING CONFIGURATION
         </h3>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {modelTiers.map((t, idx) => (
-            <div key={idx} className="model-tier-row">
-              {/* Left Column / Header */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-                  <span className="tag-badge tag-dark">{t.tier}</span>
-                  <span className="tag-badge tag-neutral" style={{ fontSize: '0.68rem' }}>Latency: {t.speed}</span>
+        {isLoading ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--ink-muted)' }}>
+            Loading model configuration...
+          </div>
+        ) : modelTiers.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--ink-muted)' }}>
+            <AlertTriangle size={24} color="var(--amber-signal)" style={{ marginBottom: '0.5rem' }} />
+            <div>No model tier data available. Start the backend server to view configuration.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {modelTiers.map((t, idx) => (
+              <div key={idx} className="model-tier-row">
+                {/* Left Column / Header */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                    <span className="tag-badge tag-dark">{t.tier}</span>
+                    <span className="tag-badge tag-neutral" style={{ fontSize: '0.68rem' }}>{t.speed}</span>
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--ink)' }}>{t.model}</div>
                 </div>
-                <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--ink)' }}>{t.model}</div>
-              </div>
 
-              {/* Middle Column / Description */}
-              <div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '0.2rem' }}>
-                  Assigned Agents: <span style={{ fontWeight: 500, color: 'var(--ink-muted)' }}>{t.agents}</span>
+                {/* Middle Column / Description */}
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '0.2rem' }}>
+                    Assigned Agents: <span style={{ fontWeight: 500, color: 'var(--ink-muted)' }}>{t.agents}</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--ink-muted)', lineHeight: '1.4' }}>
+                    {t.role}
+                  </div>
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--ink-muted)', lineHeight: '1.4' }}>
-                  {t.role}
-                </div>
-              </div>
 
-              {/* Right Column / Rates */}
-              <div className="model-tier-rates" style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-                <div style={{ color: 'var(--ink)', fontWeight: 700 }}>{t.costIn}</div>
-                <div style={{ color: 'var(--ink-muted)' }}>{t.costOut}</div>
+                {/* Right Column / Rates */}
+                <div className="model-tier-rates" style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                  <div style={{ color: 'var(--ink)', fontWeight: 700 }}>{t.costIn}</div>
+                  <div style={{ color: 'var(--ink-muted)' }}>{t.costOut}</div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Per-Agent Token Breakdown */}
+      {tokenUsage?.per_agent && Object.keys(tokenUsage.per_agent).length > 0 && (
+        <div className="brutalist-card" style={{ padding: '1.5rem', marginTop: '1.5rem' }}>
+          <h3 className="font-heading" style={{ fontSize: '1.6rem', marginBottom: '1.25rem' }}>
+            PER-AGENT TOKEN USAGE
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            {Object.entries(tokenUsage.per_agent).map(([agent, data]) => (
+              <div key={agent} style={{ background: 'var(--card-alt-bg)', border: '1px solid var(--border-dark)', padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.9rem', textTransform: 'uppercase' }}>{agent}</span>
+                  <span className="tag-badge tag-neutral" style={{ fontSize: '0.65rem' }}>{data.tier?.toUpperCase()}</span>
+                </div>
+                <div style={{ fontSize: '0.78rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)', lineHeight: '1.7' }}>
+                  <div>{data.invocations} invocations ({data.cached} cached)</div>
+                  <div>{data.input_tokens?.toLocaleString()} in / {data.output_tokens?.toLocaleString()} out</div>
+                  <div style={{ fontWeight: 700, color: 'var(--ink)' }}>Cost: ${data.cost_usd?.toFixed(6)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
