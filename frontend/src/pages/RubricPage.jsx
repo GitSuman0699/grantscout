@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Target, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, ArrowRight } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
+import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
 
 export default function RubricPage() {
   const { id } = useParams();
@@ -44,13 +45,15 @@ export default function RubricPage() {
     );
   }
 
+  const scoreTotal = calculateFitScore(grant) ?? 0;
+  const badgeInfo = getScoreBadgeProps(scoreTotal);
   const score = grant.match_score || {
     mission_alignment: 0,
     eligibility_fit: 0,
     capacity_match: 0,
     geographic_fit: 0,
     track_record: 0,
-    total: 0
+    total: scoreTotal
   };
 
   const grantId = grant.grant_id || grant.id;
@@ -77,8 +80,8 @@ export default function RubricPage() {
       <div className="brutalist-card workstation-header-card" style={{ padding: '1.75rem 2rem', marginBottom: '1.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
           <span className="tag-badge tag-dark">5-DIMENSION RUBRIC INSPECTOR</span>
-          <span className={`tag-badge ${score.total >= 80 ? 'tag-amber' : 'tag-neutral'}`}>
-            {score.total}% FIT SCORE
+          <span className={badgeInfo.className}>
+            {badgeInfo.label}
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
             {grant.agency || 'Federal Agency'} • ID: {grantId}
@@ -135,11 +138,21 @@ export default function RubricPage() {
 
           <div style={{ textAlign: 'right' }}>
             <div className="font-heading" style={{ fontSize: '2.8rem', lineHeight: '1', color: 'var(--ink)' }}>
-              {score.total} <span style={{ fontSize: '1.4rem', color: 'var(--ink-muted)' }}>/ 100</span>
+              {scoreTotal} <span style={{ fontSize: '1.4rem', color: 'var(--ink-muted)' }}>/ 100</span>
             </div>
-            <span className={`tag-badge ${score.total >= 80 ? 'tag-amber' : 'tag-neutral'}`} style={{ fontSize: '0.78rem' }}>
-              {score.total >= 80 ? 'AUTO-DRAFT RECOMMENDED' : 'MANUAL REVIEW REQUIRED'}
-            </span>
+            {scoreTotal >= 80 ? (
+              <span className="tag-badge tag-score-high" style={{ fontSize: '0.78rem' }}>
+                AUTO-DRAFT RECOMMENDED (≥80%)
+              </span>
+            ) : scoreTotal >= 50 ? (
+              <span className="tag-badge tag-score-med" style={{ fontSize: '0.78rem' }}>
+                MANUAL REVIEW REQUIRED (50-79%)
+              </span>
+            ) : (
+              <span className="tag-badge tag-score-low" style={{ fontSize: '0.78rem' }}>
+                LOW FIT / INELIGIBLE (&lt;50%)
+              </span>
+            )}
           </div>
         </div>
 
@@ -155,24 +168,29 @@ export default function RubricPage() {
             { label: 'Capacity Match', score: score.capacity_match || 0, max: 20, desc: 'Award ceiling alignment with $450K operating budget and instructional staff.' },
             { label: 'Geographic Fit', score: score.geographic_fit || 0, max: 15, desc: 'Service area alignment across Metro Atlanta partner community centers.' },
             { label: 'Past Track Record', score: score.track_record || 0, max: 10, desc: 'Historical performance on past NSF awards (#24-9182 for $25,000 closed cleanly).' }
-          ].map((dim, idx) => (
-            <div key={idx} className="brutalist-card" style={{ padding: '1.25rem', background: 'var(--card-alt-bg)', border: '1px solid var(--border-dark)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800, marginBottom: '0.4rem' }}>
-                <span>{dim.label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{dim.score} / {dim.max}</span>
+          ].map((dim, idx) => {
+            const ratio = dim.max > 0 ? dim.score / dim.max : 0;
+            const barColor = ratio >= 0.8 ? '#15803D' : ratio >= 0.5 ? '#D97706' : '#DC2626';
+
+            return (
+              <div key={idx} className="brutalist-card" style={{ padding: '1.25rem', background: 'var(--card-alt-bg)', border: '1px solid var(--border-dark)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800, marginBottom: '0.4rem' }}>
+                  <span>{dim.label}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{dim.score} / {dim.max}</span>
+                </div>
+                <div style={{ height: '8px', background: '#E4E4E7', border: '1px solid var(--border-dark)', marginBottom: '0.5rem' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${ratio * 100}%`,
+                    backgroundColor: barColor
+                  }} />
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--ink-muted)', lineHeight: '1.4' }}>
+                  {dim.desc}
+                </div>
               </div>
-              <div style={{ height: '8px', background: '#E4E4E7', border: '1px solid var(--border-dark)', marginBottom: '0.5rem' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${dim.max > 0 ? (dim.score / dim.max) * 100 : 0}%`,
-                  backgroundColor: (dim.score / (dim.max || 1)) >= 0.8 ? 'var(--amber-signal)' : 'var(--ink)'
-                }} />
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--ink-muted)', lineHeight: '1.4' }}>
-                {dim.desc}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Alignment Strengths & Risk Factors */}
@@ -180,7 +198,7 @@ export default function RubricPage() {
           {grant.key_strengths && grant.key_strengths.length > 0 && (
             <div style={{ background: '#FFFFFF', border: '2px solid var(--border-dark)', padding: '1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <span className="tag-badge tag-green">VERIFIED FIT</span>
+                <span className="tag-badge tag-score-high">VERIFIED FIT</span>
                 <span style={{ fontWeight: 800, fontSize: '1rem', textTransform: 'uppercase' }}>Key Strengths</span>
               </div>
               <ul style={{ paddingLeft: '1.2rem', color: 'var(--ink)', lineHeight: '1.7', fontSize: '0.88rem' }}>
@@ -194,7 +212,7 @@ export default function RubricPage() {
           {grant.potential_risks && grant.potential_risks.length > 0 && (
             <div style={{ background: '#FFFFFF', border: '2px solid var(--border-dark)', padding: '1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <span className="tag-badge tag-amber">REVIEW REQUIRED</span>
+                <span className="tag-badge tag-score-med">REVIEW REQUIRED</span>
                 <span style={{ fontWeight: 800, fontSize: '1rem', textTransform: 'uppercase' }}>Potential Considerations</span>
               </div>
               <ul style={{ paddingLeft: '1.2rem', color: 'var(--ink-muted)', lineHeight: '1.7', fontSize: '0.88rem' }}>

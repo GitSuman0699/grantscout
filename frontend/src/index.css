@@ -181,6 +181,28 @@ body {
   color: var(--ink);
 }
 
+/* Clear Semantic Fit Score Badges */
+.tag-score-high {
+  background: #15803D !important;
+  color: #FFFFFF !important;
+  border-color: #15803D !important;
+  font-weight: 800;
+}
+
+.tag-score-med {
+  background: #D97706 !important;
+  color: #FFFFFF !important;
+  border-color: #D97706 !important;
+  font-weight: 800;
+}
+
+.tag-score-low {
+  background: #DC2626 !important;
+  color: #FFFFFF !important;
+  border-color: #DC2626 !important;
+  font-weight: 800;
+}
+
 /* Dashed Separator */
 .dashed-divider {
   border: none;

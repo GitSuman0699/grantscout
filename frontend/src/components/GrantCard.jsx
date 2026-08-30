@@ -23,11 +23,41 @@ export function calculateFitScore(grant) {
   return null;
 }
 
+/**
+ * Returns intuitive semantic color badge information based on fit score:
+ * - 80-100%: Green (High Match / Auto-Draft)
+ * - 50-79%: Amber (Moderate Match / Review)
+ * - 0-49%: Red (Low Match / Ineligible)
+ */
+export function getScoreBadgeProps(score) {
+  if (score == null) {
+    return {
+      className: 'tag-badge tag-neutral',
+      label: 'DISCOVERED • SCORING QUEUED'
+    };
+  }
+  if (score >= 80) {
+    return {
+      className: 'tag-badge tag-score-high',
+      label: `${score}% FIT • HIGH MATCH`
+    };
+  }
+  if (score >= 50) {
+    return {
+      className: 'tag-badge tag-score-med',
+      label: `${score}% FIT • MODERATE`
+    };
+  }
+  return {
+    className: 'tag-badge tag-score-low',
+    label: `${score}% FIT • LOW MATCH`
+  };
+}
+
 export default function GrantCard({ grant }) {
   const location = useLocation();
   const fitScore = calculateFitScore(grant);
-  const isHighFit = fitScore != null && fitScore >= 80;
-  const isReview = fitScore != null && fitScore >= 50 && fitScore < 80;
+  const badgeInfo = getScoreBadgeProps(fitScore);
   
   // Format award
   const awardText = grant.award_ceiling 
@@ -65,15 +95,9 @@ export default function GrantCard({ grant }) {
           <span>{grant.agency || 'Federal Agency'}</span>
         </div>
 
-        {fitScore != null ? (
-          <span className={`tag-badge ${isHighFit ? 'tag-amber' : isReview ? 'tag-green' : 'tag-neutral'}`}>
-            {fitScore}% FIT {isHighFit ? '• AUTO-DRAFT' : ''}
-          </span>
-        ) : (
-          <span className="tag-badge tag-neutral">
-            DISCOVERED • SCORING QUEUED
-          </span>
-        )}
+        <span className={badgeInfo.className}>
+          {badgeInfo.label}
+        </span>
       </div>
 
       {/* Card Body */}
