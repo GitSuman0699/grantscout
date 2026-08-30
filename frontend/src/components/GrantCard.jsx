@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Building2, Sparkles, ChevronRight, Target } from 'lucide-react';
+import { Building2, Sparkles, Target } from 'lucide-react';
 
 export default function GrantCard({ grant }) {
   const location = useLocation();
@@ -12,8 +12,10 @@ export default function GrantCard({ grant }) {
     ? `$${(grant.award_ceiling).toLocaleString()}` 
     : 'Funding Varies';
 
-  const grantId = grant.id || grant.grant_id;
-  const grantUrl = `/grants/${grantId}`;
+  const grantId = grant.grant_id || grant.id;
+  const rubricUrl = `/rubrics/${grantId}`;
+  const draftUrl = `/drafts/${grantId}`;
+  const navState = { from: location.pathname };
 
   return (
     <div
@@ -61,8 +63,8 @@ export default function GrantCard({ grant }) {
 
         {/* Title */}
         <Link
-          to={`${grantUrl}?view=rubric`}
-          state={{ from: location.pathname, view: 'rubric' }}
+          to={rubricUrl}
+          state={navState}
           style={{ textDecoration: 'none', color: 'inherit' }}
         >
           <h3
@@ -114,11 +116,11 @@ export default function GrantCard({ grant }) {
           </div>
         </div>
 
-        {/* Action Buttons: INSPECT RUBRIC vs PRE-FILL DRAFT */}
+        {/* Action Buttons: Distinct separate routes */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <Link
-            to={`${grantUrl}?view=rubric`}
-            state={{ from: location.pathname, view: 'rubric' }}
+            to={rubricUrl}
+            state={navState}
             className="brutalist-btn btn-outline"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >
@@ -127,8 +129,8 @@ export default function GrantCard({ grant }) {
           </Link>
           
           <Link
-            to={`${grantUrl}?view=draft`}
-            state={{ from: location.pathname, view: 'draft' }}
+            to={draftUrl}
+            state={navState}
             className="brutalist-btn btn-primary"
             style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
           >

@@ -4,7 +4,8 @@ import Header from './components/Header';
 import ScrollToTop from './components/ScrollToTop';
 import HomePage from './pages/HomePage';
 import PipelinePage from './pages/PipelinePage';
-import GrantDetailPage from './pages/GrantDetailPage';
+import RubricPage from './pages/RubricPage';
+import ProposalDraftPage from './pages/ProposalDraftPage';
 import DraftsPage from './pages/DraftsPage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import OptimizationPage from './pages/OptimizationPage';
@@ -22,7 +23,12 @@ export default function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/pipeline" element={<PipelinePage />} />
-              <Route path="/grants/:id" element={<GrantDetailPage />} />
+              
+              {/* Distinct Dedicated Routes */}
+              <Route path="/rubrics/:id" element={<RubricPage />} />
+              <Route path="/grants/:id" element={<RubricPage />} />
+              <Route path="/drafts/:id" element={<ProposalDraftPage />} />
+              
               <Route path="/drafts" element={<DraftsPage />} />
               <Route path="/knowledge" element={<KnowledgeBasePage />} />
               <Route path="/optimization" element={<OptimizationPage />} />
