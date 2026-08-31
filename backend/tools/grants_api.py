@@ -179,6 +179,9 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
         raw_agency = synopsis.get("agencyName", "")
         clean_agency = html.unescape(raw_agency) if raw_agency else ""
 
+        pkgs = opp.get("opportunityPkgs", [])
+        has_packages = len(pkgs) > 0
+
         grant_details = {
             "id": opp.get("id"),
             "opportunity_number": opp.get("opportunityNumber", ""),
@@ -190,6 +193,8 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
             "award_floor": synopsis.get("awardFloor", "0"),
             "post_date": synopsis.get("postingDate", ""),
             "close_date": synopsis.get("responseDate", ""),
+            "original_due_date": opp.get("originalDueDate", ""),
+            "has_packages": has_packages,
             "archive_date": synopsis.get("archiveDate", ""),
             "estimated_funding": synopsis.get("estimatedFunding", ""),
             "expected_awards": synopsis.get("numberOfAwards", ""),

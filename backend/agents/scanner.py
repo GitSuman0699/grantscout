@@ -78,27 +78,45 @@ def create_scanner_agent() -> Agent:
     return agent
 
 
-def is_active_opportunity(close_date: str, title: str) -> bool:
-    """Returns True if the grant is active (not an expired legacy notice from past years)."""
+def is_active_opportunity(
+    close_date: str,
+    title: str,
+    original_due_date: str = "",
+    has_packages: bool = True,
+) -> bool:
+    """Returns True if the grant is active and currently open for application submission."""
     title_lower = title.lower()
     for yr in ["2020", "2021", "2022", "2023", "2024"]:
         if yr in title_lower:
             return False
 
+    from datetime import datetime, timezone
+    import re
+    now_dt = datetime.now(timezone.utc)
+
+    # 1. If Grants.gov application package is closed/missing AND original due date has passed
+    if not has_packages and original_due_date:
+        clean_orig = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", original_due_date).strip()
+        for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
+            try:
+                dt_orig = datetime.strptime(clean_orig, fmt).replace(tzinfo=timezone.utc)
+                if dt_orig < now_dt:
+                    return False
+            except ValueError:
+                continue
+
+    # 2. Check current close_date
     if not close_date or close_date in ("Ongoing", "TBD", "Rolling"):
         return True
 
-    try:
-        from datetime import datetime, timezone
-        now_dt = datetime.now(timezone.utc)
-        for fmt in ["%m/%d/%Y", "%Y-%m-%d", "%b %d, %Y"]:
-            try:
-                dt = datetime.strptime(close_date.split(" ")[0], fmt).replace(tzinfo=timezone.utc)
-                return dt >= now_dt
-            except ValueError:
-                continue
-    except Exception:
-        pass
+    clean_close = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", close_date).strip()
+    for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
+        try:
+            dt = datetime.strptime(clean_close, fmt).replace(tzinfo=timezone.utc)
+            return dt >= now_dt
+        except ValueError:
+            continue
+
     return True
 
 
@@ -152,10 +170,12 @@ async def run_scan() -> str:
 
                         title = grant_data.get("title", "Federal Grant Opportunity")
                         close_date = grant_data.get("close_date") or grant_data.get("post_date") or "2026-12-01"
+                        original_due_date = grant_data.get("original_due_date", "")
+                        has_packages = grant_data.get("has_packages", True)
 
-                        # Filter out expired legacy notices from previous years
-                        if not is_active_opportunity(close_date, title):
-                            logger.info(f"Skipping expired legacy notice: {title} (Close Date: {close_date})")
+                        # Filter out expired legacy notices or closed application packages
+                        if not is_active_opportunity(close_date, title, original_due_date, has_packages):
+                            logger.info(f"Skipping inactive / closed opportunity: {title} (Close Date: {close_date}, Pkgs: {has_packages})")
                             continue
 
                         raw_c = str(grant_data.get("award_ceiling", "0")).replace("$", "").replace(",", "").strip()
