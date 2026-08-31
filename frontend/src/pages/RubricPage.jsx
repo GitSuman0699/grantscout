@@ -12,7 +12,11 @@ export default function RubricPage() {
   const { getGrantById } = useGrants();
 
   const grant = getGrantById(id);
-  const fromPath = location.state?.from || '/pipeline';
+  // Preserve clean root origin: either '/pipeline', '/drafts', or '/'
+  const rawFrom = location.state?.from || '';
+  const fromPath = (rawFrom === '/drafts' || rawFrom === '/' || rawFrom === '/pipeline') 
+    ? rawFrom 
+    : '/pipeline';
 
   const getBackLabel = (path) => {
     if (path === '/drafts') return 'BACK TO APPLICATION DRAFTS';
@@ -23,11 +27,7 @@ export default function RubricPage() {
   const backLabel = getBackLabel(fromPath);
 
   const handleBack = () => {
-    if (window.history.state && window.history.state.idx > 0) {
-      navigate(-1);
-    } else {
-      navigate(fromPath);
-    }
+    navigate(fromPath);
   };
 
   if (!grant) {
@@ -81,7 +81,7 @@ export default function RubricPage() {
 
           <Link
             to={`/drafts/${grantId}`}
-            state={{ from: location.pathname }}
+            state={{ from: fromPath }}
             className="brutalist-btn btn-primary"
             style={{ padding: '0.45rem 1.15rem', fontSize: '0.95rem' }}
           >

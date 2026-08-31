@@ -14,7 +14,7 @@ export function getOfficialGrantUrl(grant) {
   if (grant.application_url) return grant.application_url;
   if (grant.additional_info_url) return grant.additional_info_url;
   if (grant.url) return grant.url;
-  
+
   const id = String(grant.grant_id || grant.id || '');
   const numMatch = id.replace('grants-gov-', '').trim();
 
@@ -46,13 +46,16 @@ export default function ProposalDraftPage() {
   const [activeSectionIdx, setActiveSectionIdx] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  const fromPath = location.state?.from || '/drafts';
+  // Preserve clean root origin: either '/pipeline', '/drafts', or '/'
+  const rawFrom = location.state?.from || '';
+  const fromPath = (rawFrom === '/drafts' || rawFrom === '/' || rawFrom === '/pipeline') 
+    ? rawFrom 
+    : '/pipeline';
 
   const getBackLabel = (path) => {
-    if (path.startsWith('/rubrics')) return 'BACK TO RUBRIC';
-    if (path === '/pipeline') return 'BACK TO PIPELINE';
+    if (path === '/drafts') return 'BACK TO APPLICATION DRAFTS';
     if (path === '/') return 'BACK TO HOME';
-    return 'BACK TO APPLICATION DRAFTS';
+    return 'BACK TO PIPELINE';
   };
 
   const backLabel = getBackLabel(fromPath);
@@ -170,7 +173,7 @@ export default function ProposalDraftPage() {
   const officialUrl = getOfficialGrantUrl(grant);
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2.5rem 1.5rem 5rem 1.5rem' }}>
       {/* Top Breadcrumb Navigation */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <button
