@@ -106,7 +106,10 @@ export async function searchDocuments(query, topK = 3, category = null) {
 export async function fetchApplications() {
   const res = await fetch(`${BASE_URL}/api/applications`);
   if (!res.ok) throw new Error(`Applications fetch failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data)) return data;
+  if (data && Array.isArray(data.applications)) return data.applications;
+  return [];
 }
 
 export async function fetchApplicationById(draftId) {

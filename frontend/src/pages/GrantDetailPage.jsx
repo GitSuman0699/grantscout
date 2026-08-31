@@ -62,8 +62,9 @@ export default function GrantDetailPage() {
       setLoadingDraft(true);
       try {
         const data = await fetchApplications();
+        const appsList = Array.isArray(data) ? data : (data?.applications || []);
         const grantId = grant.grant_id || grant.id;
-        const matchingDraft = (data.applications || []).find(
+        const matchingDraft = appsList.find(
           a => String(a.grant_id) === String(grantId) || String(a.grant_id) === String(grant.id)
         );
         if (matchingDraft) {
@@ -85,11 +86,12 @@ export default function GrantDetailPage() {
     try {
       const grantId = grant.grant_id || grant.id;
       const res = await triggerDraft(grantId);
-      if (res.application) {
+      if (res && res.application) {
         setDraft(res.application);
       } else {
         const appsData = await fetchApplications();
-        const found = (appsData.applications || []).find(
+        const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
+        const found = appsList.find(
           a => String(a.grant_id) === String(grantId)
         );
         if (found) setDraft(found);

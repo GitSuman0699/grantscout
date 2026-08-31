@@ -73,9 +73,10 @@ export default function ProposalDraftPage() {
       setLoadingDraft(true);
       setDraftError(null);
       try {
-        const apps = await fetchApplications();
+        const appsData = await fetchApplications();
+        const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
         const grantId = grant.grant_id || grant.id;
-        const matchingApp = apps.find(a => (a.grant_id === grantId || a.id === grantId));
+        const matchingApp = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
         if (matchingApp) {
           setDraft(matchingApp);
         } else {
@@ -97,11 +98,14 @@ export default function ProposalDraftPage() {
     try {
       const grantId = grant.grant_id || grant.id;
       const res = await triggerDraft(grantId);
-      if (res && res.sections) {
+      if (res && res.application) {
+        setDraft(res.application);
+      } else if (res && res.sections) {
         setDraft(res);
       } else {
-        const apps = await fetchApplications();
-        const updated = apps.find(a => (a.grant_id === grantId || a.id === grantId));
+        const appsData = await fetchApplications();
+        const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
+        const updated = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
         if (updated) setDraft(updated);
       }
       if (refreshGrants) refreshGrants();
