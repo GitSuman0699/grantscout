@@ -86,12 +86,16 @@ def is_active_opportunity(
     post_date: str = "",
     has_packages: bool = True,
 ) -> bool:
-    """Returns True if the grant is active and currently open for application submission."""
+    """Returns True if the grant is active, open, and has an active application package on Grants.gov."""
     import re
     from datetime import datetime, timezone
     now_dt = datetime.now(timezone.utc)
 
-    # 1. Fiscal Year check
+    # 1. Require active workspace application packages (so Apply button is enabled on Grants.gov)
+    if not has_packages:
+        return False
+
+    # 2. Fiscal Year check
     if fiscal_year is not None:
         try:
             if int(fiscal_year) < 2026:
@@ -99,38 +103,18 @@ def is_active_opportunity(
         except (ValueError, TypeError):
             pass
 
-    # 2. Legacy years in title
+    # 3. Legacy years in title
     title_lower = title.lower()
     for yr in ["2019", "2020", "2021", "2022", "2023", "2024"]:
         if yr in title_lower:
             return False
 
-    # 3. If Grants.gov application package is closed/missing AND original due date has passed
-    if not has_packages and original_due_date:
-        clean_orig = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", original_due_date).strip()
-        for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
-            try:
-                dt_orig = datetime.strptime(clean_orig, fmt).replace(tzinfo=timezone.utc)
-                if dt_orig < now_dt:
-                    return False
-            except ValueError:
-                continue
-
-    # 4. Check post_date if close_date is missing
-    if not close_date:
-        if post_date:
-            clean_post = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", post_date).strip()
-            for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
-                try:
-                    dt_post = datetime.strptime(clean_post, fmt).replace(tzinfo=timezone.utc)
-                    if dt_post.year < 2026:
-                        return False
-                except ValueError:
-                    continue
-        return False
-
+    # 4. Check close date
     if close_date in ("Ongoing", "TBD", "Rolling"):
         return True
+
+    if not close_date:
+        return False
 
     clean_close = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", close_date).strip()
     for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
@@ -164,13 +148,13 @@ async def run_scan() -> str:
         from backend.optimization import token_tracker
 
         keywords = [
-            "Louis Stokes Alliances for Minority Participation",
-            "NDEP STEM Open NFO",
-            "EDU Core Research STEM Learning",
-            "Regional Workforce Skills STEM",
-            "STEM education youth robotics",
-            "minority education science technology",
-            "after-school coding computer science"
+            "EDU Core Research",
+            "NDEP STEM",
+            "National Science Foundation Research Traineeship",
+            "Tribal Colleges and Universities Program STEM",
+            "Innovations in Graduate Education STEM",
+            "Research and Education Program for Historically Black Colleges",
+            "STEM education youth robotics"
         ]
         discovered_count = 0
         
@@ -203,11 +187,19 @@ async def run_scan() -> str:
                             logger.info(f"Skipping inactive / closed opportunity: {title} (Close Date: {close_date}, FY: {fiscal_year})")
                             continue
 
-                        raw_c = str(grant_data.get("award_ceiling", "0")).replace("$", "").replace(",", "").strip()
-                        ceiling = float(raw_c) if raw_c and raw_c != "None" and raw_c != "0" else 150000.0
+                        def _parse_amount(raw_val: Any, default: float) -> float:
+                            if raw_val is None:
+                                return default
+                            cleaned = str(raw_val).replace("$", "").replace(",", "").strip().lower()
+                            if not cleaned or cleaned in ("none", "null", "0", "tbd", "n/a", "varies"):
+                                return default
+                            try:
+                                return float(cleaned)
+                            except (ValueError, TypeError):
+                                return default
 
-                        raw_f = str(grant_data.get("award_floor", "0")).replace("$", "").replace(",", "").strip()
-                        floor = float(raw_f) if raw_f and raw_f != "None" else 25000.0
+                        ceiling = _parse_amount(grant_data.get("award_ceiling"), 150000.0)
+                        floor = _parse_amount(grant_data.get("award_floor"), 25000.0)
 
                         grant_obj = {
                             "grant_id": gid,
