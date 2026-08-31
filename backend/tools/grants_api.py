@@ -168,12 +168,12 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
         data = response.json()
 
         opp = data.get("data", {})
-        synopsis = opp.get("synopsis", {})
+        synopsis = opp.get("synopsis") or opp.get("forecast") or {}
 
-        raw_title = opp.get("opportunityTitle", "Unknown Title")
+        raw_title = opp.get("opportunityTitle") or synopsis.get("opportunityTitle", "Unknown Title")
         clean_title = html.unescape(raw_title) if raw_title else "Unknown Title"
 
-        raw_synopsis = synopsis.get("synopsisDesc", "")
+        raw_synopsis = synopsis.get("synopsisDesc") or synopsis.get("forecastDesc") or synopsis.get("description") or ""
         clean_synopsis = html.unescape(raw_synopsis) if raw_synopsis else ""
 
         raw_agency = synopsis.get("agencyName", "")
@@ -182,6 +182,10 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
         pkgs = opp.get("opportunityPkgs", [])
         has_packages = len(pkgs) > 0
 
+        post_date = synopsis.get("postingDate") or synopsis.get("createdDate") or ""
+        close_date = synopsis.get("responseDate") or synopsis.get("estApplicationResponseDate") or ""
+        fiscal_year = synopsis.get("fiscalYear")
+
         grant_details = {
             "id": opp.get("id"),
             "opportunity_number": opp.get("opportunityNumber", ""),
@@ -189,11 +193,12 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
             "agency": clean_agency,
             "agency_code": synopsis.get("agencyCode", ""),
             "synopsis_description": clean_synopsis,
-            "award_ceiling": synopsis.get("awardCeiling", "0"),
+            "award_ceiling": synopsis.get("awardCeiling", synopsis.get("estimatedFunding", "0")),
             "award_floor": synopsis.get("awardFloor", "0"),
-            "post_date": synopsis.get("postingDate", ""),
-            "close_date": synopsis.get("responseDate", ""),
+            "post_date": post_date,
+            "close_date": close_date,
             "original_due_date": opp.get("originalDueDate", ""),
+            "fiscal_year": fiscal_year,
             "has_packages": has_packages,
             "archive_date": synopsis.get("archiveDate", ""),
             "estimated_funding": synopsis.get("estimatedFunding", ""),
@@ -202,7 +207,7 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
             "funding_instrument_type": synopsis.get("fundingInstrumentType", ""),
             "category_of_funding": synopsis.get("categoryOfFunding", ""),
             "additional_info_url": synopsis.get("additionalInformationUrl", ""),
-            "grantor_contact_info": synopsis.get("grantorContactInfo", ""),
+            "grantor_contact_info": synopsis.get("grantorContactInfo", synopsis.get("agencyContactEmail", "")),
         }
 
         logger.info(f"Successfully fetched details for: {grant_details['title']}")

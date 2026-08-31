@@ -82,19 +82,30 @@ def is_active_opportunity(
     close_date: str,
     title: str,
     original_due_date: str = "",
+    fiscal_year: int | None = None,
+    post_date: str = "",
     has_packages: bool = True,
 ) -> bool:
     """Returns True if the grant is active and currently open for application submission."""
+    import re
+    from datetime import datetime, timezone
+    now_dt = datetime.now(timezone.utc)
+
+    # 1. Fiscal Year check
+    if fiscal_year is not None:
+        try:
+            if int(fiscal_year) < 2026:
+                return False
+        except (ValueError, TypeError):
+            pass
+
+    # 2. Legacy years in title
     title_lower = title.lower()
-    for yr in ["2020", "2021", "2022", "2023", "2024"]:
+    for yr in ["2019", "2020", "2021", "2022", "2023", "2024"]:
         if yr in title_lower:
             return False
 
-    from datetime import datetime, timezone
-    import re
-    now_dt = datetime.now(timezone.utc)
-
-    # 1. If Grants.gov application package is closed/missing AND original due date has passed
+    # 3. If Grants.gov application package is closed/missing AND original due date has passed
     if not has_packages and original_due_date:
         clean_orig = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", original_due_date).strip()
         for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
@@ -105,8 +116,20 @@ def is_active_opportunity(
             except ValueError:
                 continue
 
-    # 2. Check current close_date
-    if not close_date or close_date in ("Ongoing", "TBD", "Rolling"):
+    # 4. Check post_date if close_date is missing
+    if not close_date:
+        if post_date:
+            clean_post = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", post_date).strip()
+            for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
+                try:
+                    dt_post = datetime.strptime(clean_post, fmt).replace(tzinfo=timezone.utc)
+                    if dt_post.year < 2026:
+                        return False
+                except ValueError:
+                    continue
+        return False
+
+    if close_date in ("Ongoing", "TBD", "Rolling"):
         return True
 
     clean_close = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", close_date).strip()
@@ -117,7 +140,7 @@ def is_active_opportunity(
         except ValueError:
             continue
 
-    return True
+    return False
 
 
 async def run_scan() -> str:
@@ -169,13 +192,15 @@ async def run_scan() -> str:
                             continue
 
                         title = grant_data.get("title", "Federal Grant Opportunity")
-                        close_date = grant_data.get("close_date") or grant_data.get("post_date") or "2026-12-01"
+                        close_date = grant_data.get("close_date") or ""
+                        post_date = grant_data.get("post_date") or ""
                         original_due_date = grant_data.get("original_due_date", "")
+                        fiscal_year = grant_data.get("fiscal_year")
                         has_packages = grant_data.get("has_packages", True)
 
                         # Filter out expired legacy notices or closed application packages
-                        if not is_active_opportunity(close_date, title, original_due_date, has_packages):
-                            logger.info(f"Skipping inactive / closed opportunity: {title} (Close Date: {close_date}, Pkgs: {has_packages})")
+                        if not is_active_opportunity(close_date, title, original_due_date, fiscal_year, post_date, has_packages):
+                            logger.info(f"Skipping inactive / closed opportunity: {title} (Close Date: {close_date}, FY: {fiscal_year})")
                             continue
 
                         raw_c = str(grant_data.get("award_ceiling", "0")).replace("$", "").replace(",", "").strip()
@@ -192,7 +217,7 @@ async def run_scan() -> str:
                             "synopsis": grant_data.get("synopsis_description", title)[:800],
                             "award_ceiling": ceiling,
                             "award_floor": floor,
-                            "close_date": close_date,
+                            "close_date": close_date or "Rolling",
                             "applicant_types": grant_data.get("applicant_types", "Nonprofits having a 501(c)(3) status with the IRS"),
                             "category_of_funding": grant_data.get("category_of_funding", "Education, Science and Technology"),
                             "tags": ["501(c)(3)", "STEM", "FEDERAL"],
