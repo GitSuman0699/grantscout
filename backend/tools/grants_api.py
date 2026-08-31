@@ -59,6 +59,7 @@ def search_grants(
         request_body = {
             "keyword": keywords,
             "oppStatuses": "posted|forecasted",
+            "sortBy": "openDate|desc",
             "rows": min(max_results, 50),
             "startRecordNum": 0,
         }

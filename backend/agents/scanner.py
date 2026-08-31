@@ -78,6 +78,30 @@ def create_scanner_agent() -> Agent:
     return agent
 
 
+def is_active_opportunity(close_date: str, title: str) -> bool:
+    """Returns True if the grant is active (not an expired legacy notice from past years)."""
+    title_lower = title.lower()
+    for yr in ["2020", "2021", "2022", "2023", "2024"]:
+        if yr in title_lower:
+            return False
+
+    if not close_date or close_date in ("Ongoing", "TBD", "Rolling"):
+        return True
+
+    try:
+        from datetime import datetime, timezone
+        now_dt = datetime.now(timezone.utc)
+        for fmt in ["%m/%d/%Y", "%Y-%m-%d", "%b %d, %Y"]:
+            try:
+                dt = datetime.strptime(close_date.split(" ")[0], fmt).replace(tzinfo=timezone.utc)
+                return dt >= now_dt
+            except ValueError:
+                continue
+    except Exception:
+        pass
+    return True
+
+
 async def run_scan() -> str:
     """Execute a full grant scan querying Grants.gov live REST API."""
     try:
@@ -126,20 +150,26 @@ async def run_scan() -> str:
                         if not grant_data:
                             continue
 
+                        title = grant_data.get("title", "Federal Grant Opportunity")
+                        close_date = grant_data.get("close_date") or grant_data.get("post_date") or "2026-12-01"
+
+                        # Filter out expired legacy notices from previous years
+                        if not is_active_opportunity(close_date, title):
+                            logger.info(f"Skipping expired legacy notice: {title} (Close Date: {close_date})")
+                            continue
+
                         raw_c = str(grant_data.get("award_ceiling", "0")).replace("$", "").replace(",", "").strip()
                         ceiling = float(raw_c) if raw_c and raw_c != "None" and raw_c != "0" else 150000.0
 
                         raw_f = str(grant_data.get("award_floor", "0")).replace("$", "").replace(",", "").strip()
                         floor = float(raw_f) if raw_f and raw_f != "None" else 25000.0
 
-                        close_date = grant_data.get("close_date") or grant_data.get("post_date") or "2026-12-01"
-
                         grant_obj = {
                             "grant_id": gid,
                             "source": "grants.gov",
-                            "title": grant_data.get("title", "Federal Grant Opportunity"),
+                            "title": title,
                             "agency": grant_data.get("agency", "Federal Agency"),
-                            "synopsis": grant_data.get("synopsis_description", grant_data.get("title", ""))[:800],
+                            "synopsis": grant_data.get("synopsis_description", title)[:800],
                             "award_ceiling": ceiling,
                             "award_floor": floor,
                             "close_date": close_date,
