@@ -10,7 +10,7 @@ import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -138,7 +138,7 @@ async def create_or_update_org_profile(
     profile.mission = sanitize_input(profile.mission, "mission")
     profile.service_area = sanitize_input(profile.service_area, "service_area")
     profile.target_population = sanitize_input(profile.target_population, "target_population")
-    profile.updated_at = datetime.utcnow()
+    profile.updated_at = datetime.now(timezone.utc)
 
     storage.save_org_profile(profile.model_dump())
 
@@ -146,7 +146,7 @@ async def create_or_update_org_profile(
     storage.add_activity({
         "event_type": "profile_updated",
         "message": f"Organization profile updated: {profile.name} (by {auth.sub})",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
     return {"status": "saved", "org_id": profile.org_id, "updated_by": auth.sub}
@@ -270,7 +270,7 @@ async def update_application(
     if "grant_title" in payload:
         app_draft["grant_title"] = sanitize_input(payload["grant_title"], "grant_title")
         
-    app_draft["updated_at"] = datetime.utcnow().isoformat()
+    app_draft["updated_at"] = datetime.now(timezone.utc).isoformat()
     storage.save_application(app_draft)
     return {"status": "updated", "draft": app_draft, "updated_by": auth.sub}
 
@@ -331,7 +331,7 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
         storage.add_activity({
             "event_type": "scan_started",
             "message": f"Grant scan initiated across federal databases (by {auth.sub})...",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         await event_queue.put({
@@ -345,7 +345,7 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
             "event_type": "scan_completed",
             "message": "Grant scan completed successfully",
             "details": {"result_preview": result[:200] if result else ""},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         await event_queue.put({
@@ -360,7 +360,7 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
         storage.add_activity({
             "event_type": "error",
             "message": f"Grant scan failed: {str(e)}",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
@@ -374,7 +374,7 @@ async def trigger_full_orchestration(auth: TokenPayload = Depends(get_current_au
         storage.add_activity({
             "event_type": "scan_started",
             "message": f"Full autonomous orchestration cycle running in background (triggered by {auth.sub})...",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         summary = run_full_orchestration_cycle()
@@ -455,7 +455,7 @@ async def health_check():
         "status": "healthy",
         "service": "grantscout-api",
         "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 

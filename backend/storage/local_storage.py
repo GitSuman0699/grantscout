@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -167,7 +167,7 @@ class LocalStorage:
 
     def add_activity(self, event: dict) -> None:
         """Add an activity event to the feed."""
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         filepath = self.base_path / "activity" / f"{timestamp}.json"
         filepath.write_text(self._serialize(event), encoding="utf-8")
 
@@ -203,6 +203,7 @@ class LocalStorage:
         # Find the nearest deadline
         next_deadline = None
         days_until = None
+        now_dt = datetime.now(timezone.utc)
         for g in grants:
             close = g.get("close_date")
             if close and g.get("status") not in ("archived", "submitted"):
@@ -210,8 +211,8 @@ class LocalStorage:
                     # Handle various date formats
                     for fmt in ["%Y-%m-%d", "%b %d, %Y", "%m/%d/%Y"]:
                         try:
-                            close_dt = datetime.strptime(close.split(" ")[0], fmt)
-                            delta = (close_dt - datetime.utcnow()).days
+                            close_dt = datetime.strptime(close.split(" ")[0], fmt).replace(tzinfo=timezone.utc)
+                            delta = (close_dt - now_dt).days
                             if delta > 0 and (days_until is None or delta < days_until):
                                 days_until = delta
                                 next_deadline = close
@@ -228,11 +229,12 @@ class LocalStorage:
             if app.get("grant_id") in active_grant_ids
         }
 
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         return {
             "grants_discovered": len(grants),
             "grants_this_week": len([
                 g for g in grants
-                if g.get("discovered_at", "")[:10] >= datetime.utcnow().strftime("%Y-%m-%d")
+                if g.get("discovered_at", "")[:10] >= today_str
             ]),
             "high_matches": len(high_matches),
             "applications_drafted": len(unique_drafted),

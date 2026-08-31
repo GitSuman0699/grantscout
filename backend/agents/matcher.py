@@ -9,6 +9,7 @@ and <50 are archived silently.
 from __future__ import annotations
 
 import logging
+from typing import Any, Optional
 
 from strands import Agent
 from strands.models.bedrock import BedrockModel
@@ -209,11 +210,12 @@ Retrieve our org profile and return a fully formulated GrantEvaluationResult.
 
     # Persist the evaluated result only if persist is True
     if persist:
+        synopsis_val = str(grant_details.get("synopsis_description") or grant_details.get("synopsis") or "")
         save_matched_grant(
             grant_id=evaluation.grant_id,
             title=grant_details.get("title", "Grant Opportunity"),
             agency=grant_details.get("agency", "Federal Agency"),
-            synopsis=grant_details.get("synopsis_description", grant_details.get("synopsis", "")),
+            synopsis=synopsis_val,
             award_ceiling=float(grant_details.get("award_ceiling") or 0),
             award_floor=float(grant_details.get("award_floor") or 0),
             close_date=grant_details.get("close_date", "TBD"),
