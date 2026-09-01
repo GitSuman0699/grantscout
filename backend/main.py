@@ -293,60 +293,23 @@ async def trigger_grant_draft(
         grant["status"] = "drafting"
         storage.save_grant(grant)
 
-        # Step 1: Orchestrator handoff to Drafter Swarm
         await event_queue.put({
-            "type": "agent_thought",
-            "agent": "OrchestratorAgent",
-            "tier": "Standard Tier (Claude Sonnet)",
-            "step": "Swarm Delegation & Handoff",
-            "thought": f"Delegating proposal generation for '{grant.get('title')}' to Drafter Swarm sub-agents.",
+            "type": "drafting_started",
+            "message": f"Drafting application proposal for '{grant.get('title')}'...",
+            "grant_id": grant_id,
         })
-        await asyncio.sleep(0.4)
 
-        # Step 2: NarrativeAgent RAG Grounding
-        await event_queue.put({
-            "type": "agent_thought",
-            "agent": "DrafterSwarm.NarrativeAgent",
-            "tier": "Premium Tier (Claude Sonnet)",
-            "step": "RAG Grounding & Statement of Need",
-            "thought": f"Retrieved verified Form 990 facts & program impact metrics from RAG vector corpus for '{grant.get('title')}'. Drafting Executive Summary & Statement of Need.",
-        })
-        await asyncio.sleep(0.5)
-
-        # Execute draft generation across sub-agents
         result = draft_application_for_grant(grant)
 
-        # Step 3: BudgetAgent Statutory Formulations
-        await event_queue.put({
-            "type": "agent_thought",
-            "agent": "DrafterSwarm.BudgetAgent",
-            "tier": "Premium Tier (Claude Sonnet)",
-            "step": "2 CFR 200 Budget Formulations",
-            "thought": f"Computed direct personnel line items, 20% fringe benefits, and 10% de minimis MTDC indirect cost rate (§200.414(f)) for '{grant.get('title')}'.",
-        })
-        await asyncio.sleep(0.4)
-
-        # Step 4: ComplianceDrafterAgent
-        await event_queue.put({
-            "type": "agent_thought",
-            "agent": "DrafterSwarm.ComplianceDrafter",
-            "tier": "Premium Tier (Claude Sonnet)",
-            "step": "Timeline & Sustainability Framework",
-            "thought": f"Structured 4-quarter project milestones and post-grant sustainability framework for '{grant.get('title')}'.",
-        })
-        await asyncio.sleep(0.4)
-        
         # Check drafted application
         apps = storage.list_applications()
         matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
 
-        # Step 5: LeadDrafterAgent Synthesis & Persist
         await event_queue.put({
-            "type": "agent_thought",
-            "agent": "DrafterSwarm.LeadDrafter",
-            "tier": "Premium Tier (Claude Sonnet)",
-            "step": "Swarm Synthesis & Workstation Persist",
-            "thought": f"Synthesized complete 6-section proposal for '{grant.get('title')}'. Persisted to workstation with 100% completion.",
+            "type": "application_drafted",
+            "message": f"Draft proposal ready for '{grant.get('title')}'",
+            "grant_id": grant_id,
+            "draft_id": matched_app.get("draft_id") if matched_app else None,
         })
 
         return {"status": "drafted", "result": result, "application": matched_app, "requested_by": auth.sub}

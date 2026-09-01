@@ -9,7 +9,6 @@ import ProposalDraftPage from './pages/ProposalDraftPage';
 import DraftsPage from './pages/DraftsPage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import OptimizationPage from './pages/OptimizationPage';
-import AgentThoughtStream from './components/AgentThoughtStream';
 import SplashScreen from './components/SplashScreen';
 import { GrantProvider, useGrants } from './context/GrantContext';
 
@@ -67,9 +66,6 @@ function AppLayout() {
           </div>
         </div>
       </footer>
-
-      {/* Real-Time Multi-Agent Thought & Telemetry Visualizer */}
-      <AgentThoughtStream />
     </div>
   );
 }
