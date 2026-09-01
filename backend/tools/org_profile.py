@@ -107,7 +107,12 @@ def save_matched_grant(
         storage.save_grant(grant_data)
 
         # Log activity
-        total_score = sum(match_score.values())
+        if isinstance(match_score, dict) and "total" in match_score:
+            total_score = int(match_score["total"])
+        elif isinstance(match_score, dict):
+            total_score = sum(int(v) for k, v in match_score.items() if isinstance(v, (int, float)))
+        else:
+            total_score = 0
         storage.add_activity({
             "event_type": "grant_matched",
             "message": f"Scored '{title}' — {total_score}% match",

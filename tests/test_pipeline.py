@@ -62,7 +62,7 @@ class TestGrantScoutPipeline(unittest.TestCase):
         self.assertIsNotNone(retrieved)
         assert retrieved is not None
         self.assertEqual(retrieved["title"], "National Youth STEM Innovation Grant")
-        self.assertEqual(sum(retrieved["match_score"].values()), 93)
+        self.assertEqual(retrieved["match_score"]["total"], 93)
 
     def test_04_save_and_retrieve_draft(self):
         """Verify multi-section grant application draft persistence."""

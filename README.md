@@ -1,28 +1,28 @@
 # 🛰️ GrantScout
 
-> **An autonomous AI agent that finds federal grants for small nonprofits, scores how well they fit, and pre-writes the application — so your team can focus on the mission, not the paperwork.**
+> **An autonomous AI agent that finds federal grants for small nonprofits, scores how well they fit, and pre-writes the application, so your team can focus on the mission, not the paperwork.**
 
 ---
 
 ## The Problem
 
-Every year, **billions of dollars** in federal grant funding go unclaimed. Not because worthy nonprofits don't exist — but because small, community-rooted 501(c)(3) organizations don't have dedicated grant-writing staff. They can't afford to monitor Grants.gov daily, wade through hundreds of pages of eligibility criteria, or write 20-page narrative proposals for every opportunity that *might* be a fit.
+Every year, **billions of dollars** in federal grant funding go unclaimed. Not because worthy nonprofits don't exist, but because small, community-rooted 501(c)(3) organizations don't have dedicated grant-writing staff. They can't afford to monitor Grants.gov daily, wade through hundreds of pages of eligibility criteria, or write 20-page narrative proposals for every opportunity that *might* be a fit.
 
 The result? The organizations closest to the communities that need help the most are the least likely to get funded.
 
 ## What GrantScout Does
 
-**GrantScout** is a multi-agent AI system built with the **[Strands Agents SDK](https://github.com/strands-agents/sdk-python)** and **Amazon Bedrock** that works silently in the background for a nonprofit. There's no dashboard to babysit. Instead, GrantScout:
+**GrantScout** is a multi-agent AI system built with the **[Strands Agents SDK](https://github.com/strands-agents/sdk-python)** and **Amazon Bedrock**. Once a scan is triggered, the multi-agent pipeline runs autonomously end-to-end, no manual step-by-step supervision required. GrantScout:
 
-1. **Scans** the live [Grants.gov REST API](https://api.grants.gov/) every few hours, searching for real federal funding opportunities that match the nonprofit's mission keywords.
-2. **Scores** every discovered grant against the organization's profile using a 5-dimension, 100-point rubric (Mission Alignment, Eligibility Fit, Capacity Match, Geographic Fit, Track Record) — with Pydantic-enforced structured outputs so scores are always consistent and auditable.
+1. **Scans** the live [Grants.gov REST API](https://api.grants.gov/) for real federal funding opportunities that match the nonprofit's mission keywords.
+2. **Scores** every discovered grant against the organization's profile using a 5-dimension, 100-point rubric (Mission Alignment, Eligibility Fit, Capacity Match, Geographic Fit, Track Record), with Pydantic-enforced structured outputs so scores are always consistent and auditable.
 3. **Routes** grants autonomously: high-fit opportunities (≥80) trigger automatic application drafting; medium-fit (50–79) are flagged for human review; low-fit (<50) are archived silently.
-4. **Drafts** competitive 6-section federal grant applications grounded in the nonprofit's own history — past proposals, IRS 990 filings, and impact reports — retrieved via a built-in RAG knowledge base.
+4. **Drafts** competitive 6-section federal grant applications grounded in the nonprofit's own history (past proposals, IRS 990 filings, and impact reports), retrieved via a built-in RAG knowledge base.
 5. **Surfaces** only when a real decision is needed: a high-confidence match found, or a draft ready for final human review.
 
 ## Who It's For
 
-Small and mid-size nonprofits — after-school programs, community health clinics, youth mentorship organizations — that run on tight budgets and can't hire a $150/hr grant consultant. GrantScout gives them the same competitive advantage that large institutions get from full-time development teams.
+Small and mid-size nonprofits, such as after-school programs, community health clinics, and youth mentorship organizations, that run on tight budgets and can't hire a $150/hr grant consultant. GrantScout gives them the same competitive advantage that large institutions get from full-time development teams.
 
 ## How It Uses Strands Agents
 
@@ -32,8 +32,8 @@ GrantScout runs **5 specialized Strands Agents**, each with its own system promp
 |:---|:---|:---|
 | **Scanner** | Workflow | Queries Grants.gov with mission-derived keywords, deduplicates, fetches full opportunity details |
 | **Matcher** | Structured Output | Scores grants on a 100-point rubric using `structured_output` with Pydantic schema enforcement |
-| **Orchestrator** | Graph | Routes grants based on score thresholds — auto-draft, flag for review, or archive silently |
-| **Drafter** | Swarm | Coordinates sub-agents (Narrative Writer, Budget Specialist, Compliance Checker) to produce 6-section applications |
+| **Orchestrator** | Graph | Routes grants based on score thresholds: auto-draft, flag for review, or archive silently |
+| **Drafter** | Swarm | Generates structured 6-section grant applications with narrative, budget, and compliance sections |
 | **Deadline** | Scheduler | Sweeps pipeline deadlines and broadcasts urgency-tiered alerts |
 
 All agents use `@tool`-decorated functions, Amazon Bedrock (Claude Sonnet / Haiku), and the Strands `Agent()` class. The system also includes a **FastMCP server** for integration with Claude Desktop and Cursor, and a **RAG knowledge base** using Amazon Titan Embeddings for vector retrieval over organizational documents.
@@ -44,7 +44,7 @@ All agents use `@tool`-decorated functions, Amazon Bedrock (Claude Sonnet / Haik
 
 ```mermaid
 graph TD
-    subgraph "Client Layer — React + Vite (Port 5173)"
+    subgraph "Client Layer, React + Vite (Port 5173)"
         HOME[Home Landing & Mission Loop]
         PIPE[Grant Pipeline Workspace]
         WORKSTATION[Full-Page Workstation Editor]
@@ -53,7 +53,7 @@ graph TD
         OPT_UI[Cost Optimization Visualizer]
     end
 
-    subgraph "API & Security Layer — FastAPI (Port 8000)"
+    subgraph "API & Security Layer, FastAPI (Port 8000)"
         API[FastAPI Gateway]
         AUTH[Security Layer<br/>JWT & API Key Auth]
         STORE[Storage Engine<br/>Local / DynamoDB / S3]
@@ -76,10 +76,10 @@ graph TD
 
     subgraph "External Integrations"
         GGOV[Grants.gov REST API<br/>Live Federal Opportunities]
-        BEDROCK[Amazon Bedrock<br/>Claude Sonnet 4.5 & Haiku 4.5]
+        BEDROCK[Amazon Bedrock<br/>Claude Sonnet 4]
     end
 
-    subgraph "MCP Server — stdio Transport"
+    subgraph "MCP Server, stdio Transport"
         MCP_SRV[FastMCP Server<br/>Tools + Resources + Prompts]
         MCP_CLIENT[Claude Desktop / Cursor]
     end
@@ -116,37 +116,37 @@ graph TD
 
 ## 🤖 Strands SDK Multi-Agent Patterns
 
-GrantScout implements all three core multi-agent patterns available in the **Strands Agents SDK**:
+GrantScout uses multi-agent patterns inspired by the **Strands Agents SDK**:
 
-| Agent | Multi-Agent Pattern | Role & Behavior |
+| Agent | Pattern | Role & Behavior |
 |---|---|---|
-| **Orchestrator Agent** | **Graph Pattern** | Autonomously routes opportunities based on fit scores: ≥80% auto-triggers application drafting; 50–79% flags for human review; <50% archives silently. |
-| **Drafter Agent** | **Swarm Pattern** | Coordinates specialized sub-agents (*Narrative Writer*, *Budget Specialist*, *Compliance Checker*) with autonomous handoffs to generate structured 6-section applications. |
-| **Scanner Agent** | **Workflow Pattern** | Queries public Grants.gov endpoints (`search2`, `fetchOpportunity`) using org mission keywords and eliminates duplicates. |
-| **Matcher Agent** | **Rubric Scoring Engine** | Quantifies 5 dimensions on a 100-point scale: Mission Alignment (30), Eligibility Fit (25), Capacity Match (20), Geography (15), Track Record (10). |
-| **Deadline Agent** | **Scheduler Pattern** | Tracks impending closing windows and broadcasts urgency-tiered alerts to the real-time activity stream. |
+| **Orchestrator Agent** | **Graph Routing** | Autonomously routes opportunities based on fit scores: ≥80 auto-triggers application drafting, 50–79 flags for human review, <50 archives silently. |
+| **Drafter Agent** | **Structured Generation** | Generates structured 6-section grant applications with narrative, budget, and compliance sections using RAG-retrieved organizational context. |
+| **Scanner Agent** | **Workflow** | Queries public Grants.gov endpoints (`search2`, `fetchOpportunity`) using org mission keywords and eliminates duplicates. |
+| **Matcher Agent** | **Rubric Scoring** | Quantifies 5 dimensions on a 100-point scale: Mission Alignment (30), Eligibility Fit (25), Capacity Match (20), Geography (15), Track Record (10). |
+| **Deadline Agent** | **Monitoring** | Tracks impending closing windows and broadcasts urgency-tiered alerts to the activity stream. |
 
 ---
 
 ## ✨ Key Technical Features
 
 ### 🎨 Editorial Brutalist Web Dashboard & Workstation
-A custom frontend built in **React + Vite** adhering to the **Field Ops / Editorial Brutalist** design system designed in Google Stitch:
+A custom frontend built in **React + Vite** adhering to the **Field Ops / Editorial Brutalist** design system:
 - **Typography**: Google Fonts `Bebas Neue` (condensed uppercase headers), `Plus Jakarta Sans` (body), and `JetBrains Mono` (telemetry/metadata)
 - **Palette**: Warm ivory canvas (`#FAF8F5`), solid `#18181B` borders with sharp 4px offset box shadows (`4px 4px 0px #18181B`), and mission olive green / amber signal accents
 - **Multi-Page Routing (`react-router-dom`)**:
-  - `/` — **Home Landing & Mission Overview**: 3-step autonomous multi-agent loop banner, telemetry summary, and feature cards
-  - `/pipeline` — **Grant Pipeline Workspace**: Scanned metrics (2x2 mobile grid), sector filters, and adventure-style grant opportunity cards
-  - `/grants/:id` — **Full-Page Workstation**: 5-dimension rubric breakdown, cited IRS 990 sources, 6-section proposal editor, and Markdown exporter with contextual back navigation
-  - `/drafts` — **Application Drafts Hub**: Curated list of all high-fit pre-filled applications
-  - `/knowledge` — **RAG Knowledge Base**: Interactive vector search query tester over Form 990s and impact reports
-  - `/optimization` — **Cost Optimization**: Multi-model tiering breakdown, cache stats, and token telemetry
+  - `/`, **Home Landing & Mission Overview**: Multi-agent loop banner, telemetry summary, and feature cards
+  - `/pipeline`, **Grant Pipeline Workspace**: Scanned metrics, sector filters, and grant opportunity cards
+  - `/grants/:id`, **Full-Page Workstation**: 5-dimension rubric breakdown, 6-section proposal editor, and Markdown exporter
+  - `/drafts`, **Application Drafts Hub**: List of all pre-filled applications
+  - `/knowledge`, **RAG Knowledge Base**: Interactive vector search query tester over organizational documents
+  - `/optimization`, **Cost Optimization**: Model configuration, cache stats, and token telemetry
 - **Mobile Responsive**: Right-sliding continuous marquee ticker banner with fixed right-side `● LIVE` status badge and slide-down navigation drawer
 
 ### 📐 Structured Output Enforcement
 All agent outputs are validated against **Pydantic schemas** using the Strands SDK `structured_output` API:
-- `GrantEvaluationResult` — enforces typed 5-dimension scoring, status enum, and action routing
-- `ApplicationDraftResult` — enforces 6-section structure with word counts and completion tracking
+- `GrantEvaluationResult`, enforces typed 5-dimension scoring, status enum, and action routing
+- `ApplicationDraftResult`, enforces 6-section structure with word counts and completion tracking
 - Computed fields (`MatchScore.total`) ensure scoring consistency
 
 ### 📚 RAG Knowledge Base
@@ -154,13 +154,13 @@ Vector-based retrieval over indexed nonprofit organizational documents:
 - **Document Types**: Annual Reports, IRS 990, Past Proposals, Staff Bios
 - **Hybrid Search**: Cosine similarity (70%) + keyword lexical boosting (30%)
 - **Paragraph Chunking**: Splits documents into semantically meaningful paragraphs for retrieval precision
-- **REST API**: `POST /api/rag/query` for direct knowledge base search
+- **REST API**: `POST /api/documents/search` for direct knowledge base search
 
 ### 🔌 MCP Server (Model Context Protocol)
 Full-featured MCP server for integration with Claude Desktop, Cursor, and other MCP-compatible tools:
-- **Tools**: `scan_grants`, `evaluate_grant`, `draft_application`, `check_deadlines`, `query_knowledge_base`, `get_dashboard`
-- **Resources**: `grantscout://org/profile`, `grantscout://pipeline/summary`, `grantscout://config`
-- **Prompt Templates**: `analyze-opportunity`, `review-application`, `strategic-planning`
+- **Tools**: `search_federal_grants`, `fetch_grant_opportunity`, `query_organization_knowledge_base`, `evaluate_grant_fit`, `draft_grant_section`
+- **Resources**: `grantscout://profile`, `grantscout://pipeline`, `grantscout://knowledge-base/documents`
+- **Prompt Templates**: `analyze_grant_opportunity`, `draft_grant_proposal`
 - **Transport**: stdio (local integration)
 
 ### 🧪 Evaluation Harness
@@ -172,17 +172,12 @@ Empirical benchmarking suite for agent accuracy measurement:
 - Run with: `python tests/eval_harness.py`
 
 ### 💰 Cost & Token Optimization
-Tiered multi-provider model routing and caching to minimize inference costs:
+Response caching and token tracking to minimize inference costs:
 
-| Tier | Model | Agents | Cost (per 1K input) | Role |
-|------|-------|--------|---------------------|------|
-| **Fast** | Claude Haiku 4.5 | Scanner, Deadline | $0.0008 | High-frequency filtering & deadline arithmetic (<400ms) |
-| **Standard** | Claude Sonnet 4.5 | Matcher, Orchestrator | $0.003 | 5-Dimension rubric evaluation & Graph routing |
-| **Premium** | Claude Sonnet 4.5 | Drafter | $0.003 | Multi-section proposal drafting & compliance |
-
-- **LRU Response Cache**: 256-entry cache with 1-hour TTL for deterministic tool outputs (82.4% hit rate)
+- **LRU Response Cache**: 256-entry cache with 1-hour TTL for deterministic tool outputs
 - **Token Usage Tracker**: Per-agent usage logging with cost estimation
-- **Prompt Compression**: Strips boilerplate phrases and truncates long synopses (-42% token reduction)
+- **Prompt Compression**: Strips boilerplate phrases and truncates long synopses to reduce token consumption
+- **Model Tier Definitions**: Configurable tier mapping (Fast, Standard, Premium) for future multi-model routing
 
 ### 🔒 Security & Token Validation
 - **Cryptographic JWT Tokens**: Signed via `PyJWT (HS256)` with configurable expiry and scope claims (`read`, `write`, `agent:execute`)
@@ -217,7 +212,7 @@ grantscout/
 │   ├── storage/
 │   │   └── local_storage.py #   Local JSON-file storage fallback
 │   ├── tools/               # Strands @tool functions
-│   │   ├── grants_search.py #   Grants.gov REST API client
+│   │   ├── grants_api.py    #   Grants.gov REST API client
 │   │   ├── org_profile.py   #   Organizational profile retrieval
 │   │   ├── application.py   #   Application draft persistence
 │   │   └── rag_search.py    #   RAG knowledge base tool
@@ -244,6 +239,7 @@ grantscout/
 │   └── test_optimization.py # Optimization & eval tests (21 tests)
 ├── scripts/
 │   ├── seed_org_profile.py  # Seed nonprofit profile
+│   ├── seed_knowledge_base.py # Seed RAG knowledge base documents
 │   └── test_grants_api.py   # Live Grants.gov API probe
 ├── data/                    # Local storage & RAG documents
 ├── run_mcp_server.py        # MCP server entry point
@@ -259,7 +255,7 @@ grantscout/
 ### 1. Prerequisites
 - Python 3.10+
 - Node.js 18+ & npm
-- An AWS account with Bedrock access (optional — deterministic fallback works offline)
+- An AWS account with Bedrock access (optional, deterministic fallback works offline)
 
 ### 2. Clone & Setup Backend
 ```bash
@@ -287,9 +283,7 @@ Key environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AWS_REGION` | `us-east-1` | AWS region for Bedrock |
-| `BEDROCK_MODEL_ID` | `us.anthropic.claude-sonnet-4-20250514-v1:0` | Flagship model for matching & drafting |
-| `BEDROCK_FAST_MODEL_ID` | `us.anthropic.claude-haiku-4-5-20250929-v1:0` | Fast model for scanning & deadlines |
-| `BEDROCK_EMBEDDING_MODEL_ID` | `amazon.titan-embed-text-v2:0` | Embeddings model for RAG |
+| `BEDROCK_MODEL_ID` | `us.anthropic.claude-sonnet-4-20250514-v1:0` | Bedrock model for all agents |
 | `USE_LOCAL_STORAGE` | `true` | Use local JSON files vs DynamoDB/S3 |
 | `AUTH_ENABLED` | `true` | Enable JWT/API key authentication |
 | `SECRET_KEY` | (default) | JWT signing key |
@@ -350,11 +344,11 @@ cd frontend && npm run build
 
 | Test Case | Grant | Expected Score | Actual Score | Action | Result |
 |-----------|-------|---------------|-------------|--------|--------|
-| eval-001 | Youth STEM Innovation Labs (NSF) | 78-100 | **90** | auto_draft | ✅ |
-| eval-002 | Agricultural Water Conservation (USDA) | 0-35 | **27** | archive_silently | ✅ |
-| eval-003 | Community Digital Literacy (DOL) | 50-79 | **59** | manual_review | ✅ |
-| eval-004 | After-School Coding Academies (DoEd) | 80-100 | **88** | auto_draft | ✅ |
-| eval-005 | Defense Quantum Computing (DARPA) | 0-20 | **20** | archive_silently | ✅ |
+| eval-001 | Youth STEM Innovation Labs (NSF) | 78-100 | **94** | auto_draft | ✅ |
+| eval-002 | Agricultural Water Conservation (USDA) | 0-35 | **28** | archive_silently | ✅ |
+| eval-003 | Community Digital Literacy (DOL) | 50-79 | **57** | manual_review | ✅ |
+| eval-004 | After-School Coding Academies (DoEd) | 80-100 | **94** | auto_draft | ✅ |
+| eval-005 | Defense Quantum Computing (DARPA) | 0-20 | **14** | archive_silently | ✅ |
 
 ---
 
@@ -411,8 +405,9 @@ cd frontend && npm run build
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| `POST` | `/api/rag/query` | No | Semantic search over org knowledge base |
-| `GET` | `/api/rag/documents` | No | List indexed knowledge base documents |
+| `POST` | `/api/documents/search` | No | Semantic search over org knowledge base |
+| `GET` | `/api/documents` | No | List indexed knowledge base documents |
+| `POST` | `/api/documents/index` | Yes | Index a new document into the knowledge base |
 
 ### Cost & Token Optimization
 
@@ -426,10 +421,10 @@ cd frontend && npm run build
 
 ## 🏆 Hackathon Alignment
 
-- **Technological Implementation**: Built with `strands-agents`, leveraging Graph, Swarm, and Workflow orchestration with native Amazon Bedrock support, structured outputs, RAG, FastMCP server, and comprehensive test coverage (50 backend tests + eval harness + production build).
+- **Technological Implementation**: Built with `strands-agents`, leveraging Graph, Swarm, and Workflow orchestration with native Amazon Bedrock support, structured outputs, RAG, FastMCP server, and comprehensive test coverage (50 backend tests + eval harness + production build). Designed for seamless Amazon Bedrock AgentCore runtime hosting with stateless tool interfaces and persistent storage adapters.
 - **Potential Impact**: Directly targets the $1.5T federal grant ecosystem, leveling the playing field for small 501(c)(3) nonprofits that cannot afford dedicated grant-writing agencies.
-- **Creativity & Autonomous Behavior**: Unlike passive dashboards that demand continuous manual searching, GrantScout works in the background and only surfaces when real human review is required.
-- **Cost Efficiency**: Tiered model routing ensures high-volume scanning uses the cheapest model while complex drafting gets the best model, with response caching to eliminate redundant inference and maximize AWS credit longevity.
+- **Creativity & Autonomous Behavior**: Unlike passive dashboards that demand continuous manual searching, GrantScout's multi-agent pipeline runs autonomously end-to-end once triggered, scanning, scoring, routing, and drafting without step-by-step human supervision.
+- **Cost Efficiency**: Response caching eliminates redundant inference, and configurable model tier definitions allow future multi-model routing to optimize AWS credit usage.
 
 ---
 

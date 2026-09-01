@@ -135,52 +135,58 @@ Retrieve our org profile and return a fully formulated GrantEvaluationResult.
         # 1. Mission alignment (0-30): keyword-based STEM alignment
         stem_keywords = [
             "stem", "robotics", "coding", "education", "youth", "after-school",
-            "k-12", "student", "learning", "minority", "underserved", "workforce",
+            "k-12", "student", "learning", "minority", "underserved",
             "computer science", "technology", "research traineeship", "curriculum"
         ]
         mission_hits = sum(1 for k in stem_keywords if k in synopsis_lower or k in title_lower)
-        if mission_hits >= 4:
+        if mission_hits >= 3:
             mission_pts = 28
-        elif mission_hits >= 2:
-            mission_pts = 24
         elif mission_hits >= 1:
             mission_pts = 18
         else:
-            mission_pts = 10
+            mission_pts = 3
 
-        # 2. Eligibility fit (0-25): 501(c)(3) nonprofits and educational institutions
-        is_nonprofit_eligible = any(t in applicant_types_raw for t in ["501(c)(3)", "nonprofit", "community", "public", "others"])
-        if is_nonprofit_eligible or not applicant_types_raw.strip() or "nonprofit" in synopsis_lower:
+        # 2. Eligibility fit (0-25): 501(c)(3) nonprofits vs higher ed / defense / private
+        is_explicit_nonprofit = any(t in applicant_types_raw for t in ["501(c)(3)", "nonprofit", "community"])
+        is_higher_ed_only = any(t in applicant_types_raw for t in ["higher education", "institutions of higher education"]) and not is_explicit_nonprofit
+        is_defense_or_ffrdc = any(t in applicant_types_raw for t in ["federally funded", "defense", "ffrdc", "cleared"])
+
+        if is_defense_or_ffrdc:
+            eligibility_pts = 0
+        elif is_higher_ed_only:
+            eligibility_pts = 3
+        elif is_explicit_nonprofit or not applicant_types_raw.strip() or "nonprofit" in synopsis_lower:
             eligibility_pts = 24
-        elif "higher education" in applicant_types_raw or "institution" in applicant_types_raw:
-            eligibility_pts = 21
         else:
-            eligibility_pts = 15
+            eligibility_pts = 12
 
-        # 3. Capacity match (0-20): funding scale ($100K - $3M is prime sweet spot)
-        if 50000 <= raw_ceiling <= 3000000:
+        # 3. Capacity match (0-20): funding scale ($25K - $500K is prime sweet spot for $450K budget)
+        if 20000 <= raw_ceiling <= 350000:
             capacity_pts = 18
-        elif raw_ceiling > 3000000:
-            capacity_pts = 15
-        elif raw_ceiling > 0:
+        elif 350000 < raw_ceiling <= 1000000:
             capacity_pts = 14
+        elif raw_ceiling > 1000000:
+            capacity_pts = 3  # Way too large for small nonprofit capacity
+        elif raw_ceiling > 0:
+            capacity_pts = 12
         else:
-            capacity_pts = 16  # standard default for federal STEM grants
+            capacity_pts = 16
 
         # 4. Geographic fit (0-15): National and regional scope
-        geo_pts = 14
+        geo_pts = 14 if mission_hits >= 1 else 6
 
         # 5. Track record & Category (0-10): STEM / Education domain
-        mission_categories = ["education", "science", "technology", "community", "youth", "research", "development"]
+        mission_categories = ["education", "science", "technology", "community", "youth"]
         category_match = any(mc in category_raw or mc in synopsis_lower for mc in mission_categories)
-        track_pts = 10 if category_match else 7
+        track_pts = 10 if (category_match and mission_hits >= 3) else (6 if category_match or mission_hits >= 1 else 2)
 
-        # Mismatch penalty for completely off-mission industrial domains
-        hard_mismatch_keywords = ["crop farming", "heavy weapon", "fossil fuel", "petroleum drilling", "nuclear reactor"]
+        # Mismatch penalty for completely off-mission industrial / defense domains
+        hard_mismatch_keywords = ["crop farming", "heavy weapon", "fossil fuel", "petroleum drilling", "nuclear reactor", "quantum error", "irrigation", "agricultural"]
         is_hard_mismatch = any(k in synopsis_lower or k in title_lower for k in hard_mismatch_keywords)
         if is_hard_mismatch:
-            mission_pts = min(mission_pts, 4)
+            mission_pts = min(mission_pts, 3)
             track_pts = min(track_pts, 2)
+            geo_pts = min(geo_pts, 6)
 
         total = mission_pts + eligibility_pts + capacity_pts + geo_pts + track_pts
         status = GrantStatus.MATCHED if total >= 50 else GrantStatus.ARCHIVED

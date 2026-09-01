@@ -82,7 +82,13 @@ def evaluate_and_route_grant(grant_info: dict[str, Any]) -> dict[str, Any]:
         return {"grant_id": gid, "action": "unrecorded", "score": 0, "analysis": score_analysis}
 
     match_score = saved_grant.get("match_score", {})
-    total_score = sum(match_score.values()) if isinstance(match_score, dict) else 0
+    if isinstance(match_score, dict):
+        total_score = match_score.get(
+            "total",
+            sum(v for k, v in match_score.items() if k != "total" and isinstance(v, (int, float))),
+        )
+    else:
+        total_score = 0
     
     action = "flagged_for_review"
     draft_status = None
