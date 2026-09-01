@@ -1,19 +1,42 @@
 # 🛰️ GrantScout
 
-> **Autonomous AI Grant Discovery & Application Agent for Nonprofits**  
-> *Built with the Strands Agents SDK for the AWS "Agents for Humans" Hackathon*
+> **An autonomous AI agent that finds federal grants for small nonprofits, scores how well they fit, and pre-writes the application — so your team can focus on the mission, not the paperwork.**
 
 ---
 
-## 🌟 Overview
+## The Problem
 
-Every year, billions of dollars in federal grant funding go unallocated simply because small, community-rooted nonprofits lack the dedicated grant-writing staff to discover opportunities, parse hundreds of pages of eligibility criteria, and write boilerplate narrative proposals.
+Every year, **billions of dollars** in federal grant funding go unclaimed. Not because worthy nonprofits don't exist — but because small, community-rooted 501(c)(3) organizations don't have dedicated grant-writing staff. They can't afford to monitor Grants.gov daily, wade through hundreds of pages of eligibility criteria, or write 20-page narrative proposals for every opportunity that *might* be a fit.
 
-**GrantScout** solves this by running silently in the background as an autonomous multi-agent system. Instead of another dashboard users have to babysit, GrantScout:
-1. **Discovers** federal grant opportunities from live Grants.gov REST endpoints matching the nonprofit's mission.
-2. **Evaluates** organizational fit against a 5-dimension, 100-point rubric using structured output enforcement.
-3. **Pre-fills** comprehensive 6-section application drafts using RAG-enhanced organizational knowledge retrieval.
-4. **Surfaces** only when high-confidence matches are found or when an application draft is ready for final human review.
+The result? The organizations closest to the communities that need help the most are the least likely to get funded.
+
+## What GrantScout Does
+
+**GrantScout** is a multi-agent AI system built with the **[Strands Agents SDK](https://github.com/strands-agents/sdk-python)** and **Amazon Bedrock** that works silently in the background for a nonprofit. There's no dashboard to babysit. Instead, GrantScout:
+
+1. **Scans** the live [Grants.gov REST API](https://api.grants.gov/) every few hours, searching for real federal funding opportunities that match the nonprofit's mission keywords.
+2. **Scores** every discovered grant against the organization's profile using a 5-dimension, 100-point rubric (Mission Alignment, Eligibility Fit, Capacity Match, Geographic Fit, Track Record) — with Pydantic-enforced structured outputs so scores are always consistent and auditable.
+3. **Routes** grants autonomously: high-fit opportunities (≥80) trigger automatic application drafting; medium-fit (50–79) are flagged for human review; low-fit (<50) are archived silently.
+4. **Drafts** competitive 6-section federal grant applications grounded in the nonprofit's own history — past proposals, IRS 990 filings, and impact reports — retrieved via a built-in RAG knowledge base.
+5. **Surfaces** only when a real decision is needed: a high-confidence match found, or a draft ready for final human review.
+
+## Who It's For
+
+Small and mid-size nonprofits — after-school programs, community health clinics, youth mentorship organizations — that run on tight budgets and can't hire a $150/hr grant consultant. GrantScout gives them the same competitive advantage that large institutions get from full-time development teams.
+
+## How It Uses Strands Agents
+
+GrantScout runs **5 specialized Strands Agents**, each with its own system prompt, tools, and responsibility:
+
+| Agent | Strands Pattern | What It Does |
+|:---|:---|:---|
+| **Scanner** | Workflow | Queries Grants.gov with mission-derived keywords, deduplicates, fetches full opportunity details |
+| **Matcher** | Structured Output | Scores grants on a 100-point rubric using `structured_output` with Pydantic schema enforcement |
+| **Orchestrator** | Graph | Routes grants based on score thresholds — auto-draft, flag for review, or archive silently |
+| **Drafter** | Swarm | Coordinates sub-agents (Narrative Writer, Budget Specialist, Compliance Checker) to produce 6-section applications |
+| **Deadline** | Scheduler | Sweeps pipeline deadlines and broadcasts urgency-tiered alerts |
+
+All agents use `@tool`-decorated functions, Amazon Bedrock (Claude Sonnet / Haiku), and the Strands `Agent()` class. The system also includes a **FastMCP server** for integration with Claude Desktop and Cursor, and a **RAG knowledge base** using Amazon Titan Embeddings for vector retrieval over organizational documents.
 
 ---
 

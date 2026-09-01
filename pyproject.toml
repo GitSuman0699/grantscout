@@ -32,6 +32,8 @@ dependencies = [
     "requests>=2.32.0",
     "python-dotenv>=1.0.0",
     "uuid6>=2024.7.10",
+    "PyJWT>=2.8.0",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
