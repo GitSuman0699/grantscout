@@ -2,24 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createSSEStream } from '../services/api';
 
 export default function AgentThoughtStream() {
-  const [events, setEvents] = useState([
-    {
-      id: 'init-1',
-      agent: 'ScannerAgent',
-      tier: 'Fast Tier (Claude Haiku)',
-      step: 'Query Generation',
-      thought: 'Generated keyword query set for active mission: [STEM, robotics, coding].',
-      timestamp: new Date().toLocaleTimeString(),
-    },
-    {
-      id: 'init-2',
-      agent: 'MatcherAgent',
-      tier: 'Standard Tier (Claude Sonnet)',
-      step: 'Rubric Fit Analysis',
-      thought: 'Evaluated NSF Youth STEM Innovation Labs against 5-dimension rubric: Score 94/100.',
-      timestamp: new Date().toLocaleTimeString(),
-    },
-  ]);
+  const [events, setEvents] = useState([]);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {

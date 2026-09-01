@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import boto3
+from botocore.config import Config
 from pydantic import BaseModel, Field
 
 from backend.config import config
@@ -101,7 +102,8 @@ class KnowledgeBase:
         """Generate embedding vector using Bedrock Titan or local semantic hashing."""
         try:
             # Try Amazon Bedrock Titan Text Embeddings
-            bedrock = boto3.client("bedrock-runtime", region_name=config.AWS_REGION)
+            boto_config = Config(read_timeout=300, connect_timeout=60, retries={'max_attempts': 3, 'mode': 'standard'})
+            bedrock = boto3.client("bedrock-runtime", region_name=config.AWS_REGION, config=boto_config)
             body = json.dumps({"inputText": text[:2000]})
             response = bedrock.invoke_model(
                 modelId="amazon.titan-embed-text-v2:0",

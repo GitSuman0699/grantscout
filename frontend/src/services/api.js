@@ -240,7 +240,7 @@ export async function auditCompliance(grantId, payload = {}) {
 export function createSSEStream(onEvent, onError) {
   const eventSource = new EventSource(`${BASE_URL}/api/dashboard/stream`);
 
-  eventSource.onmessage = (e) => {
+  const handleEvent = (e) => {
     try {
       const data = JSON.parse(e.data);
       onEvent(data);
@@ -249,21 +249,16 @@ export function createSSEStream(onEvent, onError) {
     }
   };
 
-  eventSource.addEventListener('scan_completed', (e) => {
-    onEvent({ type: 'scan_completed', data: e.data });
-  });
+  eventSource.onmessage = handleEvent;
+  eventSource.addEventListener('agent_thought', handleEvent);
+  eventSource.addEventListener('drafting_started', handleEvent);
+  eventSource.addEventListener('application_drafted', handleEvent);
+  eventSource.addEventListener('update', handleEvent);
 
-  eventSource.addEventListener('application_drafted', (e) => {
-    onEvent({ type: 'application_drafted', data: e.data });
-  });
-
-  eventSource.addEventListener('heartbeat', () => {
-    // Ignore heartbeat pings
-  });
-
-  eventSource.onerror = (err) => {
-    if (onError) onError(err);
+  eventSource.onerror = (e) => {
+    if (onError) onError(e);
   };
 
   return eventSource;
 }
+

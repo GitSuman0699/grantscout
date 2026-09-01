@@ -14,6 +14,7 @@ from typing import Any
 
 from strands import Agent
 from strands.models.bedrock import BedrockModel
+from botocore.config import Config
 
 from backend.config import config
 from backend.optimization import get_model_for_agent
@@ -71,7 +72,7 @@ You synthesize all contributions into a unified, high-impact 6-section grant app
 def create_narrative_agent() -> Agent:
     """Create the specialized Narrative Writer Strands Agent."""
     model_cfg = get_model_for_agent("drafter")
-    model = BedrockModel(model_id=model_cfg.model_id, region_name=model_cfg.region)
+    model = BedrockModel(model_id=model_cfg.model_id, region_name=model_cfg.region, boto_client_config=Config(read_timeout=3600, connect_timeout=900, retries={'max_attempts': 3, 'mode': 'standard'}))
     return Agent(
         model=model,
         system_prompt=NARRATIVE_SYSTEM_PROMPT,
@@ -82,7 +83,7 @@ def create_narrative_agent() -> Agent:
 def create_budget_agent() -> Agent:
     """Create the specialized Budget Specialist Strands Agent."""
     model_cfg = get_model_for_agent("drafter")
-    model = BedrockModel(model_id=model_cfg.model_id, region_name=model_cfg.region)
+    model = BedrockModel(model_id=model_cfg.model_id, region_name=model_cfg.region, boto_client_config=Config(read_timeout=3600, connect_timeout=900, retries={'max_attempts': 3, 'mode': 'standard'}))
     return Agent(
         model=model,
         system_prompt=BUDGET_SYSTEM_PROMPT,
@@ -93,7 +94,7 @@ def create_budget_agent() -> Agent:
 def create_compliance_drafter_agent() -> Agent:
     """Create the specialized Compliance & Sustainability Strands Agent."""
     model_cfg = get_model_for_agent("drafter")
-    model = BedrockModel(model_id=model_cfg.model_id, region_name=model_cfg.region)
+    model = BedrockModel(model_id=model_cfg.model_id, region_name=model_cfg.region, boto_client_config=Config(read_timeout=3600, connect_timeout=900, retries={'max_attempts': 3, 'mode': 'standard'}))
     return Agent(
         model=model,
         system_prompt=COMPLIANCE_SYSTEM_PROMPT,
@@ -111,6 +112,7 @@ def create_drafter_agent() -> Agent:
     model = BedrockModel(
         model_id=model_cfg.model_id,
         region_name=model_cfg.region,
+        boto_client_config=Config(read_timeout=3600, connect_timeout=900, retries={'max_attempts': 3, 'mode': 'standard'}),
     )
 
     agent = Agent(
@@ -134,7 +136,17 @@ def create_drafter_agent() -> Agent:
 # ──────────────────────────────────────────────
 
 
-def draft_application_structured(grant_data: dict[str, Any]) -> ApplicationDraftResult:
+def get_text_from_result(result) -> str:
+    """Extract text from a Strands AgentResult."""
+    try:
+        if hasattr(result, "message") and isinstance(result.message, dict):
+            return "".join(block.get("text", "") for block in result.message.get("content", []) if isinstance(block, dict))
+    except Exception as e:
+        logger.warning(f"Error extracting text from result: {e}")
+    return str(result)
+
+
+def draft_application_structured(grant_data: dict[str, Any], status_callback: Any = None) -> ApplicationDraftResult:
     """Generate a structured, type-safe grant application draft using the Multi-Agent Drafter Swarm.
 
     Args:
@@ -151,6 +163,22 @@ def draft_application_structured(grant_data: dict[str, Any]) -> ApplicationDraft
     award_floor = grant_data.get("award_floor", 10000)
     close_date = grant_data.get("close_date", "TBD")
 
+    if status_callback: status_callback("Working, gathered information from [Narrative Writer]...")
+    narrative_agent = create_narrative_agent()
+    narr_prompt = f"Identify the mission alignment and organizational capacity for grant {title} based on our profile. Keep it under 100 words."
+    narr_result = narrative_agent(narr_prompt)
+
+    if status_callback: status_callback("Handed off to next agent [Budget Specialist]...")
+    budget_agent = create_budget_agent()
+    bud_prompt = f"Identify budget constraints for a request of ${award_ceiling} for grant {title}. Keep it under 100 words."
+    bud_result = budget_agent(bud_prompt)
+
+    if status_callback: status_callback("Handed off to next agent [Compliance Drafter]...")
+    comp_agent = create_compliance_drafter_agent()
+    comp_prompt = f"Identify evaluation metrics and timeline for grant {title}. Keep it under 100 words."
+    comp_result = comp_agent(comp_prompt)
+
+    if status_callback: status_callback("Handed off to [Lead Drafter] for final synthesis...")
     lead_agent = create_drafter_agent()
 
     prompt = f"""Draft a complete, competitive grant application for our organization:
@@ -162,6 +190,10 @@ TARGET GRANT:
 - Award Range: ${award_floor:,.0f} - ${award_ceiling:,.0f}
 - Deadline: {close_date}
 - Synopsis: {synopsis}
+
+[Narrative Agent Input]: {get_text_from_result(narr_result)}
+[Budget Agent Input]: {get_text_from_result(bud_result)}
+[Compliance Agent Input]: {get_text_from_result(comp_result)}
 
 Coordinate with the Narrative Writer, Budget Specialist, and Compliance Drafter sub-agents.
 Retrieve our org profile and return a fully formulated ApplicationDraftResult with all 6 structured sections.
@@ -175,134 +207,8 @@ Retrieve our org profile and return a fully formulated ApplicationDraftResult wi
         else:
             raise ValueError("Empty or invalid structured output returned by drafter agent")
     except Exception as e:
-        logger.warning(f"Live Bedrock structured_output invocation unavailable ({e}); generating deterministic multi-agent structured draft.")
-
-        org_profile_data = retrieve_org_profile("default")
-        org = org_profile_data.get("profile", {})
-        org_name = org.get("name", "Nonprofit Organization")
-        service_area = org.get("service_area", "Community Area")
-        annual_budget = float(org.get("annual_budget", 450000))
-        target_pop = org.get("target_population", "community residents")
-
-        requested_amount = min(award_ceiling, max(award_floor, 50000))
-        if requested_amount == 0:
-            requested_amount = 50000
-
-        # Sub-Agent 1: Narrative Writer generates Sections 1, 2, and 3
-        sec1_content = (
-            f"**Project Title**: {title}\n\n"
-            f"**Applicant Organization**: {org_name} (501(c)(3) Nonprofit)\n\n"
-            f"**Funding Agency**: {agency}\n\n"
-            f"**Requested Funding**: ${requested_amount:,.2f}\n\n"
-            f"**Executive Summary**: {org_name} requests ${requested_amount:,.2f} from {agency} to execute a high-impact initiative aligned with '{title}'. "
-            f"Grounded in our track record of serving {target_pop} across {service_area}, this project addresses critical resource disparities through evidence-based programming, structured curriculum delivery, and rigorous quantitative evaluation."
-        )
-
-        sec2_content = (
-            f"{org_name} was founded to advance equitable opportunity and high-quality educational/community interventions in {service_area}. "
-            f"Our organization operates with an annual operating budget of ${annual_budget:,.2f}, governed by an active board of directors. "
-            f"Over the past 5 years, {org_name} has successfully managed municipal, state, and federal grants with 100% on-time milestone delivery and clean single audits. "
-            f"Our experienced program directors and dedicated community staff ensure comprehensive organizational capacity to steward federal awards responsibly."
-        )
-
-        sec3_content = (
-            f"The target community served by this initiative faces acute opportunity and funding gaps. "
-            f"Recent regional data indicates that over 70% of {target_pop} in {service_area} lack access to dedicated enrichment infrastructure. "
-            f"This funding opportunity directly targets this documented need by expanding localized intervention capacity, providing necessary hardware, learning kits, and professional instruction."
-        )
-
-        # Sub-Agent 2: Compliance Drafter generates Section 4
-        sec4_content = (
-            f"The proposed initiative will be deployed across four quarterly phases:\n\n"
-            f"- **Q1 (Months 1–3)**: Site onboarding, hardware and instructional kit procurement, baseline cohort registration.\n"
-            f"- **Q2 (Months 4–6)**: Phase I program rollout; bi-weekly workshops conducted across community cohort centers.\n"
-            f"- **Q3 (Months 7–9)**: Advanced modular project delivery; mid-term milestone assessment and stakeholder review.\n"
-            f"- **Q4 (Months 10–12)**: Program showcase, capstone delivery, final reporting, and longitudinal sustainability transition."
-        )
-
-        # Sub-Agent 3: Budget Specialist generates Section 5 (2 CFR 200 compliant)
-        personnel_cost = requested_amount * 0.55
-        fringe_cost = personnel_cost * 0.20
-        supplies_cost = requested_amount * 0.15
-        indirect_cost = requested_amount * 0.10  # 10% de minimis MTDC cap (2 CFR 200.414(f))
-        other_direct = requested_amount - (personnel_cost + fringe_cost + supplies_cost + indirect_cost)
-
-        sec5_content = (
-            f"### Proposed Budget Allocation (Total Request: ${requested_amount:,.2f})\n\n"
-            f"| Budget Category | Allocated Amount | % of Total | 2 CFR 200 Justification |\n"
-            f"|---|---|---|---|\n"
-            f"| **Direct Personnel** | ${personnel_cost:,.2f} | 55.0% | Program Director (0.50 FTE) & Lead Instructors (§200.430) |\n"
-            f"| **Fringe Benefits (20%)** | ${fringe_cost:,.2f} | 11.0% | FICA, Healthcare, Workers' Comp for direct staff |\n"
-            f"| **Program Supplies & Kits** | ${supplies_cost:,.2f} | 15.0% | Reusable hardware, workshop learning kits (§200.453) |\n"
-            f"| **Travel & Local Operations** | ${other_direct:,.2f} | 9.0% | Mileage for site instructors and venue rentals (§200.475) |\n"
-            f"| **Indirect Costs (10% De Minimis)** | ${indirect_cost:,.2f} | 10.0% | Modified Total Direct Cost overhead allowance (§200.414(f)) |\n\n"
-            f"**Total Direct Costs**: ${requested_amount - indirect_cost:,.2f}\n"
-            f"**Modified Total Direct Cost Base**: ${requested_amount - indirect_cost:,.2f}\n"
-            f"**Total Grant Request**: ${requested_amount:,.2f}"
-        )
-
-        # Sub-Agent 4: Compliance Drafter generates Section 6
-        sec6_content = (
-            f"{org_name} implements a robust continuous evaluation framework combining pre/post outcome assessments, weekly attendance metrics, and qualitative participant interviews. "
-            f"Long-term sustainability is secured through diversified multi-source funding: following federal seed support, ongoing operating costs will be sustained via local corporate sponsorships, individual donor development, and municipal partner co-investments."
-        )
-
-        sections = [
-            ApplicationSection(
-                title="1. Executive Summary",
-                content=sec1_content,
-                is_auto_filled=True,
-                needs_review=False,
-                word_count=len(sec1_content.split()),
-            ),
-            ApplicationSection(
-                title="2. Organizational Background & Capacity",
-                content=sec2_content,
-                is_auto_filled=True,
-                needs_review=False,
-                word_count=len(sec2_content.split()),
-            ),
-            ApplicationSection(
-                title="3. Statement of Need & Community Impact",
-                content=sec3_content,
-                is_auto_filled=True,
-                needs_review=True,
-                word_count=len(sec3_content.split()),
-            ),
-            ApplicationSection(
-                title="4. Project Design & Implementation Timeline",
-                content=sec4_content,
-                is_auto_filled=False,
-                needs_review=True,
-                word_count=len(sec4_content.split()),
-            ),
-            ApplicationSection(
-                title="5. Budget & Financial Justification",
-                content=sec5_content,
-                is_auto_filled=True,
-                needs_review=True,
-                word_count=len(sec5_content.split()),
-            ),
-            ApplicationSection(
-                title="6. Evaluation & Long-Term Sustainability",
-                content=sec6_content,
-                is_auto_filled=False,
-                needs_review=True,
-                word_count=len(sec6_content.split()),
-            ),
-        ]
-
-        draft_result = ApplicationDraftResult(
-            grant_id=grant_id,
-            org_id="default",
-            grant_title=title,
-            sections=sections,
-            completion_percentage=100.0,
-            recommended_human_actions=[
-                "Review Section 3 community statistics against latest municipal census data.",
-                "Verify key personnel salary rates in Section 5 match current payroll ledger before submission.",
-            ],
-        )
+        logger.error(f"Live Bedrock structured_output invocation unavailable ({e}); failing drafting.")
+        raise ValueError(f"Drafting failed due to an error: {e}")
 
     # Persist the generated application draft to storage
     save_result = save_application_draft(
@@ -316,9 +222,9 @@ Retrieve our org profile and return a fully formulated ApplicationDraftResult wi
     return draft_result
 
 
-def draft_application_for_grant(grant_data: dict[str, Any]) -> dict[str, Any]:
+def draft_application_for_grant(grant_data: dict[str, Any], status_callback: Any = None) -> dict[str, Any]:
     """Generate a grant application draft and return as dictionary."""
-    result = draft_application_structured(grant_data)
+    result = draft_application_structured(grant_data, status_callback)
     if hasattr(result, "model_dump"):
         return result.model_dump()
     return result

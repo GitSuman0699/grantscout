@@ -22,7 +22,7 @@ The result? The organizations closest to the communities that need help the most
 
 ## Who It's For
 
-Small and mid-size nonprofits, such as after-school programs, community health clinics, and youth mentorship organizations, that run on tight budgets and can't hire a $150/hr grant consultant. GrantScout gives them the same competitive advantage that large institutions get from full-time development teams.
+Small and mid-size nonprofits, such as after-school programs, community health clinics, and youth mentorship organizations, that run on tight budgets. A standard 20-page federal grant proposal takes 40+ hours and costs **$5,000 to $15,000** to outsource to a professional grant writer. GrantScout autonomously generates a highly-competitive 6-section draft for approximately **$0.15** in AWS Bedrock inference costs—a **99.9% cost reduction**, giving small organizations the same competitive advantage that large institutions get from full-time development teams.
 
 ## How It Uses Strands Agents
 
@@ -135,7 +135,7 @@ A custom frontend built in **React + Vite** adhering to the **Field Ops / Editor
 - **Typography**: Google Fonts `Bebas Neue` (condensed uppercase headers), `Plus Jakarta Sans` (body), and `JetBrains Mono` (telemetry/metadata)
 - **Palette**: Warm ivory canvas (`#FAF8F5`), solid `#18181B` borders with sharp 4px offset box shadows (`4px 4px 0px #18181B`), and mission olive green / amber signal accents
 - **Multi-Tenant Persona Selector & Onboard Wizard**: Seamlessly switch between pre-built nonprofit archetypes (STEM Education, Food Security, Clean Water, Veterans Health) or onboard custom Form 990 filings.
-- **Real-Time Agent Thought Stream**: Collapsible telemetry tray displaying live agent decisions, model tiers invoked, and tool executions via SSE stream.
+- **Real-Time Agent Thought Stream**: Collapsible telemetry tray displaying live agent decisions, model tiers invoked, and tool executions via SSE stream. The Drafting UI features a sequential swarm feed with dynamic loaders and visual tick marks for completed sub-agent tasks.
 - **Multi-Page Routing (`react-router-dom`)**:
   - `/`, **Home Landing & Mission Overview**: Multi-agent loop banner, telemetry summary, and feature cards
   - `/pipeline`, **Grant Pipeline Workspace**: Scanned metrics, sector filters, and grant opportunity cards
@@ -189,6 +189,7 @@ Dynamic multi-model routing and caching to minimize inference costs:
 - **LRU Response Cache**: 256-entry cache with 1-hour TTL for deterministic tool outputs
 - **Token Usage Tracker**: Per-agent usage logging with cost estimation
 - **Prompt Compression**: Strips boilerplate phrases and truncates long synopses to reduce token consumption
+- **Resilient Long-Running Inference**: Extended AWS Bedrock connection timeouts (3600s) and Boto3 retry strategies configured globally to support the Drafter Swarm generating massive 8,000+ token structured outputs without interruption.
 
 ### 🔒 Security & Token Validation
 - **Cryptographic JWT Tokens**: Signed via `PyJWT (HS256)` with configurable expiry and scope claims (`read`, `write`, `agent:execute`)
@@ -437,7 +438,7 @@ cd frontend && npm run build
 - **Technological Implementation**: Built with `strands-agents`, leveraging Graph, Swarm, and Workflow orchestration with native Amazon Bedrock support, structured outputs, RAG, FastMCP server, and comprehensive test coverage (50 backend tests + eval harness + production build). Designed for seamless Amazon Bedrock AgentCore runtime hosting with stateless tool interfaces and persistent storage adapters.
 - **Potential Impact**: Directly targets the $1.5T federal grant ecosystem, leveling the playing field for small 501(c)(3) nonprofits that cannot afford dedicated grant-writing agencies.
 - **Creativity & Autonomous Behavior**: Unlike passive dashboards that demand continuous manual searching, GrantScout's multi-agent pipeline runs autonomously end-to-end once triggered, scanning, scoring, routing, and drafting without step-by-step human supervision.
-- **Cost Efficiency**: Response caching eliminates redundant inference, and configurable model tier definitions allow future multi-model routing to optimize AWS credit usage.
+- **Cost Efficiency**: A single 20-page federal grant proposal typically costs a nonprofit $5,000 to $15,000 to outsource. GrantScout generates a 6-section, 4,500+ word draft for **~$0.15** in AWS Bedrock tokens. Additionally, response caching eliminates redundant inference, and configurable model tier definitions allow future multi-model routing to optimize AWS credit usage.
 
 ---
 

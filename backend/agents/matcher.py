@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from strands import Agent
 from strands.models.bedrock import BedrockModel
+from botocore.config import Config
 
 from backend.config import config
 from backend.tools.org_profile import retrieve_org_profile, save_matched_grant
@@ -69,6 +70,7 @@ def create_matcher_agent() -> Agent:
     model = BedrockModel(
         model_id=model_cfg.model_id,
         region_name=model_cfg.region,
+        boto_client_config=Config(read_timeout=3600, connect_timeout=900, retries={'max_attempts': 3, 'mode': 'standard'})
     )
 
     agent = Agent(

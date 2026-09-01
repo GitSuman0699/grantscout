@@ -10,8 +10,14 @@ import asyncio
 import json
 import logging
 import uuid
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+
+# Force stdout to UTF-8 to prevent charmap encoding errors during agent streaming on Windows
+if sys.stdout.encoding != "utf-8" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -38,7 +44,11 @@ logging.basicConfig(
 logger = logging.getLogger("grantscout")
 
 # Global event queue for SSE notifications
-event_queue: asyncio.Queue = asyncio.Queue()
+event_queues: list[asyncio.Queue] = []
+
+async def broadcast_event(event: dict):
+    for q in event_queues:
+        await q.put(event)
 
 
 @asynccontextmanager
@@ -104,18 +114,24 @@ async def get_recent_activity():
 
 
 @app.get("/api/dashboard/stream")
-async def dashboard_stream():
+async def dashboard_stream(request: Request):
     """Server-Sent Events stream for real-time dashboard updates."""
+    q = asyncio.Queue()
+    event_queues.append(q)
 
     async def event_generator() -> AsyncGenerator:
-        while True:
-            try:
-                # Wait for an event with timeout (sends heartbeat if no events)
-                event = await asyncio.wait_for(event_queue.get(), timeout=20.0)
-                yield {"event": event.get("type", "update"), "data": json.dumps(event)}
-            except asyncio.TimeoutError:
-                # Send heartbeat to keep connection alive
-                yield {"event": "heartbeat", "data": json.dumps({"type": "heartbeat"})}
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=20.0)
+                    yield {"event": event.get("type", "update"), "data": json.dumps(event)}
+                except asyncio.TimeoutError:
+                    yield {"event": "heartbeat", "data": json.dumps({"type": "heartbeat"})}
+        finally:
+            if q in event_queues:
+                event_queues.remove(q)
 
     return EventSourceResponse(event_generator())
 
@@ -293,19 +309,31 @@ async def trigger_grant_draft(
         grant["status"] = "drafting"
         storage.save_grant(grant)
 
-        await event_queue.put({
+        import asyncio
+        loop = asyncio.get_running_loop()
+        def on_agent_thought(msg: str):
+            asyncio.run_coroutine_threadsafe(
+                broadcast_event({
+                    "type": "agent_thought",
+                    "message": msg,
+                    "grant_id": grant_id
+                }),
+                loop
+            )
+
+        await broadcast_event({
             "type": "drafting_started",
-            "message": f"Drafting application proposal for '{grant.get('title')}'...",
+            "message": f"INITIALIZING DRAFTER SWARM...",
             "grant_id": grant_id,
         })
 
-        result = draft_application_for_grant(grant)
+        result = await asyncio.to_thread(draft_application_for_grant, grant, on_agent_thought)
 
         # Check drafted application
         apps = storage.list_applications()
         matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
 
-        await event_queue.put({
+        await broadcast_event({
             "type": "application_drafted",
             "message": f"Draft proposal ready for '{grant.get('title')}'",
             "grant_id": grant_id,
@@ -338,7 +366,7 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-        await event_queue.put({
+        await broadcast_event({
             "type": "scan_started",
             "message": "Grant scan initiated...",
         })
@@ -352,7 +380,7 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-        await event_queue.put({
+        await broadcast_event({
             "type": "scan_completed",
             "message": "Grant scan completed!",
         })
@@ -383,7 +411,7 @@ async def trigger_full_orchestration(auth: TokenPayload = Depends(get_current_au
 
         summary = run_full_orchestration_cycle()
 
-        await event_queue.put({
+        await broadcast_event({
             "type": "orchestration_completed",
             "message": f"Autonomous cycle finished: {summary.get('grants_scanned', 0)} opportunities processed",
         })
@@ -503,7 +531,7 @@ async def switch_nonprofit_persona(
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     storage.add_activity(event)
-    await event_queue.put(event)
+    await broadcast_event(event)
 
     logger.info(f"Switched active persona to {persona.name}")
     return {"status": "success", "active_persona": persona.model_dump()}
@@ -531,7 +559,7 @@ async def onboard_nonprofit_organization(
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     storage.add_activity(event)
-    await event_queue.put(event)
+    await broadcast_event(event)
 
     return {"status": "success", "profile": profile.model_dump()}
 
