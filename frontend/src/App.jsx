@@ -9,6 +9,7 @@ import ProposalDraftPage from './pages/ProposalDraftPage';
 import DraftsPage from './pages/DraftsPage';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import OptimizationPage from './pages/OptimizationPage';
+import AgentThoughtStream from './components/AgentThoughtStream';
 import { GrantProvider } from './context/GrantContext';
 
 export default function App() {
@@ -55,7 +56,7 @@ export default function App() {
             }}>
               <div>
                 <div className="font-heading" style={{ fontSize: '1.4rem' }}>GRANTSCOUT</div>
-                <div style={{ color: '#A1A1AA' }}>Built with Strands Agents SDK 1.52.0 & Amazon Bedrock for the AWS Agents for Humans Hackathon</div>
+                <div style={{ color: '#A1A1AA' }}>Built with Strands Agents SDK & Amazon Bedrock for the AWS Agents for Humans Hackathon</div>
               </div>
 
               <div style={{ fontFamily: 'var(--font-mono)', color: '#A1A1AA' }}>
@@ -63,6 +64,9 @@ export default function App() {
               </div>
             </div>
           </footer>
+
+          {/* Real-Time Multi-Agent Thought & Telemetry Visualizer */}
+          <AgentThoughtStream />
         </div>
       </BrowserRouter>
     </GrantProvider>

@@ -460,6 +460,107 @@ async def health_check():
 
 
 # ──────────────────────────────────────────────
+#  Multi-Tenant Personas & Onboarding Endpoints
+# ──────────────────────────────────────────────
+
+from backend.storage.personas import PERSONAS, get_persona_by_id, persona_to_org_profile
+from backend.tools.compliance import audit_application_compliance
+from pydantic import BaseModel
+
+
+class PersonaSwitchRequest(BaseModel):
+    persona_id: str
+
+
+@app.get("/api/personas")
+async def list_nonprofit_personas():
+    """List available multi-tenant nonprofit personas."""
+    return {"personas": [p.model_dump() for p in PERSONAS]}
+
+
+@app.post("/api/personas/switch")
+async def switch_nonprofit_persona(
+    payload: PersonaSwitchRequest,
+    auth: TokenPayload = Depends(get_current_auth),
+):
+    """Switch active nonprofit persona and update discovery keywords."""
+    persona = get_persona_by_id(payload.persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail=f"Persona '{payload.persona_id}' not found.")
+
+    profile = persona_to_org_profile(persona)
+    storage.save_org_profile(profile.model_dump())
+
+    event = {
+        "event_id": f"evt-{uuid.uuid4().hex[:8]}",
+        "event_type": "profile_updated",
+        "message": f"Switched active sector persona to '{persona.name}' ({persona.sector})",
+        "details": {"persona_id": persona.id, "keywords": persona.keywords},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    storage.add_activity(event)
+    await event_queue.put(event)
+
+    logger.info(f"Switched active persona to {persona.name}")
+    return {"status": "success", "active_persona": persona.model_dump()}
+
+
+@app.post("/api/org/onboard")
+async def onboard_nonprofit_organization(
+    profile: OrgProfile,
+    auth: TokenPayload = Depends(get_current_auth),
+):
+    """Onboard a custom nonprofit organization with Form 990 / mission extraction."""
+    profile.org_id = "default"
+    profile.name = sanitize_input(profile.name, "name")
+    profile.mission = sanitize_input(profile.mission, "mission")
+    profile.service_area = sanitize_input(profile.service_area, "service_area")
+    profile.target_population = sanitize_input(profile.target_population, "target_population")
+
+    storage.save_org_profile(profile.model_dump())
+
+    event = {
+        "event_id": f"evt-{uuid.uuid4().hex[:8]}",
+        "event_type": "profile_updated",
+        "message": f"Onboarded organization profile for '{profile.name}'",
+        "details": {"ein": profile.ein, "budget": profile.annual_budget},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    storage.add_activity(event)
+    await event_queue.put(event)
+
+    return {"status": "success", "profile": profile.model_dump()}
+
+
+# ──────────────────────────────────────────────
+#  2 CFR 200 Compliance Audit Endpoints
+# ──────────────────────────────────────────────
+
+
+class ComplianceAuditRequest(BaseModel):
+    draft_id: str = ""
+    budget_narrative: str = ""
+    project_design: str = ""
+
+
+@app.post("/api/grants/{grant_id}/compliance-audit")
+async def audit_grant_compliance(
+    grant_id: str,
+    payload: ComplianceAuditRequest = None,
+    auth: TokenPayload = Depends(get_current_auth),
+):
+    """Run an automated 2 CFR 200 Uniform Guidance regulatory compliance audit."""
+    req_payload = payload or ComplianceAuditRequest()
+    audit_result = audit_application_compliance(
+        grant_id=grant_id,
+        draft_id=req_payload.draft_id,
+        budget_narrative=req_payload.budget_narrative,
+        project_design=req_payload.project_design,
+    )
+    return audit_result
+
+
+# ──────────────────────────────────────────────
 #  Cost & Token Optimization Endpoints
 # ──────────────────────────────────────────────
 

@@ -55,7 +55,7 @@ class ModelConfig:
 MODEL_TIERS: dict[ModelTier, ModelConfig] = {
     ModelTier.FAST: ModelConfig(
         tier=ModelTier.FAST,
-        model_id="us.anthropic.claude-haiku-4-20250514-v1:0",
+        model_id=config.BEDROCK_FAST_MODEL_ID,
         region=config.AWS_REGION,
         cost_per_1k_input=0.0008,
         cost_per_1k_output=0.004,
@@ -73,7 +73,7 @@ MODEL_TIERS: dict[ModelTier, ModelConfig] = {
     ),
     ModelTier.PREMIUM: ModelConfig(
         tier=ModelTier.PREMIUM,
-        model_id=config.BEDROCK_MODEL_ID,  # Claude Sonnet 4 (or Opus for premium)
+        model_id=config.BEDROCK_PREMIUM_MODEL_ID,  # Claude Sonnet 4 / Flagship
         region=config.AWS_REGION,
         cost_per_1k_input=0.003,
         cost_per_1k_output=0.015,

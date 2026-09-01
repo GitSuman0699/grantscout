@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare } from 'lucide-react';
+import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare, PlusCircle } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
+import PersonaSelector from './PersonaSelector';
+import OnboardingModal from './OnboardingModal';
 
 export default function Header() {
-  const { isScanning, runScanCycle, systemHealth } = useGrants();
+  const { isScanning, runScanCycle, systemHealth, refreshGrants } = useGrants();
   const isHealthy = systemHealth === 'healthy';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const location = useLocation();
 
   // Auto-close mobile menu on route change
@@ -22,7 +25,7 @@ export default function Header() {
     { to: '/optimization', label: 'COST OPTIMIZATION', end: true }
   ];
 
-  const tickerText = "STRANDS AGENTS SDK 1.52.0 • AMAZON BEDROCK (CLAUDE SONNET 4.5 & HAIKU 4.5) • RAG HYBRID VECTOR SEARCH • 5-DIMENSION RUBRIC SCORING • ZERO HALLUCINATION FORM 990 FACTS • GRANTS.GOV REST API • ";
+  const tickerText = "STRANDS AGENTS SDK • AMAZON BEDROCK TIERED ROUTING • 2 CFR 200 FEDERAL COMPLIANCE AUDITING • MULTI-TENANT NONPROFIT SECTOR PERSONAS • RAG VECTOR RETRIEVAL • GRANTS.GOV REST API • ";
 
   return (
     <header style={{
@@ -33,6 +36,13 @@ export default function Header() {
       zIndex: 50,
       width: '100%'
     }}>
+      <OnboardingModal
+        isOpen={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
+        onProfileUpdated={() => {
+          if (refreshGrants) refreshGrants();
+        }}
+      />
       {/* Top Banner Ticker with Fixed Live Health Badge on Right */}
       <div className="ticker-marquee-container" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         {/* Scrolling Track (Slides underneath the fixed badge) */}
@@ -61,8 +71,6 @@ export default function Header() {
             display: 'inline-flex',
             alignItems: 'center',
             gap: '0.35rem',
-            // background: 'rgba(34, 197, 94, 0.15)',
-            // border: '1px solid rgba(34, 197, 94, 0.4)',
             padding: '0.rem',
             borderRadius: '2px',
             fontFamily: 'var(--font-mono)',
@@ -87,9 +95,10 @@ export default function Header() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '1rem'
+        gap: '1rem',
+        flexWrap: 'wrap'
       }}>
-        {/* Brand Logo: ONLY 'GRANTSCOUT' on mobile; full title on desktop */}
+        {/* Brand Logo */}
         <Link to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{
             background: 'var(--ink)',
@@ -114,6 +123,24 @@ export default function Header() {
             </p>
           </div>
         </Link>
+
+        {/* Persona Selector + Onboard Org (Desktop & Tablet) */}
+        <div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <PersonaSelector
+            onPersonaChanged={() => {
+              if (refreshGrants) refreshGrants();
+            }}
+          />
+          <button
+            onClick={() => setOnboardingOpen(true)}
+            className="brutalist-btn btn-outline"
+            style={{ padding: '6px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            title="Onboard Custom Nonprofit Profile"
+          >
+            <PlusCircle size={14} />
+            <span>+ ONBOARD</span>
+          </button>
+        </div>
 
         {/* Desktop Navigation Links — Hidden on Mobile */}
         <nav className="nav-container desktop-only">

@@ -247,3 +247,75 @@ class DashboardStats(BaseModel):
     days_until_deadline: Optional[int] = None
     agent_status: str = "active"
     last_scan: Optional[datetime] = None
+
+
+# ──────────────────────────────────────────────
+#  2 CFR 200 Federal Regulatory Compliance Models
+# ──────────────────────────────────────────────
+
+
+class ComplianceFinding(BaseModel):
+    """A specific finding from a 2 CFR 200 federal compliance audit."""
+
+    finding_id: str
+    category: str = Field(description="e.g. 'indirect_cost', 'unallowable_cost', 'cost_sharing', 'personnel_allocation', 'procurement'")
+    severity: str = Field(description="'pass', 'warning', or 'violation'")
+    rule_reference: str = Field(description="Federal regulation reference e.g. '2 CFR 200.414(f)'")
+    description: str
+    recommendation: str = ""
+
+
+class ComplianceAuditResult(BaseModel):
+    """Result of an automated federal 2 CFR 200 compliance audit on an application draft."""
+
+    audit_id: str
+    draft_id: str
+    grant_id: str
+    overall_status: str = Field(description="'compliant', 'needs_revision', or 'high_risk'")
+    compliance_score: int = Field(100, ge=0, le=100)
+    indirect_cost_rate_pct: float = 10.0
+    indirect_cost_compliant: bool = True
+    unallowable_costs_detected: list[str] = Field(default_factory=list)
+    findings: list[ComplianceFinding] = Field(default_factory=list)
+    audited_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ──────────────────────────────────────────────
+#  Multi-Tenant Nonprofit Persona Models
+# ──────────────────────────────────────────────
+
+
+class NonprofitPersona(BaseModel):
+    """A sector-specific nonprofit persona archetype."""
+
+    id: str
+    name: str
+    sector: str
+    tagline: str
+    annual_budget: float
+    mission: str
+    keywords: list[str] = Field(default_factory=list)
+    target_population: str = ""
+    service_area: str = ""
+    founded_year: int = 2020
+    icon: str = "sparkles"
+
+
+# ──────────────────────────────────────────────
+#  Real-Time Agent Telemetry & Thought Models
+# ──────────────────────────────────────────────
+
+
+class AgentThoughtEvent(BaseModel):
+    """A real-time telemetry/thought event emitted by an agent during execution."""
+
+    agent: str
+    tier: str = "standard"
+    model_id: str = ""
+    step: str
+    thought: str
+    tool_called: Optional[str] = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+

@@ -8,6 +8,7 @@ import {
 import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft } from '../services/api';
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
+import ComplianceAuditView from '../components/ComplianceAuditView';
 
 /**
  * Returns the direct official URL to the federal opportunity / application portal.
@@ -763,22 +764,32 @@ export default function ProposalDraftPage() {
                 </div>
 
                 <p style={{ color: 'var(--ink-muted)', fontSize: '0.82rem', marginBottom: '0.6rem' }}>
-                  The Drafter Agent verified this section against Youth Education Alliance's indexed document corpus:
+                  The Drafter Agent verified this section against the nonprofit's indexed document corpus:
                 </p>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <span className="tag-badge tag-dark" style={{ fontSize: '0.75rem' }}>
-                    📄 Annual_Impact_Report_2025.md (1,450 Students, 87% Math Gains)
+                    📄 Annual_Impact_Report_2025.md (Verified Program Metrics)
                   </span>
                   <span className="tag-badge tag-dark" style={{ fontSize: '0.75rem' }}>
-                    📑 IRS_Form_990_Financial_Overview.md ($450K Budget, 82% Efficiency)
+                    📑 IRS_Form_990_Financial_Overview.md (Financial Capacity & Single Audit)
                   </span>
                   <span className="tag-badge tag-dark" style={{ fontSize: '0.75rem' }}>
-                    📜 Past_NSF_Grant_Narrative_2024.md (Federal Compliance)
+                    📜 Past_Federal_Grant_Narrative_2024.md (Federal Compliance Records)
                   </span>
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Automated Federal 2 CFR 200 Compliance Audit Widget */}
+          <div style={{ padding: '0 1.5rem 1.5rem 1.5rem', background: 'var(--card-alt-bg)', borderTop: '2px solid var(--border-dark)' }}>
+            <ComplianceAuditView
+              grantId={grantId}
+              draftId={draft?.draft_id || ''}
+              budgetContent={sections.find((s) => s.title.toLowerCase().includes('budget'))?.content || ''}
+              projectContent={sections.find((s) => s.title.toLowerCase().includes('project'))?.content || ''}
+            />
           </div>
         </div>
       ) : (

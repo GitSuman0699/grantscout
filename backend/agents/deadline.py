@@ -30,15 +30,18 @@ WORKFLOW:
 """
 
 
+from backend.optimization import get_model_for_agent
+
 def create_deadline_agent() -> Agent:
     """Create and configure the Deadline Agent.
 
     Returns:
         A Strands Agent configured for deadline tracking.
     """
+    model_cfg = get_model_for_agent("deadline")
     model = BedrockModel(
-        model_id=config.BEDROCK_MODEL_ID,
-        region_name=config.AWS_REGION,
+        model_id=model_cfg.model_id,
+        region_name=model_cfg.region,
     )
 
     agent = Agent(

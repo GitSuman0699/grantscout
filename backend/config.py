@@ -17,6 +17,12 @@ class Config:
     BEDROCK_MODEL_ID: str = os.getenv(
         "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
     )
+    BEDROCK_FAST_MODEL_ID: str = os.getenv(
+        "BEDROCK_FAST_MODEL_ID", "us.anthropic.claude-haiku-4-5-20250929-v1:0"
+    )
+    BEDROCK_PREMIUM_MODEL_ID: str = os.getenv(
+        "BEDROCK_PREMIUM_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    )
 
     # Grants.gov API
     GRANTS_API_BASE_URL: str = os.getenv(

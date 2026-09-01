@@ -116,13 +116,13 @@ graph TD
 
 ## 🤖 Strands SDK Multi-Agent Patterns
 
-GrantScout uses multi-agent patterns inspired by the **Strands Agents SDK**:
+GrantScout implements multi-agent patterns using the **Strands Agents SDK**:
 
 | Agent | Pattern | Role & Behavior |
 |---|---|---|
 | **Orchestrator Agent** | **Graph Routing** | Autonomously routes opportunities based on fit scores: ≥80 auto-triggers application drafting, 50–79 flags for human review, <50 archives silently. |
-| **Drafter Agent** | **Structured Generation** | Generates structured 6-section grant applications with narrative, budget, and compliance sections using RAG-retrieved organizational context. |
-| **Scanner Agent** | **Workflow** | Queries public Grants.gov endpoints (`search2`, `fetchOpportunity`) using org mission keywords and eliminates duplicates. |
+| **Drafter Swarm** | **Swarm Pattern** | Coordinates specialized sub-agents (`NarrativeAgent`, `BudgetAgent`, `ComplianceDrafterAgent`, `LeadDrafterAgent`) with autonomous handoffs to generate structured 6-section applications. |
+| **Scanner Agent** | **Workflow** | Queries public Grants.gov endpoints (`search2`, `fetchOpportunity`) using org mission keywords and eliminates duplicates via Fast-tier LLM inference. |
 | **Matcher Agent** | **Rubric Scoring** | Quantifies 5 dimensions on a 100-point scale: Mission Alignment (30), Eligibility Fit (25), Capacity Match (20), Geography (15), Track Record (10). |
 | **Deadline Agent** | **Monitoring** | Tracks impending closing windows and broadcasts urgency-tiered alerts to the activity stream. |
 
@@ -134,6 +134,8 @@ GrantScout uses multi-agent patterns inspired by the **Strands Agents SDK**:
 A custom frontend built in **React + Vite** adhering to the **Field Ops / Editorial Brutalist** design system:
 - **Typography**: Google Fonts `Bebas Neue` (condensed uppercase headers), `Plus Jakarta Sans` (body), and `JetBrains Mono` (telemetry/metadata)
 - **Palette**: Warm ivory canvas (`#FAF8F5`), solid `#18181B` borders with sharp 4px offset box shadows (`4px 4px 0px #18181B`), and mission olive green / amber signal accents
+- **Multi-Tenant Persona Selector & Onboard Wizard**: Seamlessly switch between pre-built nonprofit archetypes (STEM Education, Food Security, Clean Water, Veterans Health) or onboard custom Form 990 filings.
+- **Real-Time Agent Thought Stream**: Collapsible telemetry tray displaying live agent decisions, model tiers invoked, and tool executions via SSE stream.
 - **Multi-Page Routing (`react-router-dom`)**:
   - `/`, **Home Landing & Mission Overview**: Multi-agent loop banner, telemetry summary, and feature cards
   - `/pipeline`, **Grant Pipeline Workspace**: Scanned metrics, sector filters, and grant opportunity cards
@@ -141,12 +143,19 @@ A custom frontend built in **React + Vite** adhering to the **Field Ops / Editor
   - `/drafts`, **Application Drafts Hub**: List of all pre-filled applications
   - `/knowledge`, **RAG Knowledge Base**: Interactive vector search query tester over organizational documents
   - `/optimization`, **Cost Optimization**: Model configuration, cache stats, and token telemetry
-- **Mobile Responsive**: Right-sliding continuous marquee ticker banner with fixed right-side `● LIVE` status badge and slide-down navigation drawer
+
+### ⚖️ Federal 2 CFR 200 Regulatory Compliance Engine
+Automated pre-submission regulatory compliance auditing for federal grant proposals:
+- **Indirect Cost Rate Audit**: Validates against the 10% de minimis Modified Total Direct Cost (MTDC) allowance under 2 CFR 200.414(f).
+- **Unallowable Cost Detection**: Scans for prohibited federal expenditures (Alcohol §200.423, Entertainment §200.438, Lobbying §200.450, Fundraising §200.442, Contingencies §200.433).
+- **Personnel Standards Verification**: Checks direct staff effort allocations and fringe benefit formulations (§200.430).
+- **Interactive Audit Badge**: Renders compliance score (0–100), rule-by-rule findings, and remedial action items on the proposal workstation.
 
 ### 📐 Structured Output Enforcement
 All agent outputs are validated against **Pydantic schemas** using the Strands SDK `structured_output` API:
 - `GrantEvaluationResult`, enforces typed 5-dimension scoring, status enum, and action routing
 - `ApplicationDraftResult`, enforces 6-section structure with word counts and completion tracking
+- `ComplianceAuditResult`, enforces statutory compliance findings and risk levels
 - Computed fields (`MatchScore.total`) ensure scoring consistency
 
 ### 📚 RAG Knowledge Base
@@ -166,18 +175,20 @@ Full-featured MCP server for integration with Claude Desktop, Cursor, and other 
 ### 🧪 Evaluation Harness
 Empirical benchmarking suite for agent accuracy measurement:
 - **5 ground-truth test cases** spanning strong matches, partial matches, and clear mismatches
-- **Matcher scoring precision**: Validates score ranges and routing decisions
+- **Matcher scoring precision**: 100% (5/5 passed)
 - **RAG retrieval precision**: 100% (4/4 organizational facts correctly retrieved)
-- **Drafter completeness**: Validates section structure, word counts, and human action flagging
+- **Drafter completeness**: 100% (6 complete sections generated)
 - Run with: `python tests/eval_harness.py`
 
-### 💰 Cost & Token Optimization
-Response caching and token tracking to minimize inference costs:
+### 💰 Cost & Token Optimization (Multi-Model Tiering)
+Dynamic multi-model routing and caching to minimize inference costs:
 
+- **Fast Tier (Claude Haiku)**: High-frequency scanning, keyword extraction, and deadline arithmetic
+- **Standard Tier (Claude Sonnet)**: 5-dimension rubric evaluation and graph routing
+- **Premium Tier (Claude Sonnet)**: Multi-section proposal drafting and compliance auditing
 - **LRU Response Cache**: 256-entry cache with 1-hour TTL for deterministic tool outputs
 - **Token Usage Tracker**: Per-agent usage logging with cost estimation
 - **Prompt Compression**: Strips boilerplate phrases and truncates long synopses to reduce token consumption
-- **Model Tier Definitions**: Configurable tier mapping (Fast, Standard, Premium) for future multi-model routing
 
 ### 🔒 Security & Token Validation
 - **Cryptographic JWT Tokens**: Signed via `PyJWT (HS256)` with configurable expiry and scope claims (`read`, `write`, `agent:execute`)

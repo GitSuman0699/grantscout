@@ -57,15 +57,18 @@ ROUTING CRITERIA:
 """
 
 
+from backend.optimization import get_model_for_agent
+
 def create_matcher_agent() -> Agent:
     """Create and configure the Matcher Agent.
 
     Returns:
         A Strands Agent configured for grant matching and scoring.
     """
+    model_cfg = get_model_for_agent("matcher")
     model = BedrockModel(
-        model_id=config.BEDROCK_MODEL_ID,
-        region_name=config.AWS_REGION,
+        model_id=model_cfg.model_id,
+        region_name=model_cfg.region,
     )
 
     agent = Agent(

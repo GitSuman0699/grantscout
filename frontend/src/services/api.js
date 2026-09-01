@@ -181,6 +181,59 @@ export async function triggerDraft(grantId) {
 }
 
 // ─────────────────────────────────────────────
+//  Multi-Tenant Personas & Onboarding
+// ─────────────────────────────────────────────
+
+export async function fetchPersonas() {
+  const res = await fetch(`${BASE_URL}/api/personas`);
+  if (!res.ok) throw new Error(`Personas fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function switchPersona(personaId) {
+  const res = await fetch(`${BASE_URL}/api/personas/switch`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ persona_id: personaId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Persona switch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function onboardOrganization(profile) {
+  const res = await fetch(`${BASE_URL}/api/org/onboard`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(profile),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Onboarding failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ─────────────────────────────────────────────
+//  2 CFR 200 Federal Regulatory Compliance
+// ─────────────────────────────────────────────
+
+export async function auditCompliance(grantId, payload = {}) {
+  const res = await fetch(`${BASE_URL}/api/grants/${grantId}/compliance-audit`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Compliance audit failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ─────────────────────────────────────────────
 //  SSE Real-Time Stream
 // ─────────────────────────────────────────────
 

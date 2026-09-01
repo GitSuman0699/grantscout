@@ -52,15 +52,18 @@ If no new grants are found, state that clearly. Do NOT fabricate grants.
 """
 
 
+from backend.optimization import get_model_for_agent
+
 def create_scanner_agent() -> Agent:
     """Create and configure the Scanner Agent.
 
     Returns:
         A Strands Agent configured for grant discovery.
     """
+    model_cfg = get_model_for_agent("scanner")
     model = BedrockModel(
-        model_id=config.BEDROCK_MODEL_ID,
-        region_name=config.AWS_REGION,
+        model_id=model_cfg.model_id,
+        region_name=model_cfg.region,
     )
 
     agent = Agent(
