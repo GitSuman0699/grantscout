@@ -9,35 +9,47 @@ const BOOT_STEPS = [
 ];
 
 export default function SplashScreen({ isLoading, onFinished }) {
-  const [activeStep, setActiveStep] = useState(0);
+  // Check if session has already booted in this browser tab
+  const alreadyBooted = typeof window !== 'undefined' && sessionStorage.getItem('grantscout_booted') === 'true';
+
+  const [activeStep, setActiveStep] = useState(alreadyBooted ? BOOT_STEPS.length : 0);
   const [fadeOut, setFadeOut] = useState(false);
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(!alreadyBooted);
 
   useEffect(() => {
+    if (alreadyBooted) return;
+
     // Progress through boot steps
     const timers = BOOT_STEPS.map((_, idx) => {
       return setTimeout(() => {
         setActiveStep(idx + 1);
-      }, (idx + 1) * 350);
+      }, (idx + 1) * 320);
     });
 
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [alreadyBooted]);
 
   useEffect(() => {
-    // When isLoading becomes false and all steps completed, fade out
+    if (alreadyBooted) return;
+
+    // When isLoading becomes false and all steps completed, fade out and remember session
     if (!isLoading && activeStep >= BOOT_STEPS.length) {
       const timer = setTimeout(() => {
         setFadeOut(true);
         setTimeout(() => {
           setVisible(false);
+          try {
+            sessionStorage.setItem('grantscout_booted', 'true');
+          } catch (e) {
+            console.warn('sessionStorage write error:', e);
+          }
           if (onFinished) onFinished();
-        }, 500); // 500ms fade out transition
-      }, 400);
+        }, 450); // 450ms fade out transition
+      }, 350);
 
       return () => clearTimeout(timer);
     }
-  }, [isLoading, activeStep, onFinished]);
+  }, [isLoading, activeStep, alreadyBooted, onFinished]);
 
   if (!visible) return null;
 

@@ -12,8 +12,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body style="margin: 0; background-color: #FAF8F5;">
+    <script>
+      // Skip preloader if this browser tab has already completed initial boot
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('grantscout_booted') === 'true') {
+        document.write('<style>#root-preloader { display: none !important; }</style>');
+      }
+    </script>
     <div id="root">
-      <div style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FAF8F5; font-family: 'Plus Jakarta Sans', sans-serif;">
+      <div id="root-preloader" style="position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FAF8F5; font-family: 'Plus Jakarta Sans', sans-serif;">
         <div style="background: #18181B; color: #FAF8F5; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; border: 3px solid #18181B; box-shadow: 4px 4px 0px #C85A17; margin-bottom: 16px;">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation: spin 3s linear infinite;">
             <circle cx="12" cy="12" r="10"></circle>
