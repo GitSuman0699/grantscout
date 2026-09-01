@@ -314,3 +314,12 @@ Retrieve our org profile and return a fully formulated ApplicationDraftResult wi
     logger.info(f"Persisted application draft {save_result.get('draft_id')} for {draft_result.grant_id}")
 
     return draft_result
+
+
+def draft_application_for_grant(grant_data: dict[str, Any]) -> dict[str, Any]:
+    """Generate a grant application draft and return as dictionary."""
+    result = draft_application_structured(grant_data)
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    return result
+
