@@ -292,9 +292,11 @@ cp .env.example .env
 
 Key environment variables:
 | Variable | Default | Description |
-|----------|---------|-------------|
+|---|---|---|
 | `AWS_REGION` | `us-east-1` | AWS region for Bedrock |
-| `BEDROCK_MODEL_ID` | `us.anthropic.claude-sonnet-4-20250514-v1:0` | Bedrock model for all agents |
+| `BEDROCK_MODEL_ID` | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Standard/Premium Bedrock model for orchestrator & drafter |
+| `BEDROCK_FAST_MODEL_ID` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Fast tier Bedrock model for scan query generation |
+| `BEDROCK_PREMIUM_MODEL_ID` | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Premium tier Bedrock model for structured drafting |
 | `USE_LOCAL_STORAGE` | `true` | Use local JSON files vs DynamoDB/S3 |
 | `AUTH_ENABLED` | `true` | Enable JWT/API key authentication |
 | `SECRET_KEY` | (default) | JWT signing key |

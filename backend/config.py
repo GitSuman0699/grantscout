@@ -15,13 +15,16 @@ class Config:
 
     # Amazon Bedrock
     BEDROCK_MODEL_ID: str = os.getenv(
-        "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
+        "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     )
     BEDROCK_FAST_MODEL_ID: str = os.getenv(
-        "BEDROCK_FAST_MODEL_ID", "us.anthropic.claude-haiku-4-5-20250929-v1:0"
+        "BEDROCK_FAST_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     )
     BEDROCK_PREMIUM_MODEL_ID: str = os.getenv(
-        "BEDROCK_PREMIUM_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
+        "BEDROCK_PREMIUM_MODEL_ID", os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+    )
+    BEDROCK_EMBEDDING_MODEL_ID: str = os.getenv(
+        "BEDROCK_EMBEDDING_MODEL_ID", "amazon.titan-embed-text-v2:0"
     )
 
     # Grants.gov API
