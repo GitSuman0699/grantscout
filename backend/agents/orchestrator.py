@@ -159,6 +159,19 @@ def create_orchestrator_agent() -> Agent:
     return agent
 
 
+async def run_orchestrator() -> str:
+    """Run the Orchestrator Agent to perform discovery and routing autonomously."""
+    import asyncio
+    
+    agent = create_orchestrator_agent()
+    
+    def _run():
+        return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Finally, summarize the results.")
+
+    result = await asyncio.to_thread(_run)
+    return str(result)
+
+
 def run_full_orchestration_cycle() -> dict[str, Any]:
     """Execute a complete autonomous scan, match, draft, and deadline cycle.
 

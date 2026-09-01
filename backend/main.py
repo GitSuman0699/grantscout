@@ -14,9 +14,11 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-# Force stdout to UTF-8 to prevent charmap encoding errors during agent streaming on Windows
+# Force stdout and stderr to UTF-8 to prevent charmap encoding errors during agent streaming on Windows
 if sys.stdout.encoding != "utf-8" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding != "utf-8" and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from typing import AsyncGenerator
 
@@ -358,7 +360,7 @@ async def trigger_grant_draft(
 async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
     """Manually trigger a grant scan (Authenticated)."""
     try:
-        from backend.agents.scanner import run_scan
+        from backend.agents.orchestrator import run_orchestrator
 
         storage.add_activity({
             "event_type": "scan_started",
@@ -371,7 +373,7 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
             "message": "Grant scan initiated...",
         })
 
-        result = await run_scan()
+        result = await run_orchestrator()
 
         storage.add_activity({
             "event_type": "scan_completed",

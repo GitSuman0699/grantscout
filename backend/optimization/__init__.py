@@ -299,6 +299,18 @@ class TokenTracker:
                 (cached_count / len(self._entries) * 100) if self._entries else 0, 1
             ),
             "per_agent": per_agent,
+            "transactions": [
+                {
+                    "agent": e.agent,
+                    "tier": e.tier,
+                    "input_tokens": e.input_tokens,
+                    "output_tokens": e.output_tokens,
+                    "cost_usd": e.estimated_cost_usd,
+                    "timestamp": e.timestamp,
+                    "cached": e.cached,
+                }
+                for e in reversed(self._entries[-50:])
+            ],
         }
 
     def reset(self) -> None:
@@ -362,3 +374,64 @@ def estimate_tokens(text: str) -> int:
         Estimated token count.
     """
     return max(1, len(text) // 4)
+
+
+# ──────────────────────────────────────────────
+#  Token Tracker Integration
+# ──────────────────────────────────────────────
+
+from strands import Agent
+import functools
+
+_original_agent_call = Agent.__call__
+
+@functools.wraps(_original_agent_call)
+def _tracking_agent_call(self, *args, **kwargs):
+    result = _original_agent_call(self, *args, **kwargs)
+    
+    try:
+        in_tokens = 0
+        out_tokens = 0
+        cached = False
+        
+        if hasattr(result, "metrics") and result.metrics:
+            usage = getattr(result.metrics, "accumulated_usage", {})
+            if isinstance(usage, dict):
+                in_tokens = usage.get("inputTokens", 0)
+                out_tokens = usage.get("outputTokens", 0)
+                # Detect prompt caching
+                if usage.get("cacheReadInputTokens", 0) > 0:
+                    cached = True
+                
+        sys_prompt = getattr(self, "system_prompt", "")
+        if not isinstance(sys_prompt, str):
+            sys_prompt = str(sys_prompt)
+        sys_prompt = sys_prompt.lower()
+        
+        agent_name = "unknown"
+        if "scanner" in sys_prompt:
+            agent_name = "scanner"
+        elif "matcher" in sys_prompt or "score" in sys_prompt:
+            agent_name = "matcher"
+        elif "narrative writer" in sys_prompt:
+            agent_name = "narrative_writer"
+        elif "budget specialist" in sys_prompt:
+            agent_name = "budget_specialist"
+        elif "compliance & sustainability drafter" in sys_prompt:
+            agent_name = "compliance_drafter"
+        elif "lead drafter" in sys_prompt or "generate a structured" in sys_prompt:
+            agent_name = "lead_drafter"
+        elif "drafter" in sys_prompt:
+            agent_name = "drafter"
+        elif "orchestrator" in sys_prompt:
+            agent_name = "orchestrator"
+        elif "deadline" in sys_prompt:
+            agent_name = "deadline"
+            
+        token_tracker.log_usage(agent_name, in_tokens, out_tokens, cached=cached)
+    except Exception as e:
+        logger.warning(f"Failed to track tokens: {e}")
+        
+    return result
+
+Agent.__call__ = _tracking_agent_call

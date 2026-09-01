@@ -158,75 +158,44 @@ export default function OptimizationView() {
         </div>
       </div>
 
-      {/* Model Tiers List */}
-      <div className="brutalist-card" style={{ padding: '1.5rem' }}>
-        <h3 className="font-heading" style={{ fontSize: '1.6rem', marginBottom: '1.25rem' }}>
-          TIERED MULTI-MODEL ROUTING CONFIGURATION
-        </h3>
 
-        {isLoading ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--ink-muted)' }}>
-            Loading model configuration...
-          </div>
-        ) : modelTiers.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--ink-muted)' }}>
-            <AlertTriangle size={24} color="var(--amber-signal)" style={{ marginBottom: '0.5rem' }} />
-            <div>No model tier data available. Start the backend server to view configuration.</div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {modelTiers.map((t, idx) => (
-              <div key={idx} className="model-tier-row">
-                {/* Left Column / Header */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-                    <span className="tag-badge tag-dark">{t.tier}</span>
-                    <span className="tag-badge tag-neutral" style={{ fontSize: '0.68rem' }}>{t.speed}</span>
-                  </div>
-                  <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--ink)' }}>{t.model}</div>
-                </div>
 
-                {/* Middle Column / Description */}
-                <div>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink)', marginBottom: '0.2rem' }}>
-                    Assigned Agents: <span style={{ fontWeight: 500, color: 'var(--ink-muted)' }}>{t.agents}</span>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--ink-muted)', lineHeight: '1.4' }}>
-                    {t.role}
-                  </div>
-                </div>
 
-                {/* Right Column / Rates */}
-                <div className="model-tier-rates" style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-                  <div style={{ color: 'var(--ink)', fontWeight: 700 }}>{t.costIn}</div>
-                  <div style={{ color: 'var(--ink-muted)' }}>{t.costOut}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Per-Agent Token Breakdown */}
-      {tokenUsage?.per_agent && Object.keys(tokenUsage.per_agent).length > 0 && (
+      {/* Transaction History List */}
+      {tokenUsage?.transactions && tokenUsage.transactions.length > 0 && (
         <div className="brutalist-card" style={{ padding: '1.5rem', marginTop: '1.5rem' }}>
           <h3 className="font-heading" style={{ fontSize: '1.6rem', marginBottom: '1.25rem' }}>
-            PER-AGENT TOKEN USAGE
+            RECENT INVOCATIONS (LAST 50)
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-            {Object.entries(tokenUsage.per_agent).map(([agent, data]) => (
-              <div key={agent} style={{ background: 'var(--card-alt-bg)', border: '1px solid var(--border-dark)', padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.9rem', textTransform: 'uppercase' }}>{agent}</span>
-                  <span className="tag-badge tag-neutral" style={{ fontSize: '0.65rem' }}>{data.tier?.toUpperCase()}</span>
-                </div>
-                <div style={{ fontSize: '0.78rem', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)', lineHeight: '1.7' }}>
-                  <div>{data.invocations} invocations ({data.cached} cached)</div>
-                  <div>{data.input_tokens?.toLocaleString()} in / {data.output_tokens?.toLocaleString()} out</div>
-                  <div style={{ fontWeight: 700, color: 'var(--ink)' }}>Cost: ${data.cost_usd?.toFixed(6)}</div>
-                </div>
-              </div>
-            ))}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border-dark)', textAlign: 'left', color: 'var(--ink-muted)' }}>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>TIMESTAMP</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>AGENT</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>TIER</th>
+                  <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>INPUT</th>
+                  <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>OUTPUT</th>
+                  <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>COST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tokenUsage.transactions.map((tx, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid var(--border-dark)', backgroundColor: tx.cached ? 'var(--card-alt-bg)' : 'transparent' }}>
+                    <td style={{ padding: '0.75rem 0.5rem', color: 'var(--ink)' }}>{new Date(tx.timestamp).toLocaleTimeString()}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 'bold' }}>{tx.agent.toUpperCase()}</td>
+                    <td style={{ padding: '0.75rem 0.5rem' }}>
+                      <span className="tag-badge tag-neutral" style={{ fontSize: '0.65rem' }}>{tx.tier.toUpperCase()}</span>
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>{tx.input_tokens.toLocaleString()}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>{tx.output_tokens.toLocaleString()}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontWeight: 'bold', color: tx.cached ? 'var(--green-signal)' : 'var(--ink)' }}>
+                      {tx.cached ? 'CACHED ($0)' : `$${tx.cost_usd.toFixed(6)}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
