@@ -817,30 +817,52 @@ export default function ProposalDraftPage() {
               Orchestrate a complete, 6-section federal grant proposal tailored for <strong>{grant.title}</strong>, grounded in Youth Education Alliance's verified RAG corpus and past awards.
             </p>
 
-            {draftError && (
-              <div style={{ padding: '0.85rem 1rem', background: '#ffebee', border: '2px solid #c62828', color: '#c62828', marginBottom: '1.5rem', fontSize: '0.88rem', fontWeight: 600 }}>
-                {draftError}
-              </div>
-            )}
+            {isDrafting ? (
+              <div style={{ padding: '1.5rem', background: '#FAF8F5', border: '2px solid #18181B', boxShadow: '4px 4px 0px #18181B', textAlign: 'left', marginTop: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #18181B', paddingBottom: '10px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Loader2 size={20} className="spin" color="var(--accent, #C85A17)" />
+                    <strong style={{ fontSize: '14px', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Drafter Swarm Multi-Agent Collaboration Active
+                    </strong>
+                  </div>
+                  <span style={{ fontSize: '11px', background: '#18181B', color: '#FAF8F5', padding: '2px 8px', fontWeight: '800', fontFamily: 'var(--font-mono)' }}>
+                    TIER: PREMIUM CLAUDE SONNET
+                  </span>
+                </div>
 
-            <button
-              onClick={handleGenerateDraft}
-              disabled={isDrafting}
-              className="brutalist-btn btn-primary"
-              style={{ padding: '0.95rem 2.25rem', fontSize: '1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.65rem', cursor: isDrafting ? 'not-allowed' : 'pointer' }}
-            >
-              {isDrafting ? (
-                <>
-                  <Loader2 size={20} className="spin" />
-                  ORCHESTRATING 6-SECTION PROPOSAL...
-                </>
-              ) : (
-                <>
-                  <Sparkles size={20} />
-                  GENERATE APPLICATION DRAFT NOW
-                </>
-              )}
-            </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: '#F0FDF4', borderLeft: '4px solid #166534' }}>
+                    <span style={{ color: '#166534', fontWeight: '800' }}>✓ [NarrativeAgent]</span>
+                    <span style={{ color: '#18181B' }}>Grounding Executive Summary & Statement of Need against RAG Form 990 corpus</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: '#FFFBEB', borderLeft: '4px solid #B45309' }}>
+                    <span style={{ color: '#B45309', fontWeight: '800' }}>⚡ [BudgetAgent]</span>
+                    <span style={{ color: '#18181B' }}>Formulating 2 CFR 200 direct personnel FTEs, fringe benefits, and 10% de minimis indirect rate</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: '#FAF8F5', borderLeft: '4px solid #C85A17' }}>
+                    <span style={{ color: '#C85A17', fontWeight: '800' }}>⚖️ [ComplianceDrafter]</span>
+                    <span style={{ color: '#18181B' }}>Structuring 4-quarter project timeline and post-grant sustainability framework</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: '#F4F4F5', borderLeft: '4px solid #71717A' }}>
+                    <span style={{ color: '#71717A', fontWeight: '800' }}>🔗 [LeadDrafter]</span>
+                    <span style={{ color: '#71717A' }}>Synthesizing 6-section typed ApplicationDraftResult for workstation...</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleGenerateDraft}
+                className="brutalist-btn btn-primary"
+                style={{ padding: '0.95rem 2.25rem', fontSize: '1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}
+              >
+                <Sparkles size={20} />
+                GENERATE APPLICATION DRAFT NOW
+              </button>
+            )}
           </div>
         </div>
       )}

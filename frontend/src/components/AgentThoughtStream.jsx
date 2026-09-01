@@ -25,7 +25,7 @@ export default function AgentThoughtStream() {
   useEffect(() => {
     const sse = createSSEStream(
       (data) => {
-        if (data && (data.message || data.thought)) {
+        if (data && (data.message || data.thought || data.agent)) {
           const newEvt = {
             id: `evt-${Date.now()}-${Math.random()}`,
             agent: data.agent || (data.event_type ? data.event_type.replace('_', ' ').toUpperCase() : 'Agent Core'),
@@ -34,7 +34,9 @@ export default function AgentThoughtStream() {
             thought: data.thought || data.message || JSON.stringify(data.details || {}),
             timestamp: new Date().toLocaleTimeString(),
           };
-          setEvents((prev) => [newEvt, ...prev.slice(0, 19)]);
+          setEvents((prev) => [newEvt, ...prev.slice(0, 24)]);
+          // Auto-expand telemetry feed when live agent events stream in
+          setExpanded(true);
         }
       },
       (err) => console.warn('SSE stream error:', err)
