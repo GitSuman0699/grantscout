@@ -102,7 +102,7 @@ DEMO_ORG_PROFILE = {
 def seed_org_profile():
     """Seed the demo organization profile."""
     storage.save_org_profile(DEMO_ORG_PROFILE)
-    print(f"✅ Seeded organization profile: {DEMO_ORG_PROFILE['name']}")
+    print(f"[OK] Seeded organization profile: {DEMO_ORG_PROFILE['name']}")
     print(f"   Mission: {DEMO_ORG_PROFILE['mission'][:80]}...")
     print(f"   Programs: {len(DEMO_ORG_PROFILE['programs'])}")
     print(f"   Past Grants: {len(DEMO_ORG_PROFILE['past_grants'])}")

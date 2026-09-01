@@ -104,9 +104,9 @@ def seed_rag_documents():
             category=doc["category"],
         )
         total_chunks += chunks_count
-        print(f"✓ Indexed {doc['doc_name']} ({chunks_count} chunks)")
+        print(f"[OK] Indexed {doc['doc_name']} ({chunks_count} chunks)")
 
-    print(f"\n✅ Total {len(DOCUMENTS)} documents ({total_chunks} chunks) indexed successfully.")
+    print(f"\n[SUCCESS] Total {len(DOCUMENTS)} documents ({total_chunks} chunks) indexed successfully.")
 
 
 if __name__ == "__main__":
