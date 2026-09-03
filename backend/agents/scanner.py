@@ -103,7 +103,7 @@ def is_active_opportunity(
     # 2. Fiscal Year check
     if fiscal_year is not None:
         try:
-            if int(fiscal_year) < 2026:
+            if fiscal_year < 2026:
                 return False
         except (ValueError, TypeError):
             pass

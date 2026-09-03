@@ -580,7 +580,7 @@ class ComplianceAuditRequest(BaseModel):
 @app.post("/api/grants/{grant_id}/compliance-audit")
 async def audit_grant_compliance(
     grant_id: str,
-    payload: ComplianceAuditRequest = None,
+    payload: ComplianceAuditRequest | None = None,
     auth: TokenPayload = Depends(get_current_auth),
 ):
     """Run an automated 2 CFR 200 Uniform Guidance regulatory compliance audit."""

@@ -13,7 +13,7 @@ import logging
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
@@ -215,7 +215,7 @@ class TokenTracker:
 
     def __init__(self):
         self._entries: list[TokenUsageEntry] = []
-        self._session_start = datetime.utcnow().isoformat()
+        self._session_start = datetime.now(timezone.utc).isoformat()
 
     def log_usage(
         self,
@@ -253,7 +253,7 @@ class TokenTracker:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             estimated_cost_usd=round(cost, 6),
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             cached=cached,
         )
         self._entries.append(entry)
@@ -316,7 +316,7 @@ class TokenTracker:
     def reset(self) -> None:
         """Reset the tracker for a new session."""
         self._entries.clear()
-        self._session_start = datetime.utcnow().isoformat()
+        self._session_start = datetime.now(timezone.utc).isoformat()
 
 
 # Global tracker singleton

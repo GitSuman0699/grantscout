@@ -8,6 +8,7 @@ application drafting.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from strands import tool
@@ -100,8 +101,8 @@ def save_matched_grant(
             "status": status,
             "match_score": match_score,
             "match_reasoning": match_reasoning,
-            "discovered_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "discovered_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         storage.save_grant(grant_data)
@@ -117,7 +118,7 @@ def save_matched_grant(
             "event_type": "grant_matched",
             "message": f"Scored '{title}' — {total_score}% match",
             "details": {"grant_id": grant_id, "score": total_score},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         logger.info(f"Saved matched grant: {grant_id} with score {total_score}")

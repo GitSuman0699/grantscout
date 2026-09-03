@@ -225,7 +225,5 @@ Retrieve our org profile and return a fully formulated ApplicationDraftResult wi
 def draft_application_for_grant(grant_data: dict[str, Any], status_callback: Any = None) -> dict[str, Any]:
     """Generate a grant application draft and return as dictionary."""
     result = draft_application_structured(grant_data, status_callback)
-    if hasattr(result, "model_dump"):
-        return result.model_dump()
-    return result
+    return result.model_dump()
 

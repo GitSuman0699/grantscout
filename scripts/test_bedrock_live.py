@@ -17,6 +17,10 @@ model_id = os.getenv("BEDROCK_MODEL_ID")
 fast_model_id = os.getenv("BEDROCK_FAST_MODEL_ID")
 premium_model_id = os.getenv("BEDROCK_PREMIUM_MODEL_ID", model_id)
 
+if not model_id or not fast_model_id:
+    print("ERROR: BEDROCK_MODEL_ID and BEDROCK_FAST_MODEL_ID must be set in .env")
+    sys.exit(1)
+
 print("=" * 60)
 print("TESTING LIVE AMAZON BEDROCK CONNECTIVITY")
 print("=" * 60)

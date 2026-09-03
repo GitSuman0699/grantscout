@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -78,8 +78,8 @@ class OrgProfile(BaseModel):
     past_grants: list[PastGrant] = []
     board_members: list[str] = []
     keywords: list[str] = []
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ──────────────────────────────────────────────
@@ -133,8 +133,8 @@ class GrantOpportunity(BaseModel):
     match_reasoning: str = ""
     draft_location: str = ""
 
-    discovered_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    discovered_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def total_score(self) -> int:
@@ -173,8 +173,8 @@ class ApplicationDraft(BaseModel):
     grant_title: str = ""
     sections: list[ApplicationSection] = []
     completion_percentage: float = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ──────────────────────────────────────────────
@@ -228,7 +228,7 @@ class ActivityEvent(BaseModel):
     event_type: ActivityType
     message: str
     details: dict = {}
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ──────────────────────────────────────────────
@@ -277,7 +277,7 @@ class ComplianceAuditResult(BaseModel):
     indirect_cost_compliant: bool = True
     unallowable_costs_detected: list[str] = Field(default_factory=list)
     findings: list[ComplianceFinding] = Field(default_factory=list)
-    audited_at: datetime = Field(default_factory=datetime.utcnow)
+    audited_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ──────────────────────────────────────────────
@@ -317,5 +317,5 @@ class AgentThoughtEvent(BaseModel):
     tool_called: Optional[str] = None
     input_tokens: int = 0
     output_tokens: int = 0
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
