@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import MissionLoopBanner from '../components/MissionLoopBanner';
 import MetricsBar from '../components/MetricsBar';
 import { calculateFitScore } from '../components/GrantCard';
-import { Compass, ArrowRight, ShieldCheck, Cpu, Database, Sparkles, Target, Zap } from 'lucide-react';
+import { Compass, ArrowRight, ShieldCheck, Cpu, Database, Sparkles, Target, Zap, Clock } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
+import { formatAsOfDate } from '../utils/dateUtils';
 
 export default function HomePage() {
   const { grants, dashboardStats } = useGrants();
+  const asOfInfo = formatAsOfDate(dashboardStats?.last_scan, grants);
   const highFitCount = grants.filter(g => {
     const score = calculateFitScore(g);
     return score != null && score >= 80;
@@ -35,9 +37,14 @@ export default function HomePage() {
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
-            <span className="tag-badge tag-dark" style={{ marginBottom: '0.35rem', display: 'inline-block' }}>
-              REAL-TIME AGENT TELEMETRY
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+              <span className="tag-badge tag-dark">
+                REAL-TIME AGENT TELEMETRY
+              </span>
+              <span className="tag-badge tag-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                <Clock size={12} /> GRANTS LISTED AS OF {asOfInfo.dateString}
+              </span>
+            </div>
             <h3 className="font-heading" style={{ fontSize: '2rem', lineHeight: '1', color: 'var(--ink)' }}>
               PIPELINE INTELLIGENCE OVERVIEW
             </h3>

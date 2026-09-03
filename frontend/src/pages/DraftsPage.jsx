@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import GrantCard, { calculateFitScore } from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
-import { FileText, CheckCircle2, Search, Sparkles, ArrowRight, ArrowDownWideNarrow } from 'lucide-react';
+import { FileText, CheckCircle2, Search, Sparkles, ArrowRight, ArrowDownWideNarrow, Clock } from 'lucide-react';
+import { formatAsOfDate } from '../utils/dateUtils';
 
 export default function DraftsPage() {
-  const { grants, isLoading } = useGrants();
+  const { grants, dashboardStats, isLoading } = useGrants();
   const [filterAgency, setFilterAgency] = useState('ALL');
+  const asOfInfo = formatAsOfDate(dashboardStats?.last_scan, grants);
   
   const draftedGrants = grants.filter(g => {
     const score = calculateFitScore(g);
@@ -38,6 +40,9 @@ export default function DraftsPage() {
           </span>
           <span className="tag-badge tag-amber">
             <Sparkles size={12} /> RAG CITATION VERIFIED
+          </span>
+          <span className="tag-badge tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+            <Clock size={12} /> DRAFTS AS OF {asOfInfo.dateString}
           </span>
         </div>
 

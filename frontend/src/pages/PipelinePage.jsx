@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import MetricsBar from '../components/MetricsBar';
 import GrantCard, { calculateFitScore } from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
-import { Layers, Sparkles, AlertTriangle, ArrowUpDown, ArrowDownWideNarrow } from 'lucide-react';
+import { Layers, Sparkles, AlertTriangle, ArrowUpDown, ArrowDownWideNarrow, Clock, Calendar } from 'lucide-react';
+import { formatAsOfDate } from '../utils/dateUtils';
 
 export default function PipelinePage() {
   const { grants, dashboardStats, sectorFilter, setSectorFilter, isLoading } = useGrants();
   const [sortBy, setSortBy] = useState('SCORE_DESC'); // 'SCORE_DESC' | 'AWARD_DESC' | 'DEADLINE'
+
+  const asOfInfo = formatAsOfDate(dashboardStats?.last_scan, grants);
 
   const highFitCount = grants.filter(g => {
     const score = calculateFitScore(g);
@@ -69,9 +72,12 @@ export default function PipelinePage() {
         marginBottom: '2rem'
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
             <span className="tag-badge tag-dark">LIVE DISCOVERY ENGINE</span>
             <span className="tag-badge tag-green">GRANTS.GOV REST API</span>
+            <span className="tag-badge tag-amber" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Clock size={12} /> LISTED AS OF {asOfInfo.dateString}
+            </span>
           </div>
 
           <h1 className="font-heading hero-title" style={{ fontSize: '2.8rem', lineHeight: '0.95', color: 'var(--ink)' }}>
@@ -145,6 +151,35 @@ export default function PipelinePage() {
           >
             DEADLINE
           </button>
+        </div>
+      </div>
+
+      {/* Grants Freshness & Sync Telemetry Strip */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '0.75rem',
+        backgroundColor: 'var(--card-alt-bg)',
+        border: '1.5px solid var(--border-dark)',
+        boxShadow: 'var(--shadow-offset-sm)',
+        padding: '0.65rem 1rem',
+        marginBottom: '1.75rem',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <span className="live-indicator" style={{ width: '8px', height: '8px' }} />
+          <span className="font-mono" style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--ink)', letterSpacing: '0.04em' }}>
+            FEDERAL GRANTS LISTED AS OF: <span style={{ color: 'var(--mission-green)', backgroundColor: 'var(--mission-green-light)', padding: '0.15rem 0.45rem', border: '1px solid var(--mission-green)', borderRadius: '2px' }}>{asOfInfo.dateString}</span>
+          </span>
+          <span className="tag-badge tag-dark" style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>
+            AUTONOMOUS 24H SYNC
+          </span>
+        </div>
+
+        <div className="font-mono" style={{ fontSize: '0.72rem', color: 'var(--ink-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+          <Calendar size={13} />
+          <span>GRANTS.GOV REST API • INDEXED DAILY IN BACKGROUND</span>
         </div>
       </div>
 

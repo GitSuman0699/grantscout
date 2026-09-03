@@ -230,6 +230,35 @@ class LocalStorage:
         }
 
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # Determine last scan timestamp from activity or discovered grants
+        last_scan = None
+        activity = self.get_recent_activity(limit=20)
+        for ev in activity:
+            ev_type = str(ev.get("event_type") or ev.get("type") or "").lower()
+            ev_msg = str(ev.get("message") or "").lower()
+            if "scan" in ev_type or "scan" in ev_msg:
+                ts = ev.get("timestamp")
+                if ts:
+                    try:
+                        last_scan = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                        break
+                    except Exception:
+                        pass
+        if not last_scan and grants:
+            dates = [g.get("discovered_at") for g in grants if g.get("discovered_at")]
+            if dates:
+                latest_d = max(dates)
+                if isinstance(latest_d, datetime):
+                    last_scan = latest_d
+                elif isinstance(latest_d, str):
+                    try:
+                        last_scan = datetime.fromisoformat(latest_d.replace("Z", "+00:00"))
+                    except Exception:
+                        pass
+        if not last_scan:
+            last_scan = datetime.now(timezone.utc)
+
         return {
             "grants_discovered": len(grants),
             "grants_this_week": len([
@@ -240,6 +269,7 @@ class LocalStorage:
             "applications_drafted": len(unique_drafted),
             "next_deadline": next_deadline,
             "days_until_deadline": days_until,
+            "last_scan": last_scan,
         }
 
 

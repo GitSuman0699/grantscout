@@ -1,12 +1,18 @@
 import React from 'react';
 import { Search, Target, FileText, DollarSign } from 'lucide-react';
+import { useGrants } from '../context/GrantContext';
+import { formatAsOfDate } from '../utils/dateUtils';
 
-export default function MetricsBar({ stats }) {
+export default function MetricsBar({ stats, asOfDate }) {
+  const context = useGrants();
+  const asOfInfo = formatAsOfDate(context?.dashboardStats?.last_scan, context?.grants);
+  const effectiveAsOf = asOfDate || asOfInfo.dateString;
+
   const items = [
     {
       label: 'GRANTS SCANNED',
       value: stats?.scanned ?? '0',
-      meta: 'Grants.gov Live REST API',
+      meta: effectiveAsOf ? `Listed as of ${effectiveAsOf}` : 'Grants.gov Live REST API',
       icon: Search,
       badge: 'AUTONOMOUS'
     },
