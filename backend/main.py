@@ -53,6 +53,46 @@ async def broadcast_event(event: dict):
         await q.put(event)
 
 
+async def _background_scan_loop():
+    """Autonomous background scan loop — runs the full pipeline on a recurring interval.
+
+    Grants.gov updates once daily, so the default interval is 24 hours.
+    Override with SCAN_INTERVAL_HOURS env var (e.g., 0.01 for 36s demo cycles).
+    """
+    interval_seconds = config.SCAN_INTERVAL_HOURS * 3600
+    logger.info(f"🔄 Background auto-scan enabled. Interval: every {config.SCAN_INTERVAL_HOURS}h")
+
+    # Wait before first scan to let the server fully initialize
+    await asyncio.sleep(30)
+
+    while True:
+        try:
+            logger.info("🚀 Background auto-scan starting...")
+            await broadcast_event({
+                "event": "auto_scan_started",
+                "data": json.dumps({"message": "Autonomous background scan initiated"}),
+            })
+
+            from backend.agents.orchestrator import run_full_orchestration_cycle
+            result = await asyncio.to_thread(run_full_orchestration_cycle)
+
+            grants_found = result.get("grants_scanned", 0)
+            logger.info(f"✅ Background auto-scan complete. {grants_found} grants processed.")
+
+            await broadcast_event({
+                "event": "auto_scan_completed",
+                "data": json.dumps({
+                    "message": f"Background scan complete: {grants_found} grants processed",
+                    "grants_scanned": grants_found,
+                    "status": "completed",
+                }),
+            })
+        except Exception as e:
+            logger.error(f"❌ Background auto-scan failed: {e}")
+
+        await asyncio.sleep(interval_seconds)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle handler."""
@@ -60,7 +100,22 @@ async def lifespan(app: FastAPI):
     logger.info(f"   Storage: Local ({config.LOCAL_STORAGE_PATH})")
     logger.info(f"   Model: {config.BEDROCK_MODEL_ID}")
     logger.info(f"   Security: {'Enabled (JWT + API Key)' if config.AUTH_ENABLED else 'Disabled (Dev Mode)'}")
+    logger.info(f"   Auto-Scan: {'Enabled' if config.AUTO_SCAN_ENABLED else 'Disabled'} (every {config.SCAN_INTERVAL_HOURS}h)")
+
+    # Start background autonomous scan task
+    scan_task = None
+    if config.AUTO_SCAN_ENABLED:
+        scan_task = asyncio.create_task(_background_scan_loop())
+
     yield
+
+    # Graceful shutdown
+    if scan_task:
+        scan_task.cancel()
+        try:
+            await scan_task
+        except asyncio.CancelledError:
+            pass
     logger.info("GrantScout API shutting down...")
 
 
@@ -474,6 +529,17 @@ async def get_agent_status():
         "status": "active",
         "last_activity": last_scan,
         "scan_interval_hours": config.SCAN_INTERVAL_HOURS,
+        "auto_scan_enabled": config.AUTO_SCAN_ENABLED,
+    }
+
+
+@app.get("/api/agent/autoscan/status")
+async def get_autoscan_status():
+    """Return the current background auto-scan configuration."""
+    return {
+        "enabled": config.AUTO_SCAN_ENABLED,
+        "interval_hours": config.SCAN_INTERVAL_HOURS,
+        "next_scan_note": f"Every {config.SCAN_INTERVAL_HOURS} hours" if config.AUTO_SCAN_ENABLED else "Disabled",
     }
 
 

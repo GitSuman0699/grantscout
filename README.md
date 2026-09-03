@@ -12,7 +12,7 @@ The result? The organizations closest to the communities that need help the most
 
 ## What GrantScout Does
 
-**GrantScout** is a multi-agent AI system built with the **[Strands Agents SDK](https://github.com/strands-agents/sdk-python)** and **Amazon Bedrock**. Once a scan is triggered, the multi-agent pipeline runs autonomously end-to-end, no manual step-by-step supervision required. GrantScout:
+**GrantScout** is a multi-agent AI system built with the **[Strands Agents SDK](https://github.com/strands-agents/sdk-python)** and **Amazon Bedrock**. It runs autonomously in the background on a configurable schedule (default: every 24 hours), scanning for new federal grants, scoring them, and drafting applications — only surfacing when there's a real decision to make. GrantScout:
 
 1. **Scans** the live [Grants.gov REST API](https://api.grants.gov/) for real federal funding opportunities that match the nonprofit's mission keywords.
 2. **Scores** every discovered grant against the organization's profile using a 5-dimension, 100-point rubric (Mission Alignment, Eligibility Fit, Capacity Match, Geographic Fit, Track Record), with Pydantic-enforced structured outputs so scores are always consistent and auditable.
@@ -302,6 +302,8 @@ Key environment variables:
 | `AUTH_ENABLED` | `true` | Enable JWT/API key authentication |
 | `SECRET_KEY` | (default) | JWT signing key |
 | `MASTER_API_KEY` | (default) | API key for service auth |
+| `AUTO_SCAN_ENABLED` | `true` | Enable background autonomous scanning |
+| `SCAN_INTERVAL_HOURS` | `24` | Hours between background scan cycles (Grants.gov updates daily) |
 
 ### 4. Initialize Profile & Start Backend
 ```bash
@@ -437,7 +439,7 @@ cd frontend && npm run build
 
 - **Technological Implementation**: Built with `strands-agents`, leveraging Graph, Swarm, and Workflow orchestration with native Amazon Bedrock support, structured outputs, RAG, FastMCP server, and comprehensive test coverage (50 backend tests + eval harness + production build). Designed for seamless Amazon Bedrock AgentCore runtime hosting with stateless tool interfaces and persistent storage adapters.
 - **Potential Impact**: Directly targets the $1.5T federal grant ecosystem, leveling the playing field for small 501(c)(3) nonprofits that cannot afford dedicated grant-writing agencies.
-- **Creativity & Autonomous Behavior**: Unlike passive dashboards that demand continuous manual searching, GrantScout's multi-agent pipeline runs autonomously end-to-end once triggered, scanning, scoring, routing, and drafting without step-by-step human supervision.
+- **Creativity & Autonomous Behavior**: GrantScout's multi-agent pipeline runs autonomously in the background on a configurable 24-hour schedule — scanning, scoring, routing, and drafting without any human trigger. It only surfaces when there's a real decision: a high-confidence match found or a draft ready for final review.
 - **Cost Efficiency**: A single 20-page federal grant proposal typically costs a nonprofit $5,000 to $15,000 to outsource. GrantScout generates a 6-section, 4,500+ word draft for **~$0.15** in AWS Bedrock tokens. Additionally, response caching eliminates redundant inference, and configurable model tier definitions allow future multi-model routing to optimize AWS credit usage.
 
 ---

@@ -41,7 +41,8 @@ class Config:
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
 
     # Scan Schedule
-    SCAN_INTERVAL_HOURS: int = int(os.getenv("SCAN_INTERVAL_HOURS", "6"))
+    SCAN_INTERVAL_HOURS: int = int(os.getenv("SCAN_INTERVAL_HOURS", "24"))
+    AUTO_SCAN_ENABLED: bool = os.getenv("AUTO_SCAN_ENABLED", "true").lower() == "true"
 
     # Local storage fallback (when AWS is not configured)
     USE_LOCAL_STORAGE: bool = os.getenv("USE_LOCAL_STORAGE", "true").lower() == "true"
