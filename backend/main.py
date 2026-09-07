@@ -79,6 +79,9 @@ async def _background_scan_loop():
             grants_found = result.get("grants_scanned", 0)
             logger.info(f"✅ Background auto-scan complete. {grants_found} grants processed.")
 
+            # Dispatch background drafting tasks for high-scoring opportunities
+            dispatch_queued_drafts()
+
             await broadcast_event({
                 "event": "auto_scan_completed",
                 "data": json.dumps({
@@ -285,21 +288,70 @@ async def search_knowledge_base(payload: dict):
     return {"query": query, "count": len(results), "results": [r.model_dump() for r in results]}
 
 
+@app.get("/api/documents/{doc_name:path}")
+async def get_knowledge_base_document(doc_name: str):
+    """Retrieve full content and metadata for a specific indexed document."""
+    doc = knowledge_base.get_document(doc_name)
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Document '{doc_name}' not found")
+    return doc
+
+
 @app.post("/api/documents/index")
 async def index_document(
     payload: dict,
     auth: TokenPayload = Depends(get_current_auth),
 ):
-    """Index a new document into the RAG Knowledge Base (Authenticated)."""
-    doc_name = payload.get("doc_name", "")
-    content = payload.get("content", "")
+    """Index or update a document into the RAG Knowledge Base (Authenticated)."""
+    doc_name = payload.get("doc_name", "").strip()
+    content = payload.get("content", "").strip()
     category = payload.get("category", "general")
 
     if not doc_name or not content:
         raise HTTPException(status_code=400, detail="doc_name and content are required")
 
     chunks_indexed = knowledge_base.add_document(doc_name, content, category)
+
+    storage.add_activity({
+        "event_type": "document_indexed",
+        "message": f"Indexed '{doc_name}' ({chunks_indexed} chunks) into Knowledge Base (by {auth.sub})",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    await broadcast_event({
+        "type": "document_indexed",
+        "doc_name": doc_name,
+        "category": category,
+        "chunks": chunks_indexed,
+        "message": f"Document '{doc_name}' indexed successfully ({chunks_indexed} chunks)",
+    })
+
     return {"status": "indexed", "doc_name": doc_name, "chunks": chunks_indexed, "indexed_by": auth.sub}
+
+
+@app.delete("/api/documents/{doc_name:path}")
+async def delete_knowledge_base_document(
+    doc_name: str,
+    auth: TokenPayload = Depends(get_current_auth),
+):
+    """Delete a document and its embeddings from the RAG Knowledge Base (Authenticated)."""
+    success = knowledge_base.delete_document(doc_name)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Document '{doc_name}' not found")
+
+    storage.add_activity({
+        "event_type": "document_deleted",
+        "message": f"Deleted document '{doc_name}' from Knowledge Base (by {auth.sub})",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    await broadcast_event({
+        "type": "document_deleted",
+        "doc_name": doc_name,
+        "message": f"Document '{doc_name}' removed from Knowledge Base",
+    })
+
+    return {"status": "deleted", "doc_name": doc_name, "deleted_by": auth.sub}
 
 
 # ──────────────────────────────────────────────
@@ -407,8 +459,97 @@ async def trigger_grant_draft(
 
 
 # ──────────────────────────────────────────────
-#  Agent Control Endpoints
+#  Agent Control Endpoints & Background Workers
 # ──────────────────────────────────────────────
+
+
+async def execute_background_drafting(grant_id: str):
+    """Asynchronous background worker that executes the Drafter Agent swarm for a high-scoring grant."""
+    grant = storage.get_grant(grant_id)
+    if not grant:
+        logger.warning(f"Background drafting: grant {grant_id} not found in storage.")
+        return
+
+    title = grant.get("title", "Grant Opportunity")
+    logger.info(f"🚀 Starting autonomous background drafting swarm for grant {grant_id}: '{title}'")
+
+    try:
+        from backend.agents.drafter import draft_application_for_grant
+
+        grant["status"] = "drafting"
+        grant["is_drafting"] = True
+        storage.save_grant(grant)
+
+        await broadcast_event({
+            "type": "drafting_started",
+            "grant_id": grant_id,
+            "title": title,
+            "message": f"Autonomous AI Drafter swarm started for '{title}'...",
+        })
+
+        loop = asyncio.get_running_loop()
+
+        def on_agent_thought(msg: str):
+            asyncio.run_coroutine_threadsafe(
+                broadcast_event({
+                    "type": "agent_thought",
+                    "message": msg,
+                    "grant_id": grant_id,
+                }),
+                loop,
+            )
+
+        # Run multi-agent drafting swarm in worker thread without blocking
+        result = await asyncio.to_thread(draft_application_for_grant, grant, on_agent_thought)
+
+        apps = storage.list_applications()
+        matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+
+        grant["status"] = "ready_for_review"
+        grant["is_drafted"] = True
+        grant["is_drafting"] = False
+        grant["draft_id"] = matched_app.get("draft_id") if matched_app else None
+        storage.save_grant(grant)
+
+        logger.info(f"✅ Background drafting completed successfully for {grant_id}")
+
+        await broadcast_event({
+            "type": "application_drafted",
+            "message": f"Draft proposal ready for '{title}'",
+            "grant_id": grant_id,
+            "draft_id": matched_app.get("draft_id") if matched_app else None,
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Background drafting failed for {grant_id}: {e}")
+        grant["status"] = "matched"
+        grant["is_drafting"] = False
+        storage.save_grant(grant)
+        await broadcast_event({
+            "type": "drafting_failed",
+            "grant_id": grant_id,
+            "message": f"Auto-drafting failed for '{title}': {str(e)}",
+        })
+
+
+def dispatch_queued_drafts() -> list[str]:
+    """Find any grants in 'drafting' status without an existing completed draft and launch background workers."""
+    grants = storage.list_grants()
+    apps = storage.list_applications()
+    drafted_grant_ids = {a.get("grant_id") for a in apps if a.get("grant_id")}
+
+    dispatched = []
+    for g in grants:
+        gid = g.get("grant_id") or g.get("id")
+        if not gid:
+            continue
+        if (g.get("status") == "drafting" or g.get("is_drafting")) and gid not in drafted_grant_ids:
+            dispatched.append(gid)
+            asyncio.create_task(execute_background_drafting(gid))
+
+    if dispatched:
+        logger.info(f"⚡ Dispatched {len(dispatched)} autonomous background drafting task(s): {dispatched}")
+    return dispatched
 
 
 @app.post("/api/agent/scan")
@@ -430,19 +571,23 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
 
         result = await run_orchestrator()
 
+        # Dispatch background drafting for any high-scoring grants discovered
+        queued_drafts = dispatch_queued_drafts()
+
         storage.add_activity({
             "event_type": "scan_completed",
-            "message": "Grant scan completed successfully",
-            "details": {"result_preview": result[:200] if result else ""},
+            "message": f"Grant scan completed successfully. {len(queued_drafts)} proposals queued for background drafting.",
+            "details": {"result_preview": result[:200] if result else "", "queued_drafts": queued_drafts},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         await broadcast_event({
             "type": "scan_completed",
             "message": "Grant scan completed!",
+            "queued_drafts": queued_drafts,
         })
 
-        return {"status": "completed", "result": result, "triggered_by": auth.sub}
+        return {"status": "completed", "result": result, "queued_drafts": queued_drafts, "triggered_by": auth.sub}
 
     except Exception as e:
         logger.error(f"Scan failed: {e}")
@@ -468,12 +613,16 @@ async def trigger_full_orchestration(auth: TokenPayload = Depends(get_current_au
 
         summary = run_full_orchestration_cycle()
 
+        # Dispatch background drafting for high-scoring grants
+        queued_drafts = dispatch_queued_drafts()
+
         await broadcast_event({
             "type": "orchestration_completed",
-            "message": f"Autonomous cycle finished: {summary.get('grants_scanned', 0)} opportunities processed",
+            "message": f"Autonomous cycle finished: {summary.get('grants_scanned', 0)} opportunities processed, {len(queued_drafts)} queued for drafting",
+            "queued_drafts": queued_drafts,
         })
 
-        return {"status": "completed", "summary": summary, "triggered_by": auth.sub}
+        return {"status": "completed", "summary": summary, "queued_drafts": queued_drafts, "triggered_by": auth.sub}
 
     except Exception as e:
         logger.error(f"Orchestration failed: {e}")

@@ -188,13 +188,19 @@ def evaluate_and_route_grant(grant_info: dict[str, Any]) -> dict[str, Any]:
     draft_status = None
 
     if total_score >= 80:
-        action = "auto_drafted"
-        # Autonomous pre-fill drafting
-        draft_result = draft_application_for_grant(saved_grant)
-        draft_status = "completed"
+        action = "auto_draft_queued"
+        # Mark grant for asynchronous autonomous drafting without blocking discovery
+        saved_grant["status"] = "drafting"
+        saved_grant["is_drafting"] = True
+        storage.save_grant(saved_grant)
+        draft_status = "queued"
     elif total_score < 50:
         action = "archived_silently"
         saved_grant["status"] = "archived"
+        storage.save_grant(saved_grant)
+    else:
+        action = "flagged_for_review"
+        saved_grant["status"] = "matched"
         storage.save_grant(saved_grant)
 
     return {

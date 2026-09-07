@@ -239,8 +239,13 @@ export default function ProposalDraftPage() {
         const matchingApp = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
         if (matchingApp) {
           setDraft(matchingApp);
+          setIsDrafting(false);
         } else {
           setDraft(null);
+          if (grant.status === 'drafting' || grant.is_drafting) {
+            setIsDrafting(true);
+            setAgentThoughts(['AUTONOMOUS DRAFTER SWARM ACTIVE IN BACKGROUND...']);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch draft:', err);
@@ -250,6 +255,43 @@ export default function ProposalDraftPage() {
     }
     loadDraft();
   }, [grant, id]);
+
+  // Live SSE listener for background auto-drafting
+  useEffect(() => {
+    if (draft) return;
+    const grantId = grant?.grant_id || grant?.id || id;
+    if (!grantId) return;
+
+    const sse = createSSEStream((data) => {
+      if (!data) return;
+      const targetId = data.grant_id;
+      if (targetId && String(targetId) === String(grantId)) {
+        if (data.type === 'agent_thought' && data.message) {
+          setAgentThoughts(prev => [...prev, data.message.toUpperCase()]);
+        } else if (data.type === 'drafting_started') {
+          setIsDrafting(true);
+          setAgentThoughts(prev => [...prev, data.message ? data.message.toUpperCase() : 'DRAFTER SWARM STARTED...']);
+        } else if (data.type === 'application_drafted') {
+          fetchApplications().then((appsData) => {
+            const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
+            const updated = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
+            if (updated) {
+              setDraft(updated);
+              setIsDrafting(false);
+            }
+          });
+          if (refreshGrants) refreshGrants();
+        } else if (data.type === 'drafting_failed') {
+          setIsDrafting(false);
+          setDraftError(data.message || 'Auto-drafting failed in background.');
+        }
+      }
+    });
+
+    return () => {
+      if (sse) sse.close();
+    };
+  }, [grant, id, draft, refreshGrants]);
 
   const sections = draft?.sections || [];
   const activeSection = sections[activeSectionIdx] || sections[0] || {};

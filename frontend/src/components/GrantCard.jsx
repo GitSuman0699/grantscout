@@ -58,7 +58,8 @@ export default function GrantCard({ grant }) {
   const location = useLocation();
   const fitScore = calculateFitScore(grant);
   const badgeInfo = getScoreBadgeProps(fitScore);
-  const isDrafted = Boolean(grant.is_drafted || grant.draft_location || grant.status === 'ready_for_review');
+  const isDrafting = Boolean(grant.status === 'drafting' || grant.is_drafting);
+  const isDrafted = Boolean(grant.is_drafted || grant.draft_location || grant.status === 'ready_for_review') && !isDrafting;
   
   // Format award
   const awardText = grant.award_ceiling 
@@ -98,7 +99,23 @@ export default function GrantCard({ grant }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
           {/* Draft Status Indicator Badge */}
-          {isDrafted ? (
+          {isDrafting ? (
+            <span
+              className="tag-badge pulse-glow"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontSize: '0.72rem',
+                border: '1.5px solid var(--accent, #C85A17)',
+                background: '#FFF5EB',
+                color: 'var(--accent, #C85A17)',
+                fontWeight: 700
+              }}
+            >
+              <Sparkles size={12} className="spin-slow" /> AUTO-DRAFTING...
+            </span>
+          ) : isDrafted ? (
             <span className="tag-badge tag-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem' }}>
               <FileCheck size={12} /> DRAFTED
             </span>
@@ -196,11 +213,16 @@ export default function GrantCard({ grant }) {
           <Link
             to={draftUrl}
             state={navState}
-            className={`brutalist-btn ${isDrafted ? 'btn-primary' : 'btn-outline'}`}
-            style={{ flex: 1, padding: '0.55rem', fontSize: '0.95rem' }}
+            className={`brutalist-btn ${isDrafting ? 'btn-outline pulse-glow' : isDrafted ? 'btn-primary' : 'btn-outline'}`}
+            style={{
+              flex: 1,
+              padding: '0.55rem',
+              fontSize: '0.95rem',
+              ...(isDrafting ? { borderColor: 'var(--accent, #C85A17)', color: 'var(--accent, #C85A17)', fontWeight: 700 } : {})
+            }}
           >
-            <Sparkles size={16} />
-            {isDrafted ? 'OPEN DRAFT' : 'PRE-FILL DRAFT'}
+            <Sparkles size={16} className={isDrafting ? 'spin-slow' : ''} />
+            {isDrafting ? 'DRAFTING IN PROGRESS' : isDrafted ? 'OPEN DRAFT' : 'PRE-FILL DRAFT'}
           </Link>
         </div>
       </div>

@@ -86,6 +86,42 @@ export async function fetchDocuments() {
   return res.json();
 }
 
+export async function fetchDocumentByName(docName) {
+  const encoded = encodeURIComponent(docName);
+  const res = await fetch(`${BASE_URL}/api/documents/${encoded}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch document' }));
+    throw new Error(err.detail || `Document fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function indexDocument({ doc_name, content, category = 'general' }) {
+  const res = await fetch(`${BASE_URL}/api/documents/index`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ doc_name, content, category }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to index document' }));
+    throw new Error(err.detail || `Document indexing failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteDocument(docName) {
+  const encoded = encodeURIComponent(docName);
+  const res = await fetch(`${BASE_URL}/api/documents/${encoded}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to delete document' }));
+    throw new Error(err.detail || `Document deletion failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function searchDocuments(query, topK = 3, category = null) {
   const body = { query, top_k: topK };
   if (category) body.category = category;

@@ -95,7 +95,14 @@ export function GrantProvider({ children }) {
     const sse = createSSEStream(
       (event) => {
         // Auto-refresh data on relevant events
-        if (event.type === 'scan_completed' || event.type === 'application_drafted' || event.type === 'orchestration_completed' || event.type === 'cache_cleared') {
+        if (
+          event.type === 'scan_completed' ||
+          event.type === 'drafting_started' ||
+          event.type === 'application_drafted' ||
+          event.type === 'drafting_failed' ||
+          event.type === 'orchestration_completed' ||
+          event.type === 'cache_cleared'
+        ) {
           loadGrants();
           loadStats();
         }

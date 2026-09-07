@@ -245,6 +245,31 @@ class KnowledgeBase:
 
         return list(doc_stats.values())
 
+    def get_document(self, doc_name: str) -> Optional[dict[str, Any]]:
+        """Retrieve the reconstructed full content and metadata of a specific document."""
+        doc_chunks = [c for c in self.chunks if c.doc_name == doc_name]
+        if not doc_chunks:
+            return None
+        full_content = "\n\n".join(c.content for c in doc_chunks)
+        return {
+            "doc_name": doc_name,
+            "category": doc_chunks[0].category,
+            "content": full_content,
+            "chunk_count": len(doc_chunks),
+            "total_words": sum(c.token_estimate for c in doc_chunks),
+            "chunks": [c.model_dump() for c in doc_chunks],
+        }
+
+    def delete_document(self, doc_name: str) -> bool:
+        """Delete a document and all its chunks from the knowledge base."""
+        initial_len = len(self.chunks)
+        self.chunks = [c for c in self.chunks if c.doc_name != doc_name]
+        if len(self.chunks) < initial_len:
+            self._save_index()
+            logger.info(f"Deleted document '{doc_name}' from KnowledgeBase ({initial_len - len(self.chunks)} chunks removed).")
+            return True
+        return False
+
 
 # Global singleton instance
 knowledge_base = KnowledgeBase()

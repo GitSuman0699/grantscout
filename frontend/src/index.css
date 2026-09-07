@@ -650,3 +650,23 @@ body {
   50% { content: '..'; }
   75% { content: '...'; }
 }
+
+.spin-slow {
+  animation: spin 3s linear infinite;
+}
+
+.pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.02);
+  }
+}
+
