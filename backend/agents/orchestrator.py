@@ -23,7 +23,7 @@ from backend.config import config
 from backend.tools.org_profile import retrieve_org_profile
 from backend.tools.grants_api import search_grants, fetch_grant_details
 from backend.storage.local_storage import storage
-from backend.agents.scanner import create_scanner_agent
+from backend.agents.scanner import create_scanner_agent, is_active_opportunity
 from backend.agents.matcher import score_grant
 from backend.agents.drafter import draft_application_for_grant
 from backend.agents.deadline import run_deadline_check
@@ -31,9 +31,48 @@ from backend.agents.deadline import run_deadline_check
 logger = logging.getLogger(__name__)
 
 
+def is_domain_relevant(grant_info: dict[str, Any], profile_data: dict[str, Any]) -> tuple[bool, str]:
+    """Pre-filter opportunities to avoid evaluating grants completely outside the nonprofit's scope."""
+    import re
+
+    title = (grant_info.get("title") or "").lower()
+    synopsis = (grant_info.get("synopsis_description") or grant_info.get("synopsis") or "").lower()
+    full_text = f"{title} {synopsis}"
+
+    # 1. Skip RFIs (Requests for Information) and non-grant notices
+    if title.startswith("request for information") or "rfi" in title.split():
+        return False, "Skipped: Request for Information (RFI), not a grant opportunity"
+
+    # 2. Check for exact phrase matches from profile keywords
+    keywords = profile_data.get("keywords", [])
+    for kw in keywords:
+        clean_kw = kw.strip().strip('"').lower()
+        if clean_kw and clean_kw in full_text:
+            return True, f"Direct keyword phrase match: '{clean_kw}'"
+
+    # 3. Check for substantive domain keyword matches (words > 3 chars)
+    domain_terms = set()
+    for kw in keywords:
+        for word in re.findall(r"[a-zA-Z0-9\-]+", kw.lower()):
+            if len(word) > 3 and word not in {"with", "from", "that", "this", "have", "more", "into", "their"}:
+                domain_terms.add(word)
+
+    matches = [w for w in domain_terms if w in full_text]
+    # If 2 or more domain terms match anywhere in full text, or 1 in the title
+    if len(matches) >= 2:
+        return True, f"Domain terms matched: {matches[:3]}"
+    elif len(matches) == 1 and any(w in title for w in matches):
+        return True, f"Domain term matched in title: {matches[0]}"
+
+    return False, "No substantive domain keyword alignment with organization profile"
+
+
 @tool
 def execute_discovery_scan() -> dict[str, Any]:
-    """Discover new grant opportunities by querying grants.gov with org profile keywords.
+    """Discover authentic grant opportunities by querying grants.gov with targeted org profile keywords.
+
+    Uses high-precision quoted search queries and pre-filters opportunities against the
+    nonprofit's domain and active window to avoid wasting resources on irrelevant grants.
 
     Returns:
         Dictionary containing the list of newly found grant opportunities.
@@ -42,18 +81,72 @@ def execute_discovery_scan() -> dict[str, Any]:
     if not profile_data:
         return {"count": 0, "grants": [], "error": "No org profile found"}
 
-    keywords = " ".join(profile_data.get("keywords", [])[:4]) or "youth education STEM"
-    search_res = search_grants(keywords=keywords, max_results=10)
-    
+    raw_keywords = profile_data.get("keywords", [])
+    # Build list of distinct targeted search queries (exact phrases)
+    search_queries = []
+    for kw in raw_keywords[:5]:
+        kw_clean = kw.strip()
+        if not kw_clean.startswith('"') and not kw_clean.endswith('"'):
+            search_queries.append(f'"{kw_clean}"')
+        else:
+            search_queries.append(kw_clean)
+
+    if not search_queries:
+        search_queries = ['"STEM education"', '"robotics"', '"computer science education"', '"after-school"']
+
+    logger.info(f"Executing discovery scan across {len(search_queries)} targeted search queries: {search_queries}")
+
+    seen_ids = set()
+    candidate_grants = []
+    for query in search_queries:
+        try:
+            search_res = search_grants(keywords=query, max_results=6)
+            for g in search_res.get("grants", []):
+                gid_num = g.get("id")
+                if gid_num and gid_num not in seen_ids:
+                    seen_ids.add(gid_num)
+                    candidate_grants.append(g)
+        except Exception as e:
+            logger.warning(f"Search query '{query}' failed: {e}")
+
     new_grants = []
-    for g in search_res.get("grants", []):
+    for g in candidate_grants:
         gid = f"grants-gov-{g.get('id')}"
-        if not storage.grant_exists(gid):
-            # Fetch full details
+        if storage.grant_exists(gid):
+            continue
+
+        # Fetch full opportunity details
+        try:
             detail_res = fetch_grant_details(opportunity_id=int(g.get("id")))
             grant_info = detail_res.get("grant") or g
             grant_info["grant_id"] = gid
-            new_grants.append(grant_info)
+        except Exception as e:
+            logger.warning(f"Failed to fetch details for grant {gid}: {e}")
+            continue
+
+        # 1. Filter out closed/inactive opportunities
+        if not is_active_opportunity(
+            close_date=grant_info.get("close_date", ""),
+            title=grant_info.get("title", ""),
+            original_due_date=grant_info.get("original_due_date", ""),
+            fiscal_year=grant_info.get("fiscal_year"),
+            has_packages=grant_info.get("has_packages", True),
+        ):
+            logger.info(f"Filtered out inactive/closed opportunity: {gid} - {grant_info.get('title')}")
+            continue
+
+        # 2. Pre-filter by domain relevance to avoid scanning unnecessary grants
+        relevant, reason = is_domain_relevant(grant_info, profile_data)
+        if not relevant:
+            logger.info(f"Pre-filtered unrelated opportunity: {gid} ('{grant_info.get('title')}') - {reason}")
+            continue
+
+        logger.info(f"Discovered authentic candidate grant: {gid} ('{grant_info.get('title')}') - {reason}")
+        new_grants.append(grant_info)
+
+        # Cap at 6 authentic candidates per cycle for fast response
+        if len(new_grants) >= 6:
+            break
 
     return {"count": len(new_grants), "grants": new_grants, "error": None}
 

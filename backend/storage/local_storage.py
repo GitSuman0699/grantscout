@@ -134,6 +134,28 @@ class LocalStorage:
         filepath = self.base_path / "grants" / f"{grant_id}.json"
         return filepath.exists()
 
+    def delete_grant(self, grant_id: str) -> bool:
+        """Delete a grant opportunity."""
+        filepath = self.base_path / "grants" / f"{grant_id}.json"
+        if filepath.exists():
+            filepath.unlink()
+            logger.info(f"Deleted grant: {grant_id}")
+            return True
+        return False
+
+    def clear_all_grants(self) -> int:
+        """Clear all stored grants."""
+        grants_dir = self.base_path / "grants"
+        count = 0
+        for filepath in grants_dir.glob("*.json"):
+            try:
+                filepath.unlink()
+                count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete {filepath}: {e}")
+        return count
+
+
     # ── Application Operations ──
 
     def save_application(self, application: dict) -> str:
@@ -163,6 +185,28 @@ class LocalStorage:
                 logger.warning(f"Failed to read application file {filepath}: {e}")
         return sorted(apps, key=lambda a: a.get("created_at", ""), reverse=True)
 
+    def delete_application(self, draft_id: str) -> bool:
+        """Delete an application draft."""
+        filepath = self.base_path / "applications" / f"{draft_id}.json"
+        if filepath.exists():
+            filepath.unlink()
+            logger.info(f"Deleted application draft: {draft_id}")
+            return True
+        return False
+
+    def clear_all_applications(self) -> int:
+        """Clear all stored applications."""
+        apps_dir = self.base_path / "applications"
+        count = 0
+        for filepath in apps_dir.glob("*.json"):
+            try:
+                filepath.unlink()
+                count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete {filepath}: {e}")
+        return count
+
+
     # ── Activity Operations ──
 
     def add_activity(self, event: dict) -> None:
@@ -183,6 +227,32 @@ class LocalStorage:
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read activity file {filepath}: {e}")
         return events
+
+    def clear_all_activity(self) -> int:
+        """Clear all stored activity events."""
+        activity_dir = self.base_path / "activity"
+        count = 0
+        for filepath in activity_dir.glob("*.json"):
+            try:
+                filepath.unlink()
+                count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete {filepath}: {e}")
+        return count
+
+    def purge_all_data(self) -> dict[str, int]:
+        """Purge all grants, applications, and activity records."""
+        grants_cleared = self.clear_all_grants()
+        apps_cleared = self.clear_all_applications()
+        activity_cleared = self.clear_all_activity()
+        logger.info(
+            f"Purged storage: {grants_cleared} grants, {apps_cleared} applications, {activity_cleared} activities"
+        )
+        return {
+            "grants_cleared": grants_cleared,
+            "applications_cleared": apps_cleared,
+            "activity_cleared": activity_cleared,
+        }
 
     # ── Stats ──
 

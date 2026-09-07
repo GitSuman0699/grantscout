@@ -87,6 +87,18 @@ def create_matcher_agent() -> Agent:
     return agent
 
 
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    val_str = str(val).strip().replace("$", "").replace(",", "")
+    try:
+        return float(val_str)
+    except (ValueError, TypeError):
+        return default
+
+
 def evaluate_grant_structured(grant_details: dict[str, Any], persist: bool = True) -> GrantEvaluationResult:
     """Evaluate a grant against the org profile with structured Pydantic output.
 
@@ -140,8 +152,8 @@ Retrieve our org profile and return a fully formulated GrantEvaluationResult.
             title=grant_details.get("title", "Grant Opportunity"),
             agency=grant_details.get("agency", "Federal Agency"),
             synopsis=synopsis_val,
-            award_ceiling=float(grant_details.get("award_ceiling") or 0),
-            award_floor=float(grant_details.get("award_floor") or 0),
+            award_ceiling=_safe_float(grant_details.get("award_ceiling")),
+            award_floor=_safe_float(grant_details.get("award_floor")),
             close_date=grant_details.get("close_date", "TBD"),
             status=evaluation.status.value,
             match_score=evaluation.match_score.model_dump(),

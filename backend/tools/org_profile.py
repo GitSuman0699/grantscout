@@ -89,14 +89,24 @@ def save_matched_grant(
     try:
         from datetime import datetime
 
+        def _to_float(v: Any) -> float:
+            if v is None:
+                return 0.0
+            if isinstance(v, (int, float)):
+                return float(v)
+            try:
+                return float(str(v).strip().replace("$", "").replace(",", ""))
+            except (ValueError, TypeError):
+                return 0.0
+
         grant_data = {
             "grant_id": grant_id,
             "source": "grants.gov",
             "title": title,
             "agency": agency,
             "synopsis": synopsis,
-            "award_ceiling": award_ceiling,
-            "award_floor": award_floor,
+            "award_ceiling": _to_float(award_ceiling),
+            "award_floor": _to_float(award_floor),
             "close_date": close_date,
             "status": status,
             "match_score": match_score,

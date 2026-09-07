@@ -180,6 +180,18 @@ export async function triggerDraft(grantId) {
   return res.json();
 }
 
+export async function clearSystemCache() {
+  const res = await fetch(`${BASE_URL}/api/admin/clear-cache`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Clear cache failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ─────────────────────────────────────────────
 //  Multi-Tenant Personas & Onboarding
 // ─────────────────────────────────────────────

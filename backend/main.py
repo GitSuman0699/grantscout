@@ -702,6 +702,36 @@ async def get_model_tiers():
     return {"tiers": tiers, "agent_routing": agent_map}
 
 
+# ──────────────────────────────────────────────
+#  Admin / Cache Purge Endpoints
+# ──────────────────────────────────────────────
+
+
+@app.post("/api/admin/clear-cache")
+async def clear_system_cache(auth: TokenPayload = Depends(get_current_auth)):
+    """Clear all cached responses, stored grants, applications, and activity records (Authenticated)."""
+    # 1. Clear in-memory response cache
+    response_cache.clear()
+
+    # 2. Clear stored grants, applications, and activity
+    purge_summary = storage.purge_all_data()
+
+    logger.info(f"System cache and stored data cleared by {auth.sub}: {purge_summary}")
+
+    # Broadcast event to frontend to refresh
+    await broadcast_event({
+        "type": "cache_cleared",
+        "message": "All cached data, grants, and activity purged successfully",
+    })
+
+    return {
+        "status": "cleared",
+        "purged": purge_summary,
+        "cache_stats": response_cache.stats,
+        "cleared_by": auth.sub,
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
 

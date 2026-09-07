@@ -4,6 +4,7 @@ import {
   fetchDashboardStats as apiFetchStats,
   fetchHealthCheck as apiFetchHealth,
   triggerScan as apiTriggerScan,
+  clearSystemCache,
   createSSEStream,
 } from '../services/api';
 
@@ -94,7 +95,7 @@ export function GrantProvider({ children }) {
     const sse = createSSEStream(
       (event) => {
         // Auto-refresh data on relevant events
-        if (event.type === 'scan_completed' || event.type === 'application_drafted' || event.type === 'orchestration_completed') {
+        if (event.type === 'scan_completed' || event.type === 'application_drafted' || event.type === 'orchestration_completed' || event.type === 'cache_cleared') {
           loadGrants();
           loadStats();
         }
@@ -113,6 +114,17 @@ export function GrantProvider({ children }) {
     };
   }, [systemHealth, loadGrants, loadStats]);
 
+  // ── Clear System Cache ──
+  const handleClearCache = useCallback(async () => {
+    try {
+      await clearSystemCache();
+      await Promise.all([loadGrants(), loadStats()]);
+    } catch (err) {
+      console.error('Clear cache failed:', err.message);
+      setError(`Clear cache failed: ${err.message}`);
+    }
+  }, [loadGrants, loadStats]);
+
   return (
     <GrantContext.Provider value={{
       grants,
@@ -123,6 +135,7 @@ export function GrantProvider({ children }) {
       error,
       systemHealth,
       runScanCycle,
+      handleClearCache,
       sectorFilter,
       setSectorFilter,
       getGrantById,

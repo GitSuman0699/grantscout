@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare, PlusCircle } from 'lucide-react';
+import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare, PlusCircle, Trash2 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import PersonaSelector from './PersonaSelector';
 import OnboardingModal from './OnboardingModal';
 
 export default function Header() {
-  const { isScanning, runScanCycle, systemHealth, refreshGrants } = useGrants();
+  const { isScanning, runScanCycle, handleClearCache, systemHealth, refreshGrants } = useGrants();
   const isHealthy = systemHealth === 'healthy';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -169,25 +169,42 @@ export default function Header() {
           ))}
         </nav>
 
-        {/* Desktop Action Button — Hidden on Mobile */}
-        <button
-          onClick={runScanCycle}
-          disabled={isScanning}
-          className="brutalist-btn btn-amber desktop-only"
-          style={{ padding: '0.5rem 1.15rem', fontSize: '1rem' }}
-        >
-          {isScanning ? (
-            <>
-              <Activity className="animate-spin" size={16} />
-              SCANNING...
-            </>
-          ) : (
-            <>
-              <Zap size={16} />
-              RUN DISCOVERY CYCLE
-            </>
-          )}
-        </button>
+        {/* Desktop Action Buttons — Hidden on Mobile */}
+        <div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <button
+            onClick={async () => {
+              if (window.confirm("Are you sure you want to clear all cached data, stored grants, and activity logs?")) {
+                await handleClearCache();
+              }
+            }}
+            disabled={isScanning}
+            className="brutalist-btn btn-outline"
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+            title="Purge all cached responses, grants, and activity logs"
+          >
+            <Trash2 size={14} />
+            CLEAR CACHE
+          </button>
+
+          <button
+            onClick={runScanCycle}
+            disabled={isScanning}
+            className="brutalist-btn btn-amber"
+            style={{ padding: '0.5rem 1.15rem', fontSize: '1rem' }}
+          >
+            {isScanning ? (
+              <>
+                <Activity className="animate-spin" size={16} />
+                SCANNING...
+              </>
+            ) : (
+              <>
+                <Zap size={16} />
+                RUN DISCOVERY CYCLE
+              </>
+            )}
+          </button>
+        </div>
 
         {/* Mobile Hamburger Toggle Button — Hidden on Desktop */}
         <button
@@ -244,28 +261,45 @@ export default function Header() {
             ))}
           </nav>
 
-          {/* Action Button inside Mobile Drawer */}
-          <button
-            onClick={() => {
-              runScanCycle();
-              setMobileMenuOpen(false);
-            }}
-            disabled={isScanning}
-            className="brutalist-btn btn-amber"
-            style={{ width: '100%', padding: '0.75rem', fontSize: '1.15rem' }}
-          >
-            {isScanning ? (
-              <>
-                <Activity className="animate-spin" size={18} />
-                SCANNING GRANTS.GOV...
-              </>
-            ) : (
-              <>
-                <Zap size={18} />
-                RUN DISCOVERY CYCLE
-              </>
-            )}
-          </button>
+          {/* Action Buttons inside Mobile Drawer */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <button
+              onClick={() => {
+                runScanCycle();
+                setMobileMenuOpen(false);
+              }}
+              disabled={isScanning}
+              className="brutalist-btn btn-amber"
+              style={{ width: '100%', padding: '0.75rem', fontSize: '1.15rem' }}
+            >
+              {isScanning ? (
+                <>
+                  <Activity className="animate-spin" size={18} />
+                  SCANNING GRANTS.GOV...
+                </>
+              ) : (
+                <>
+                  <Zap size={18} />
+                  RUN DISCOVERY CYCLE
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={async () => {
+                if (window.confirm("Are you sure you want to clear all cached data, stored grants, and activity logs?")) {
+                  await handleClearCache();
+                  setMobileMenuOpen(false);
+                }
+              }}
+              disabled={isScanning}
+              className="brutalist-btn btn-outline"
+              style={{ width: '100%', padding: '0.6rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              <Trash2 size={16} />
+              CLEAR SYSTEM CACHE
+            </button>
+          </div>
         </div>
       )}
     </header>

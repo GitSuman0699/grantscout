@@ -35,10 +35,10 @@ YOUR WORKFLOW:
 6. Return a structured summary of all NEW grants discovered, including their titles, agencies, award amounts, deadlines, and synopses.
 
 SEARCH STRATEGY:
-- Extract 3-5 keyword phrases from the org's mission and programs
-- Search with specific terms first (e.g., "youth STEM education"), then broader terms (e.g., "education nonprofit")
-- Try different agency codes relevant to the org's work
-- Focus on grants with "posted" status that have future deadlines
+- Extract 3-5 distinct keyword phrases from the org's mission and programs
+- Always use targeted exact phrases in quotes (e.g., '"STEM education"', '"robotics"') to avoid noisy subword stemming
+- Never combine multiple separate phrases into one long query
+- Focus strictly on grants with "posted" status that have future deadlines and active packages
 
 OUTPUT FORMAT:
 Provide a clear summary listing each new grant with:
