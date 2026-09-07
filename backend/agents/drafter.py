@@ -14,6 +14,8 @@ The Swarm uses the strands.multiagent.swarm.Swarm class with:
 
 from __future__ import annotations
 
+import sys
+import contextlib
 import asyncio
 import logging
 from typing import Any
@@ -26,7 +28,7 @@ from botocore.config import Config
 from backend.config import config
 from backend.optimization import get_model_for_agent
 from backend.tools.org_profile import retrieve_org_profile
-from backend.tools.application import save_application_draft, get_existing_application_draft
+from backend.tools.application import save_application_draft, get_existing_application_draft, update_draft_section
 from backend.tools.rag_search import query_knowledge_base
 from backend.tools.compliance import audit_application_compliance
 from backend.api.models.schemas import ApplicationDraftResult, ApplicationSection
@@ -45,48 +47,42 @@ You produce Sections 1, 2, and 3:
 2. Organizational Background & Capacity
 3. Statement of Need & Community Impact
 
-Use `query_knowledge_base` and `retrieve_org_profile` to ground your writing in verified historical outcomes, Form 990 financials, and staff leadership bios.
+Use `query_knowledge_base` and `retrieve_org_profile` to ground your writing.
+CRITICAL: You MUST use the `update_draft_section` tool to independently save each of your drafted sections to the shared database. Do not just chat them out.
+Call `update_draft_section` for Section 1, then for Section 2, then for Section 3.
 
 HANDOFF INSTRUCTIONS:
-After drafting your narrative sections, hand off to the `budget_specialist` agent to draft the budget section.
+After saving your sections, hand off to the `budget_specialist` agent.
 """
 
 BUDGET_SYSTEM_PROMPT = """You are the Budget Specialist Agent in the GrantScout Drafter Swarm.
 YOUR ROLE:
-You specialize in drafting rigorous, formulaic financial proposals and budget justifications compliant with federal 2 CFR 200 Uniform Guidance standards.
 You produce Section 5: Budget & Financial Justification.
+Ensure direct personnel allocations and indirect rate (MTDC) are clearly itemized.
 
-Ensure direct personnel allocations (FTEs, wages), supplies, equipment caps, and the standard 10% de minimis Modified Total Direct Cost (MTDC) indirect rate are clearly itemized.
+CRITICAL: You MUST use the `update_draft_section` tool to save your Section 5 draft to the shared database. Do not just chat it out.
 
 HANDOFF INSTRUCTIONS:
-After drafting the budget section, hand off to the `compliance_drafter` agent for project design and evaluation sections.
+After saving Section 5, hand off to the `compliance_drafter` agent.
 """
 
-COMPLIANCE_SYSTEM_PROMPT = """You are the Compliance & Sustainability Drafter Agent in the GrantScout Drafter Swarm.
+COMPLIANCE_SYSTEM_PROMPT = """You are the Compliance Drafter Agent in the GrantScout Drafter Swarm.
 YOUR ROLE:
-You specialize in project timelines, measurable evaluation metrics, and long-term sustainability frameworks.
 You produce Section 4 (Project Design & Timeline) and Section 6 (Evaluation & Sustainability).
 
-Ensure clear quarterly milestones, participant KPIs, and diversified non-federal funding models are documented.
+CRITICAL: You MUST use the `update_draft_section` tool to save Section 4 and Section 6 to the shared database. Do not just chat them out.
 
 HANDOFF INSTRUCTIONS:
-After drafting compliance sections, hand off to the `lead_drafter` agent to synthesize all sections into the final application.
+After saving your sections, hand off to the `lead_drafter` agent.
 """
 
 LEAD_DRAFTER_SYSTEM_PROMPT = """You are the Lead Drafter Coordinator in the GrantScout Drafter Swarm.
 YOUR ROLE:
-You coordinate the multi-agent Swarm of specialized grant drafting agents (Narrative Writer, Budget Specialist, Compliance Drafter).
-You synthesize all contributions into a unified, high-impact 6-section grant application and save it using the `save_application_draft` tool.
+You coordinate the swarm. Your peers have already saved their sections to the shared database using `update_draft_section`.
+Use `get_existing_application_draft` to verify that all 6 sections are present and populated.
+If any are missing, write them yourself and save them using `update_draft_section`.
 
-After receiving handoffs from all sub-agents, compile the final application with all 6 sections:
-1. Executive Summary
-2. Organizational Background & Capacity
-3. Statement of Need
-4. Project Design & Timeline
-5. Budget & Financial Justification
-6. Evaluation & Sustainability Plan
-
-Use `save_application_draft` to persist the final application. Do NOT hand off to any other agent — you are the final node.
+Once the draft is 100% complete with 6 sections, output a final summary stating 'Application Drafting Complete'. Do NOT hand off to anyone else.
 """
 
 
@@ -115,7 +111,7 @@ def create_narrative_agent() -> Agent:
         name="narrative_writer",
         model=_create_bedrock_model(),
         system_prompt=NARRATIVE_SYSTEM_PROMPT,
-        tools=[retrieve_org_profile, query_knowledge_base],
+        tools=[retrieve_org_profile, query_knowledge_base, update_draft_section],
     )
 
 
@@ -125,7 +121,7 @@ def create_budget_agent() -> Agent:
         name="budget_specialist",
         model=_create_bedrock_model(),
         system_prompt=BUDGET_SYSTEM_PROMPT,
-        tools=[retrieve_org_profile, audit_application_compliance],
+        tools=[retrieve_org_profile, audit_application_compliance, update_draft_section],
     )
 
 
@@ -135,7 +131,7 @@ def create_compliance_drafter_agent() -> Agent:
         name="compliance_drafter",
         model=_create_bedrock_model(),
         system_prompt=COMPLIANCE_SYSTEM_PROMPT,
-        tools=[query_knowledge_base, audit_application_compliance],
+        tools=[query_knowledge_base, audit_application_compliance, update_draft_section],
     )
 
 
@@ -154,6 +150,7 @@ def create_drafter_agent() -> Agent:
             query_knowledge_base,
             save_application_draft,
             get_existing_application_draft,
+            update_draft_section,
             audit_application_compliance,
         ],
     )
@@ -207,6 +204,27 @@ def get_text_from_result(result) -> str:
     except Exception as e:
         logger.warning(f"Error extracting text from result: {e}")
     return str(result)
+
+
+class StdoutInterceptor:
+    """Intercepts stdout to stream raw agent thoughts back via callback."""
+    def __init__(self, callback):
+        self.callback = callback
+        self.original_stdout = sys.stdout
+        self.buffer = ""
+
+    def write(self, s):
+        self.original_stdout.write(s)
+        self.buffer += s
+        while "\n" in self.buffer:
+            line, self.buffer = self.buffer.split("\n", 1)
+            line = line.strip()
+            # Pass clean lines to the UI (truncate overly long ones)
+            if line and "DEBUG" not in line:
+                self.callback(line[:150])
+
+    def flush(self):
+        self.original_stdout.flush()
 
 
 def draft_application_structured(grant_data: dict[str, Any], status_callback: Any = None) -> ApplicationDraftResult:
@@ -264,10 +282,15 @@ Start by retrieving the organization profile and relevant knowledge base documen
 
     if status_callback:
         status_callback("Swarm started — narrative_writer agent is working...")
+        interceptor = StdoutInterceptor(status_callback)
+    else:
+        interceptor = sys.stdout
 
-    # Run the Swarm asynchronously
+    # Run the Swarm asynchronously with intercepted stdout
     try:
-        swarm_result = asyncio.run(swarm.invoke_async(task))
+        with contextlib.redirect_stdout(interceptor): # type: ignore
+            swarm_result = asyncio.run(swarm.invoke_async(task))
+            
         logger.info(
             f"Drafter Swarm completed. Status: {swarm_result.status}, "
             f"Executions: {swarm_result.execution_count}, "
@@ -277,44 +300,30 @@ Start by retrieving the organization profile and relevant knowledge base documen
         # Already in an async context — run in a new thread
         loop = asyncio.new_event_loop()
         try:
-            swarm_result = loop.run_until_complete(swarm.invoke_async(task))
+            with contextlib.redirect_stdout(interceptor): # type: ignore
+                swarm_result = loop.run_until_complete(swarm.invoke_async(task))
         finally:
             loop.close()
 
     if status_callback:
-        status_callback("Swarm completed — generating structured output...")
+        status_callback("Swarm completed — retrieving populated native sections...")
 
-    # After the Swarm completes, use the Lead Drafter for final structured output
-    # The Swarm should have already saved the draft via save_application_draft,
-    # but we also want the structured Pydantic output for the API response
-    lead_agent = create_drafter_agent()
-
-    try:
-        agent_result = lead_agent(
-            f"Retrieve the saved application draft for grant {grant_id} using get_existing_application_draft. "
-            f"Then return the complete application as an ApplicationDraftResult structured output with "
-            f"grant_id='{grant_id}', org_id='default', and grant_title='{title}'.",
-            structured_output_model=ApplicationDraftResult,
+    # The Swarm has natively hydrated the shared state via `update_draft_section`.
+    # No need for an expensive, brittle extractor agent. We just fetch the completed draft from the DB.
+    from backend.storage.local_storage import storage
+    apps = storage.list_applications()
+    saved_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+    
+    if saved_app and saved_app.get("sections"):
+        draft_result = ApplicationDraftResult(
+            grant_id=grant_id,
+            org_id=saved_app.get("org_id", "default"),
+            grant_title=title,
+            sections=[ApplicationSection(**s) for s in saved_app["sections"]],
+            completion_percentage=saved_app.get("completion_percentage", 100.0)
         )
-        if isinstance(agent_result.structured_output, ApplicationDraftResult):
-            draft_result = agent_result.structured_output
-        else:
-            raise ValueError("Empty or invalid structured output returned by lead drafter agent")
-    except Exception as e:
-        logger.error(f"Structured output extraction failed ({e}); attempting direct retrieval...")
-        # Fallback: check if the Swarm already saved the draft
-        from backend.storage.local_storage import storage
-        apps = storage.list_applications()
-        saved_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
-        if saved_app and saved_app.get("sections"):
-            draft_result = ApplicationDraftResult(
-                grant_id=grant_id,
-                org_id="default",
-                grant_title=title,
-                sections=[ApplicationSection(**s) for s in saved_app["sections"]],
-            )
-        else:
-            raise ValueError(f"Swarm drafting failed: {e}")
+    else:
+        raise ValueError("Swarm failed to populate sections natively using the shared state.")
 
     # Ensure the draft is persisted
     save_result = save_application_draft(

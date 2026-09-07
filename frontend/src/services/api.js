@@ -140,8 +140,9 @@ export async function searchDocuments(query, topK = 3, category = null) {
 // ─────────────────────────────────────────────
 
 export async function fetchApplications() {
-  const res = await fetch(`${BASE_URL}/api/applications`);
-  if (!res.ok) throw new Error(`Applications fetch failed: ${res.status}`);
+  const ts = new Date().getTime();
+  const res = await fetch(`${BASE_URL}/api/applications?_t=${ts}`, { headers: publicHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch applications');
   const data = await res.json();
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.applications)) return data.applications;

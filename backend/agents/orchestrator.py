@@ -449,29 +449,19 @@ async def run_graph_orchestration_cycle() -> dict[str, Any]:
     return summary
 
 
-def run_full_orchestration_cycle() -> dict[str, Any]:
+async def run_full_orchestration_cycle() -> dict[str, Any]:
     """Execute a complete autonomous scan, match, draft, and deadline cycle.
 
-    Runs the Graph DAG asynchronously if an event loop is available,
-    otherwise falls back to synchronous sequential execution.
+    Runs the Graph DAG asynchronously.
 
     Returns:
         Comprehensive summary dictionary of the orchestration run.
     """
-    # Try to run the Graph-based async pipeline
     try:
-        loop = asyncio.get_running_loop()
-        # If we're already in an async context, create a task
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            future = pool.submit(asyncio.run, run_graph_orchestration_cycle())
-            return future.result(timeout=1800)
-    except RuntimeError:
-        # No running event loop — run directly
-        return asyncio.run(run_graph_orchestration_cycle())
+        return await run_graph_orchestration_cycle()
     except Exception as e:
-        logger.warning(f"Graph DAG execution failed ({e}), falling back to sequential execution...")
-        return _run_sequential_fallback()
+        logger.error(f"Graph DAG execution failed: {e}")
+        raise e
 
 
 def _run_sequential_fallback() -> dict[str, Any]:

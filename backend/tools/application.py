@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from strands import tool
@@ -12,6 +12,88 @@ from strands import tool
 from backend.storage.local_storage import storage
 
 logger = logging.getLogger(__name__)
+
+@tool
+def update_draft_section(
+    grant_id: str,
+    org_id: str,
+    grant_title: str,
+    section_title: str,
+    content: str,
+) -> dict[str, Any]:
+    """Save or update a specific section of a grant application draft.
+    
+    Use this tool to incrementally build the application draft. Each specialized agent
+    should call this tool for the sections they are responsible for writing.
+    
+    Args:
+        grant_id: The unique ID of the target grant opportunity.
+        org_id: The organization ID applying for the grant.
+        grant_title: Title of the grant opportunity.
+        section_title: The specific section being updated (e.g., 'Executive Summary', 'Budget & Financial Justification').
+        content: The full drafted text for this section.
+    
+    Returns:
+        A dictionary containing success status and current completion percentage.
+    """
+    try:
+        # Get existing or create new draft
+        apps = storage.list_applications()
+        existing = next((a for a in apps if a.get("grant_id") == grant_id), None)
+        
+        if existing:
+            draft_data: dict[str, Any] = existing
+            sections = draft_data.get("sections", [])
+        else:
+            draft_data: dict[str, Any] = {
+                "draft_id": f"draft-{uuid.uuid4().hex[:10]}",
+                "grant_id": grant_id,
+                "org_id": org_id,
+                "grant_title": grant_title,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "sections": []
+            }
+            sections = []
+
+        # Update or add section
+        section_idx = next((i for i, s in enumerate(sections) if s.get("title") == section_title), -1)
+        
+        word_count = len(content.split())
+        new_section = {
+            "title": section_title,
+            "content": content,
+            "is_auto_filled": True,
+            "needs_review": True,
+            "word_count": word_count
+        }
+
+        if section_idx >= 0:
+            sections[section_idx] = new_section
+        else:
+            sections.append(new_section)
+            
+        draft_data["sections"] = sections
+        draft_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        
+        # Calculate completion pct
+        completion_pct = round((len(sections) / 6.0) * 100, 1)
+        draft_data["completion_percentage"] = completion_pct
+
+        storage.save_application(draft_data)
+        
+        # Update grant status
+        grant = storage.get_grant(grant_id)
+        if grant:
+            grant["status"] = "ready_for_review"
+            grant["draft_location"] = draft_data["draft_id"]
+            grant["updated_at"] = datetime.now(timezone.utc).isoformat()
+            storage.save_grant(grant)
+            
+        return {"saved": True, "section": section_title, "completion": completion_pct}
+        
+    except Exception as e:
+        logger.error(f"Error updating draft section {section_title}: {e}")
+        return {"saved": False, "error": str(e)}
 
 
 @tool
@@ -59,8 +141,8 @@ def save_application_draft(
             "grant_title": grant_title,
             "sections": sections,
             "completion_percentage": completion_pct,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         storage.save_application(draft_data)
@@ -70,7 +152,7 @@ def save_application_draft(
         if grant:
             grant["status"] = "ready_for_review"
             grant["draft_location"] = draft_id
-            grant["updated_at"] = datetime.utcnow().isoformat()
+            grant["updated_at"] = datetime.now(timezone.utc).isoformat()
             storage.save_grant(grant)
 
         # Add activity entry
@@ -78,7 +160,7 @@ def save_application_draft(
             "event_type": "application_drafted",
             "message": f"Pre-filled application draft for '{grant_title}' ({completion_pct}% auto-completed)",
             "details": {"grant_id": grant_id, "draft_id": draft_id},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         logger.info(f"Saved application draft {draft_id} for grant {grant_id}")

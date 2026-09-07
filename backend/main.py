@@ -20,9 +20,9 @@ if sys.stdout.encoding != "utf-8" and hasattr(sys.stdout, "reconfigure"):
 if sys.stderr.encoding != "utf-8" and hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
@@ -74,7 +74,7 @@ async def _background_scan_loop():
             })
 
             from backend.agents.orchestrator import run_full_orchestration_cycle
-            result = await asyncio.to_thread(run_full_orchestration_cycle)
+            result = await run_full_orchestration_cycle()
 
             grants_found = result.get("grants_scanned", 0)
             logger.info(f"✅ Background auto-scan complete. {grants_found} grants processed.")
@@ -404,6 +404,7 @@ async def update_application(
 @app.post("/api/grants/{grant_id}/draft")
 async def trigger_grant_draft(
     grant_id: str,
+    background_tasks: BackgroundTasks,
     auth: TokenPayload = Depends(get_current_auth),
 ):
     """Trigger the Drafter Agent to pre-fill a grant application (Authenticated)."""
@@ -418,7 +419,13 @@ async def trigger_grant_draft(
         grant["status"] = "drafting"
         storage.save_grant(grant)
 
-        import asyncio
+        # Broadcast start
+        await broadcast_event({
+            "type": "drafting_started",
+            "message": f"INITIALIZING DRAFTER SWARM...",
+            "grant_id": grant_id,
+        })
+        
         loop = asyncio.get_running_loop()
         def on_agent_thought(msg: str):
             asyncio.run_coroutine_threadsafe(
@@ -430,26 +437,44 @@ async def trigger_grant_draft(
                 loop
             )
 
-        await broadcast_event({
-            "type": "drafting_started",
-            "message": f"INITIALIZING DRAFTER SWARM...",
-            "grant_id": grant_id,
-        })
+        # Define synchronous wrapper for BackgroundTasks
+        def draft_task_runner():
+            if grant is None:
+                return
+            try:
+                # Runs synchronously in a background thread, preventing event loop blocking
+                draft_application_for_grant(grant, on_agent_thought)
+                
+                # Check drafted application
+                apps = storage.list_applications()
+                matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+                
+                asyncio.run_coroutine_threadsafe(
+                    broadcast_event({
+                        "type": "application_drafted",
+                        "message": f"Draft proposal ready for '{grant.get('title')}'",
+                        "grant_id": grant_id,
+                        "draft_id": matched_app.get("draft_id") if matched_app else None,
+                    }),
+                    loop
+                )
+            except Exception as e:
+                logger.error(f"Drafting failed in background: {e}")
+                grant["status"] = "matched"
+                storage.save_grant(grant)
+                asyncio.run_coroutine_threadsafe(
+                    broadcast_event({
+                        "type": "drafting_failed",
+                        "grant_id": grant_id,
+                        "message": f"Auto-drafting failed for '{grant.get('title')}': {str(e)}",
+                    }),
+                    loop
+                )
 
-        result = await asyncio.to_thread(draft_application_for_grant, grant, on_agent_thought)
+        # Dispatch securely to background task queue
+        background_tasks.add_task(draft_task_runner)
 
-        # Check drafted application
-        apps = storage.list_applications()
-        matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
-
-        await broadcast_event({
-            "type": "application_drafted",
-            "message": f"Draft proposal ready for '{grant.get('title')}'",
-            "grant_id": grant_id,
-            "draft_id": matched_app.get("draft_id") if matched_app else None,
-        })
-
-        return {"status": "drafted", "result": result, "application": matched_app, "requested_by": auth.sub}
+        return {"status": "drafting_queued", "requested_by": auth.sub}
 
     except Exception as e:
         logger.error(f"Drafting failed: {e}")
@@ -463,8 +488,8 @@ async def trigger_grant_draft(
 # ──────────────────────────────────────────────
 
 
-async def execute_background_drafting(grant_id: str):
-    """Asynchronous background worker that executes the Drafter Agent swarm for a high-scoring grant."""
+def execute_background_drafting(grant_id: str, loop: asyncio.AbstractEventLoop):
+    """Synchronous background worker that executes the Drafter Agent swarm securely."""
     grant = storage.get_grant(grant_id)
     if not grant:
         logger.warning(f"Background drafting: grant {grant_id} not found in storage.")
@@ -480,14 +505,15 @@ async def execute_background_drafting(grant_id: str):
         grant["is_drafting"] = True
         storage.save_grant(grant)
 
-        await broadcast_event({
-            "type": "drafting_started",
-            "grant_id": grant_id,
-            "title": title,
-            "message": f"Autonomous AI Drafter swarm started for '{title}'...",
-        })
-
-        loop = asyncio.get_running_loop()
+        asyncio.run_coroutine_threadsafe(
+            broadcast_event({
+                "type": "drafting_started",
+                "grant_id": grant_id,
+                "title": title,
+                "message": f"Autonomous AI Drafter swarm started for '{title}'...",
+            }),
+            loop
+        )
 
         def on_agent_thought(msg: str):
             asyncio.run_coroutine_threadsafe(
@@ -499,8 +525,8 @@ async def execute_background_drafting(grant_id: str):
                 loop,
             )
 
-        # Run multi-agent drafting swarm in worker thread without blocking
-        result = await asyncio.to_thread(draft_application_for_grant, grant, on_agent_thought)
+        # Run multi-agent drafting swarm synchronously in the background thread
+        result = draft_application_for_grant(grant, on_agent_thought)
 
         apps = storage.list_applications()
         matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
@@ -513,30 +539,39 @@ async def execute_background_drafting(grant_id: str):
 
         logger.info(f"✅ Background drafting completed successfully for {grant_id}")
 
-        await broadcast_event({
-            "type": "application_drafted",
-            "message": f"Draft proposal ready for '{title}'",
-            "grant_id": grant_id,
-            "draft_id": matched_app.get("draft_id") if matched_app else None,
-        })
+        asyncio.run_coroutine_threadsafe(
+            broadcast_event({
+                "type": "application_drafted",
+                "message": f"Draft proposal ready for '{title}'",
+                "grant_id": grant_id,
+                "draft_id": matched_app.get("draft_id") if matched_app else None,
+            }),
+            loop
+        )
 
     except Exception as e:
         logger.error(f"❌ Background drafting failed for {grant_id}: {e}")
         grant["status"] = "matched"
         grant["is_drafting"] = False
         storage.save_grant(grant)
-        await broadcast_event({
-            "type": "drafting_failed",
-            "grant_id": grant_id,
-            "message": f"Auto-drafting failed for '{title}': {str(e)}",
-        })
+        asyncio.run_coroutine_threadsafe(
+            broadcast_event({
+                "type": "drafting_failed",
+                "grant_id": grant_id,
+                "message": f"Auto-drafting failed for '{title}': {str(e)}",
+            }),
+            loop
+        )
 
 
-def dispatch_queued_drafts() -> list[str]:
+def dispatch_queued_drafts(background_tasks: BackgroundTasks | None = None, loop: asyncio.AbstractEventLoop | None = None) -> list[str]:
     """Find any grants in 'drafting' status without an existing completed draft and launch background workers."""
     grants = storage.list_grants()
     apps = storage.list_applications()
     drafted_grant_ids = {a.get("grant_id") for a in apps if a.get("grant_id")}
+
+    if loop is None:
+        loop = asyncio.get_running_loop()
 
     dispatched = []
     for g in grants:
@@ -545,7 +580,10 @@ def dispatch_queued_drafts() -> list[str]:
             continue
         if (g.get("status") == "drafting" or g.get("is_drafting")) and gid not in drafted_grant_ids:
             dispatched.append(gid)
-            asyncio.create_task(execute_background_drafting(gid))
+            if background_tasks:
+                background_tasks.add_task(execute_background_drafting, gid, loop)
+            else:
+                loop.run_in_executor(None, execute_background_drafting, gid, loop)
 
     if dispatched:
         logger.info(f"⚡ Dispatched {len(dispatched)} autonomous background drafting task(s): {dispatched}")
@@ -553,7 +591,10 @@ def dispatch_queued_drafts() -> list[str]:
 
 
 @app.post("/api/agent/scan")
-async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
+async def trigger_scan(
+    background_tasks: BackgroundTasks,
+    auth: TokenPayload = Depends(get_current_auth)
+):
     """Manually trigger a grant scan (Authenticated)."""
     try:
         from backend.agents.orchestrator import run_orchestrator
@@ -571,8 +612,9 @@ async def trigger_scan(auth: TokenPayload = Depends(get_current_auth)):
 
         result = await run_orchestrator()
 
-        # Dispatch background drafting for any high-scoring grants discovered
-        queued_drafts = dispatch_queued_drafts()
+        # Dispatch background drafting for any high-scoring grants discovered securely
+        loop = asyncio.get_running_loop()
+        queued_drafts = dispatch_queued_drafts(background_tasks, loop)
 
         storage.add_activity({
             "event_type": "scan_completed",
@@ -611,7 +653,7 @@ async def trigger_full_orchestration(auth: TokenPayload = Depends(get_current_au
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-        summary = run_full_orchestration_cycle()
+        summary = await run_full_orchestration_cycle()
 
         # Dispatch background drafting for high-scoring grants
         queued_drafts = dispatch_queued_drafts()

@@ -1,6 +1,6 @@
 # 🛰️ GrantScout
 
-> **GrantScout isn't just a grant writer; it's a proactive, autonomous grant pipeline engine. It runs in the background 24/7, actively scouting federal databases, scoring matches against your organizational profile, and fully pre-drafting 6-section applications for high-fit opportunities before you even log in. You don't manage it—it reports to you when there's a competitive draft ready for review.**
+> **GrantScout is a 2 CFR 200 compliance force-multiplier. It runs in the background 24/7, actively scouting federal databases, scoring matches against your organizational profile, and fully pre-drafting strictly-compliant 6-section applications for high-fit opportunities before you even log in. You don't manage it—it reports to you when there's a competitive, 2 CFR 200 compliant draft ready for review.**
 
 ---
 
@@ -17,8 +17,8 @@ The result? The organizations closest to the communities that need help the most
 1. **Scans** the live [Grants.gov REST API](https://api.grants.gov/) (chosen deliberately as the most complex, unstructured, and bureaucratic data source in the nonprofit space to prove the system's robust parsing and structuring capabilities).
 2. **Scores** every discovered grant against the organization's profile using a 5-dimension, 100-point rubric (Mission Alignment, Eligibility Fit, Capacity Match, Geographic Fit, Track Record), with Pydantic-enforced structured outputs so scores are always consistent and auditable.
 3. **Routes** grants autonomously via a deterministic Graph execution: high-fit opportunities (≥80) trigger automatic application drafting; medium-fit (50–79) are flagged for human review; low-fit (<50) are archived silently.
-4. **Drafts** competitive 6-section federal grant applications grounded in the nonprofit's own history (past proposals, IRS 990 filings, and impact reports), retrieved via a built-in RAG knowledge base.
-5. **Surfaces** only when a real decision is needed: a high-confidence match found, or a draft ready for final human review.
+4. **Drafts** highly competitive, strictly 2 CFR 200-compliant 6-section federal grant applications grounded in the nonprofit's own history (past proposals, IRS 990 filings, and impact reports), retrieved via a built-in RAG knowledge base.
+5. **Surfaces** only when a real decision is needed: a high-confidence match found, or a compliant draft ready for final human review.
 
 ## Who It's For
 

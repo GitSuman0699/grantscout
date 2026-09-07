@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 import requests
 
@@ -51,7 +51,7 @@ def send_deadline_alert(
                 "days_remaining": days_remaining,
                 "urgency": urgency_level,
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         logger.info(f"Recorded deadline alert for {grant_id} ({days_remaining} days left)")
@@ -127,7 +127,7 @@ def scan_upcoming_deadlines() -> dict[str, Any]:
                 try:
                     close_clean = close.split(" ")[0] if " " in close and "-" in close else close.split(" 12:")[0]
                     close_dt = datetime.strptime(close_clean, fmt)
-                    days_left = (close_dt - datetime.utcnow()).days
+                    days_left = (close_dt - datetime.now(timezone.utc)).days
                     break
                 except Exception:
                     continue
