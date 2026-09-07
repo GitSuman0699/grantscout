@@ -154,6 +154,19 @@ export async function fetchApplicationById(draftId) {
   return res.json();
 }
 
+export async function updateApplication(draftId, payload) {
+  const res = await fetch(`${BASE_URL}/api/applications/${draftId}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Application update failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ─────────────────────────────────────────────
 //  Cost & Token Optimization
 // ─────────────────────────────────────────────
@@ -201,6 +214,12 @@ export async function triggerOrchestrate() {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Orchestration trigger failed: ${res.status}`);
   }
+  return res.json();
+}
+
+export async function fetchAutoScanStatus() {
+  const res = await fetch(`${BASE_URL}/api/agent/autoscan/status`);
+  if (!res.ok) throw new Error(`Autoscan status fetch failed: ${res.status}`);
   return res.json();
 }
 

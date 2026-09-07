@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import MissionLoopBanner from '../components/MissionLoopBanner';
 import MetricsBar from '../components/MetricsBar';
 import { calculateFitScore } from '../components/GrantCard';
-import { Compass, ArrowRight, ShieldCheck, Cpu, Database, Sparkles, Target, Zap, Clock } from 'lucide-react';
+import { Compass, ArrowRight, ShieldCheck, Cpu, Database, Sparkles, Target, Zap, Clock, Activity } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { formatAsOfDate } from '../utils/dateUtils';
+import { fetchAutoScanStatus } from '../services/api';
 
 export default function HomePage() {
   const { grants, dashboardStats } = useGrants();
@@ -28,10 +29,47 @@ export default function HomePage() {
     pipelineValue: `$${(grants.reduce((sum, g) => sum + (g.award_ceiling || 0), 0) / 1000).toFixed(0)}K`,
   };
 
+  const [autoScanStatus, setAutoScanStatus] = useState(null);
+
+  useEffect(() => {
+    async function loadStatus() {
+      try {
+        const res = await fetchAutoScanStatus();
+        setAutoScanStatus(res);
+      } catch (err) {
+        console.error("Failed to load autoscan status", err);
+      }
+    }
+    loadStatus();
+    // Poll every 30s
+    const interval = setInterval(loadStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="page-container">
       {/* 3-Step Autonomous Loop & Mission Overview Banner */}
       <MissionLoopBanner />
+
+      {/* Autonomous Agent Status Indicator */}
+      {autoScanStatus && (
+        <div className="brutalist-card" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--mission-green)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+            <span className="live-indicator"></span>
+            <span className="font-heading" style={{ fontSize: '1.4rem' }}>AUTONOMOUS MODE ACTIVE</span>
+            <span className="tag-badge tag-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+              <Activity size={12} /> SCANNING EVERY {autoScanStatus.scan_interval_hours || 4}H
+            </span>
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', color: 'var(--ink-muted)' }}>
+            <strong>Last autonomous scan:</strong> {autoScanStatus.last_scan_time ? new Date(autoScanStatus.last_scan_time).toLocaleString() : 'Pending first cycle...'}
+            <br />
+            <strong>Next scan:</strong> {autoScanStatus.next_scan_time ? new Date(autoScanStatus.next_scan_time).toLocaleString() : 'Scheduling...'}
+            <br />
+            <strong>Grants auto-discovered this session:</strong> {autoScanStatus.grants_discovered_session || 0}
+          </div>
+        </div>
+      )}
 
       {/* Live System Metrics Quick Overview */}
       <div style={{ marginBottom: '2rem' }}>

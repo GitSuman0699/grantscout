@@ -13,10 +13,22 @@ import SplashScreen from './components/SplashScreen';
 import { GrantProvider, useGrants } from './context/GrantContext';
 
 function AppLayout() {
-  const { isLoading } = useGrants();
+  const { isLoading, error } = useGrants();
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Error Toast */}
+      {error && (
+        <div style={{
+          position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 9999,
+          background: '#DC2626', color: '#FFF', padding: '1rem 1.5rem',
+          border: '2px solid var(--border-dark)', boxShadow: 'var(--shadow-offset)',
+          fontFamily: 'var(--font-mono)', fontSize: '0.85rem', maxWidth: '400px'
+        }}>
+          ⚠ {error}
+        </div>
+      )}
+
       {/* Animated Brutalist Splash / Boot Screen */}
       <SplashScreen isLoading={isLoading} />
 

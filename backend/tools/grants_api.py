@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from typing import Any
 
 import requests
@@ -20,6 +21,19 @@ logger = logging.getLogger(__name__)
 
 GRANTS_API_BASE = config.GRANTS_API_BASE_URL
 REQUEST_TIMEOUT = 30
+
+
+def strip_html_tags(text: str) -> str:
+    """Remove HTML tags and decode entities from API response text."""
+    if not text:
+        return ""
+    # Remove HTML tags
+    clean = re.sub(r'<[^>]+>', ' ', text)
+    # Decode HTML entities
+    clean = html.unescape(clean)
+    # Collapse whitespace
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean
 
 
 @tool
@@ -171,13 +185,13 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
         synopsis = opp.get("synopsis") or opp.get("forecast") or {}
 
         raw_title = opp.get("opportunityTitle") or synopsis.get("opportunityTitle", "Unknown Title")
-        clean_title = html.unescape(raw_title) if raw_title else "Unknown Title"
+        clean_title = strip_html_tags(raw_title) if raw_title else "Unknown Title"
 
         raw_synopsis = synopsis.get("synopsisDesc") or synopsis.get("forecastDesc") or synopsis.get("description") or ""
-        clean_synopsis = html.unescape(raw_synopsis) if raw_synopsis else ""
+        clean_synopsis = strip_html_tags(raw_synopsis) if raw_synopsis else ""
 
         raw_agency = synopsis.get("agencyName", "")
-        clean_agency = html.unescape(raw_agency) if raw_agency else ""
+        clean_agency = strip_html_tags(raw_agency) if raw_agency else ""
 
         pkgs = opp.get("opportunityPkgs", [])
         has_packages = len(pkgs) > 0

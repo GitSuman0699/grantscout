@@ -1,6 +1,6 @@
 # 🛰️ GrantScout
 
-> **An autonomous AI agent that finds federal grants for small nonprofits, scores how well they fit, and pre-writes the application, so your team can focus on the mission, not the paperwork.**
+> **GrantScout isn't just a grant writer; it's a proactive, autonomous grant pipeline engine. It runs in the background 24/7, actively scouting federal databases, scoring matches against your organizational profile, and fully pre-drafting 6-section applications for high-fit opportunities before you even log in. You don't manage it—it reports to you when there's a competitive draft ready for review.**
 
 ---
 
@@ -12,11 +12,11 @@ The result? The organizations closest to the communities that need help the most
 
 ## What GrantScout Does
 
-**GrantScout** is a multi-agent AI system built with the **[Strands Agents SDK](https://github.com/strands-agents/sdk-python)** and **Amazon Bedrock**. It runs autonomously in the background on a configurable schedule (default: every 24 hours), scanning for new federal grants, scoring them, and drafting applications — only surfacing when there's a real decision to make. GrantScout:
+**GrantScout** is a multi-agent AI system built with the **[Strands Agents SDK](https://github.com/strands-agents/sdk-python)** and **Amazon Bedrock**. It doesn't wait for human instruction—it operates proactively on a configurable schedule (default: every 24 hours). The engine scouts for funding, executes complex multi-dimensional scoring, and coordinates a swarm of specialized drafting agents entirely in the background, only surfacing to the user when a high-quality draft is ready for final approval. GrantScout:
 
-1. **Scans** the live [Grants.gov REST API](https://api.grants.gov/) for real federal funding opportunities that match the nonprofit's mission keywords.
+1. **Scans** the live [Grants.gov REST API](https://api.grants.gov/) (chosen deliberately as the most complex, unstructured, and bureaucratic data source in the nonprofit space to prove the system's robust parsing and structuring capabilities).
 2. **Scores** every discovered grant against the organization's profile using a 5-dimension, 100-point rubric (Mission Alignment, Eligibility Fit, Capacity Match, Geographic Fit, Track Record), with Pydantic-enforced structured outputs so scores are always consistent and auditable.
-3. **Routes** grants autonomously: high-fit opportunities (≥80) trigger automatic application drafting; medium-fit (50–79) are flagged for human review; low-fit (<50) are archived silently.
+3. **Routes** grants autonomously via a deterministic Graph execution: high-fit opportunities (≥80) trigger automatic application drafting; medium-fit (50–79) are flagged for human review; low-fit (<50) are archived silently.
 4. **Drafts** competitive 6-section federal grant applications grounded in the nonprofit's own history (past proposals, IRS 990 filings, and impact reports), retrieved via a built-in RAG knowledge base.
 5. **Surfaces** only when a real decision is needed: a high-confidence match found, or a draft ready for final human review.
 
@@ -356,7 +356,19 @@ python tests/eval_harness.py
 cd frontend && npm run build
 ```
 
-### Evaluation Harness Results
+### 🛣️ Validation & Benchmarking Roadmap
+
+Our hackathon prototype successfully demonstrates complex multi-agent orchestration, Graph-based routing, and RAG retrieval over nonprofit documents. To mature this into a production-ready federal grant generation engine, we have outlined the following validation roadmap:
+
+#### Draft Quality Benchmarking
+Currently, the Drafter Swarm generates complete, 6-section grant narratives (4,000+ words). To objectively validate the *competitiveness* of these drafts, we plan to:
+1. **Blind Expert Review**: Submit 5 AI-generated drafts alongside 5 human-written winning proposals to professional grant reviewers, scoring them blindly against standard federal rubrics.
+2. **Win-Rate Tracking**: Partner with a pilot cohort of 10 nonprofits to submit AI-assisted drafts and track their actual funding win rates compared to historical baselines.
+3. **Compliance Stress Testing**: Adversarially test the Compliance Auditor agent against deliberately non-compliant budget narratives to measure false-positive/false-negative rates.
+
+### Evaluation Harness Results (Initial Baseline)
+
+We built an automated evaluation harness (`tests/eval_harness.py`) to benchmark the Matcher and Drafter agents against 5 ground-truth test cases. **Note:** These initial results validate the *functional execution* of the system (i.e., the agent successfully follows instructions, correctly uses RAG, and produces the required output schema), rather than the subjective quality of the final prose.
 
 | Test Case | Grant | Expected Score | Actual Score | Action | Result |
 |-----------|-------|---------------|-------------|--------|--------|

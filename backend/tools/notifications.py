@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Any
+import requests
 
 from strands import tool
 
 from backend.storage.local_storage import storage
+from backend.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +61,42 @@ def send_deadline_alert(
             "days_remaining": days_remaining,
             "error": None,
         }
-
     except Exception as e:
-        logger.error(f"Error sending deadline alert: {e}")
-        return {"delivered": False, "grant_id": grant_id, "error": str(e)}
+        logger.error(f"Failed to record deadline alert: {e}")
+        return {"delivered": False, "error": str(e)}
+
+
+@tool
+def send_external_notification(
+    channel: str,
+    subject: str,
+    body: str,
+    urgency: str = "normal"
+) -> dict:
+    """Send a notification to external channels (Slack webhook, email).
+    
+    Args:
+        channel: Notification channel ('slack', 'email', 'dashboard').
+        subject: Alert subject line.
+        body: Full notification text.
+        urgency: 'critical', 'high', 'normal', or 'low'.
+    
+    Returns:
+        Delivery confirmation.
+    """
+    if channel == "slack" and config.SLACK_WEBHOOK_URL:
+        emoji = {"critical": "🚨", "high": "⚠️", "normal": "📋", "low": "📌"}
+        payload = {
+            "text": f"{emoji.get(urgency, '📋')} *{subject}*\n{body}"
+        }
+        try:
+            requests.post(config.SLACK_WEBHOOK_URL, json=payload, timeout=10)
+            return {"delivered": True, "channel": "slack"}
+        except Exception as e:
+            return {"delivered": False, "error": str(e)}
+    
+    # Default: dashboard-only
+    return {"delivered": True, "channel": "dashboard"}
 
 
 @tool

@@ -434,4 +434,9 @@ def _tracking_agent_call(self, *args, **kwargs):
         
     return result
 
+# HACKATHON NOTE: We are monkey-patching strands.Agent.__call__ here to globally
+# intercept all agent invocations and log their token usage to our TokenTracker.
+# In a real production deployment, we would build this into a proper Strands middleware 
+# or callback handler, but for the hackathon MVP, this ensures we track costs
+# for every agent without modifying all of our individual agent definitions.
 Agent.__call__ = _tracking_agent_call

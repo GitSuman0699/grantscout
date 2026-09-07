@@ -134,11 +134,10 @@ export default function Header() {
           <button
             onClick={() => setOnboardingOpen(true)}
             className="brutalist-btn btn-outline"
-            style={{ padding: '6px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-            title="Onboard Custom Nonprofit Profile"
+            style={{ fontSize: '0.85rem' }}
+            title="Configure Custom Nonprofit Profile"
           >
-            <PlusCircle size={14} />
-            <span>+ ONBOARD</span>
+            ⚙ CONFIGURE PROFILE
           </button>
         </div>
 

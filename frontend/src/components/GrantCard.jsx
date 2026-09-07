@@ -2,6 +2,12 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Building2, Sparkles, Target, FileCheck, FileText } from 'lucide-react';
 
+/** Strip HTML tags and decode entities from API response text. */
+function stripHtml(text) {
+  if (!text) return '';
+  return text.replace(/<[^>]*>/g, ' ').replace(/&[a-zA-Z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /**
  * Universal calculation of grant fit percentage score.
  * Handles match_score.total, match_score 5-dimension objects, numbers, and raw score fields.
@@ -171,9 +177,12 @@ export default function GrantCard({ grant }) {
           marginBottom: '1rem',
           flex: 1
         }}>
-          {grant.synopsis 
-            ? grant.synopsis.slice(0, 140) + (grant.synopsis.length > 140 ? '...' : '') 
-            : 'Federal funding opportunity for qualifying 501(c)(3) nonprofit organizations.'}
+          {(() => {
+            const clean = stripHtml(grant.synopsis);
+            return clean
+              ? clean.slice(0, 140) + (clean.length > 140 ? '...' : '')
+              : 'Federal funding opportunity for qualifying 501(c)(3) nonprofit organizations.';
+          })()}
         </p>
 
         {/* Dashed Divider */}

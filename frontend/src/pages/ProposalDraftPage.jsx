@@ -6,7 +6,7 @@ import {
   Edit3, Eye, Save, RefreshCw, ShieldCheck, BookOpen, Layers
 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
-import { fetchApplications, triggerDraft, createSSEStream } from '../services/api';
+import { fetchApplications, triggerDraft, createSSEStream, updateApplication } from '../services/api';
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
 import ComplianceAuditView from '../components/ComplianceAuditView';
 
@@ -389,7 +389,7 @@ export default function ProposalDraftPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSaveSection = () => {
+  const handleSaveSection = async () => {
     if (!draft || !draft.sections) return;
     setIsSaving(true);
     const updatedSections = [...draft.sections];
@@ -402,9 +402,18 @@ export default function ProposalDraftPage() {
       ...draft,
       sections: updatedSections,
     };
-    setDraft(updatedDraft);
-    setIsEditMode(false);
-    setIsSaving(false);
+    
+    try {
+      const draftId = draft.draft_id || draft.id || (grant && (grant.grant_id || grant.id));
+      await updateApplication(draftId, { sections: updatedSections });
+      setDraft(updatedDraft);
+      setIsEditMode(false);
+    } catch (err) {
+      console.error('Failed to save section:', err);
+      // Fallback UI error handling could go here
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!grant) {

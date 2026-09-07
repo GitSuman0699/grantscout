@@ -5,6 +5,12 @@ import { useGrants } from '../context/GrantContext';
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
 import { getOfficialGrantUrl } from './ProposalDraftPage';
 
+/** Strip HTML tags and decode entities from API response text. */
+function stripHtml(text) {
+  if (!text) return '';
+  return text.replace(/<[^>]*>/g, ' ').replace(/&[a-zA-Z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export default function RubricPage() {
   const { id } = useParams();
   const location = useLocation();
@@ -117,10 +123,10 @@ export default function RubricPage() {
         </h1>
 
         <p style={{ color: 'var(--ink-muted)', fontSize: '0.92rem', lineHeight: '1.5', maxWidth: '960px' }}>
-          {grant.synopsis || 'Federal grant opportunity evaluated across Mission Alignment, Eligibility, Organizational Capacity, Geographic Target, and Historical Track Record.'}
+          {stripHtml(grant.synopsis) || 'Federal grant opportunity evaluated across Mission Alignment, Eligibility, Organizational Capacity, Geographic Target, and Historical Track Record.'}
         </p>
 
-        {grant.award_ceiling && (
+        {grant.award_ceiling > 0 && (
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1.25rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
             <span className="tag-badge tag-dark">
               AWARD CEILING: ${grant.award_ceiling.toLocaleString()}
