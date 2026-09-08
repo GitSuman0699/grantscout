@@ -670,3 +670,37 @@ body {
   }
 }
 
+/* ==========================================================================
+   Zen Mode (Focus Mode) Overrides
+   ========================================================================== */
+
+body.zen-mode {
+  --canvas-bg: #F9FAFB;
+  --card-bg: #FFFFFF;
+  --card-alt-bg: #F3F4F6;
+  --border-dark: #E5E7EB;
+  --shadow-offset: 0px 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-offset-sm: 0px 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-offset-lg: 0px 8px 24px rgba(0, 0, 0, 0.08);
+  --font-heading: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --ink: #1F2937;
+  --ink-muted: #6B7280;
+}
+
+body.zen-mode .brutalist-card,
+body.zen-mode .brutalist-btn {
+  border-radius: 8px;
+  border-width: 1px;
+}
+
+body.zen-mode .agent-telemetry-tray {
+  display: none !important;
+}
+
+body.zen-mode .tag-badge {
+  border-radius: 4px;
+}
+
+body.zen-mode .workstation-tab-btn {
+  border-radius: 6px;
+}

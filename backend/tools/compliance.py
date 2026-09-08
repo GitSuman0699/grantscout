@@ -85,6 +85,30 @@ def parse_indirect_rate(budget_text: str) -> tuple[float, bool]:
 
 
 @tool
+def calculate_mtdc_compliance(direct_costs: float, indirect_costs: float) -> dict[str, Any]:
+    """Deterministically calculate and verify the 2 CFR 200.414(f) 10% de minimis indirect cost rate.
+    
+    Args:
+        direct_costs: Total Modified Total Direct Costs (MTDC) in dollars.
+        indirect_costs: Total indirect costs (F&A/overhead) in dollars.
+        
+    Returns:
+        Dictionary containing the computed rate, whether it is compliant, and a message.
+    """
+    if direct_costs <= 0:
+        return {"rate_pct": 0.0, "compliant": False, "message": "Direct costs must be greater than 0."}
+    
+    rate = (indirect_costs / direct_costs) * 100.0
+    is_compliant = rate <= 10.0
+    
+    return {
+        "rate_pct": round(rate, 2),
+        "compliant": is_compliant,
+        "message": f"Computed rate is {rate:.1f}%. " + ("Compliant with 10% cap." if is_compliant else "Exceeds 10% de minimis cap.")
+    }
+
+
+@tool
 def audit_application_compliance(
     grant_id: str,
     draft_id: str = "",

@@ -10,7 +10,17 @@ export default function Header() {
   const isHealthy = systemHealth === 'healthy';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [zenMode, setZenMode] = useState(false);
   const location = useLocation();
+
+  // Apply Zen Mode to body
+  useEffect(() => {
+    if (zenMode) {
+      document.body.classList.add('zen-mode');
+    } else {
+      document.body.classList.remove('zen-mode');
+    }
+  }, [zenMode]);
 
   // Auto-close mobile menu on route change
   useEffect(() => {
@@ -131,6 +141,14 @@ export default function Header() {
               if (refreshGrants) refreshGrants();
             }}
           />
+          <button
+            onClick={() => setZenMode(!zenMode)}
+            className="brutalist-btn btn-outline"
+            style={{ fontSize: '0.85rem' }}
+            title="Toggle Zen Mode"
+          >
+            {zenMode ? '🌙 ZEN MODE' : '☕ FOCUS MODE'}
+          </button>
           <button
             onClick={() => setOnboardingOpen(true)}
             className="brutalist-btn btn-outline"
@@ -262,6 +280,17 @@ export default function Header() {
 
           {/* Action Buttons inside Mobile Drawer */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <button
+              onClick={() => {
+                setZenMode(!zenMode);
+                setMobileMenuOpen(false);
+              }}
+              className="brutalist-btn btn-outline"
+              style={{ width: '100%', padding: '0.75rem', fontSize: '1.15rem' }}
+            >
+              {zenMode ? '🌙 DISABLE ZEN MODE' : '☕ ENABLE ZEN MODE'}
+            </button>
+
             <button
               onClick={() => {
                 runScanCycle();

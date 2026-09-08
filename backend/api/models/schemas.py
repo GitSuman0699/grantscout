@@ -214,6 +214,14 @@ class ApplicationDraftResult(BaseModel):
         default_factory=list,
         description="Specific tasks recommended for human staff review before submission.",
     )
+    submission_checklist: list[str] = Field(
+        default_factory=list,
+        description="Concrete checklist of requirements for submission (e.g. SAM.gov, SF-424, letters).",
+    )
+    budget_csv_data: Optional[str] = Field(
+        default=None,
+        description="Comma-separated values for the SF-424 budget template.",
+    )
 
 
 # ──────────────────────────────────────────────

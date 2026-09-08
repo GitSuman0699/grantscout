@@ -28,9 +28,9 @@ from botocore.config import Config
 from backend.config import config
 from backend.optimization import get_model_for_agent
 from backend.tools.org_profile import retrieve_org_profile
-from backend.tools.application import save_application_draft, get_existing_application_draft, update_draft_section
+from backend.tools.application import save_application_draft, get_existing_application_draft, update_draft_section, generate_budget_csv
 from backend.tools.rag_search import query_knowledge_base
-from backend.tools.compliance import audit_application_compliance
+from backend.tools.compliance import audit_application_compliance, calculate_mtdc_compliance
 from backend.api.models.schemas import ApplicationDraftResult, ApplicationSection
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,7 @@ YOUR ROLE:
 You produce Section 5: Budget & Financial Justification.
 Ensure direct personnel allocations and indirect rate (MTDC) are clearly itemized.
 
+CRITICAL: You MUST use the `calculate_mtdc_compliance` tool to deterministically verify your indirect cost math before finalizing the budget.
 CRITICAL: You MUST use the `update_draft_section` tool to save your Section 5 draft to the shared database. Do not just chat it out.
 
 HANDOFF INSTRUCTIONS:
@@ -82,7 +83,19 @@ You coordinate the swarm. Your peers have already saved their sections to the sh
 Use `get_existing_application_draft` to verify that all 6 sections are present and populated.
 If any are missing, write them yourself and save them using `update_draft_section`.
 
-Once the draft is 100% complete with 6 sections, output a final summary stating 'Application Drafting Complete'. Do NOT hand off to anyone else.
+You must also use `generate_budget_csv` to create a structured budget CSV based on the Section 5 budget narrative.
+You must compile a concrete `submission_checklist` (e.g. SAM.gov registration, SF-424 forms, specific attachments required).
+
+Once the draft is 100% complete with 6 sections, use `save_application_draft` and provide the sections, your submission_checklist, and the budget_csv_data.
+After saving, hand off to the `reviewer_agent`.
+"""
+
+REVIEWER_SYSTEM_PROMPT = """You are the Quality Reviewer Agent in the GrantScout Drafter Swarm.
+YOUR ROLE:
+You evaluate the final draft for 2 CFR 200 compliance and quality.
+Use `get_existing_application_draft` to read the completed application.
+If you find major issues (e.g., budget math is wrong, narrative doesn't match the prompt), you MUST use the built-in `handoff_to_agent` tool to hand control back to the `narrative_writer` or `budget_specialist` with targeted feedback on what to fix.
+If the draft looks highly competitive and compliant, output a final summary stating 'Application Drafting Complete'. Do NOT hand off to anyone else.
 """
 
 
@@ -121,7 +134,7 @@ def create_budget_agent() -> Agent:
         name="budget_specialist",
         model=_create_bedrock_model(),
         system_prompt=BUDGET_SYSTEM_PROMPT,
-        tools=[retrieve_org_profile, audit_application_compliance, update_draft_section],
+        tools=[retrieve_org_profile, audit_application_compliance, calculate_mtdc_compliance, update_draft_section],
     )
 
 
@@ -152,7 +165,17 @@ def create_drafter_agent() -> Agent:
             get_existing_application_draft,
             update_draft_section,
             audit_application_compliance,
+            generate_budget_csv,
         ],
+    )
+
+def create_reviewer_agent() -> Agent:
+    """Create the Quality Reviewer Agent to enforce the non-linear swarm loop."""
+    return Agent(
+        name="reviewer_agent",
+        model=_create_bedrock_model(),
+        system_prompt=REVIEWER_SYSTEM_PROMPT,
+        tools=[get_existing_application_draft, audit_application_compliance],
     )
 
 
@@ -178,12 +201,13 @@ def build_drafter_swarm() -> Swarm:
     budget_agent = create_budget_agent()
     compliance_agent = create_compliance_drafter_agent()
     lead_agent = create_drafter_agent()
+    reviewer_agent = create_reviewer_agent()
 
     swarm = Swarm(
-        nodes=[narrative_agent, budget_agent, compliance_agent, lead_agent],
+        nodes=[narrative_agent, budget_agent, compliance_agent, lead_agent, reviewer_agent],
         entry_point=narrative_agent,
-        max_handoffs=12,
-        max_iterations=16,
+        max_handoffs=15,
+        max_iterations=20,
         execution_timeout=900.0,    # 15 min total swarm timeout
         node_timeout=300.0,         # 5 min per agent
         id="grantscout_drafter_swarm",
@@ -191,7 +215,7 @@ def build_drafter_swarm() -> Swarm:
 
     logger.info(
         "GrantScout Drafter Swarm built: "
-        "narrative_writer → budget_specialist → compliance_drafter → lead_drafter"
+        "narrative_writer ↔ budget_specialist ↔ compliance_drafter ↔ lead_drafter ↔ reviewer_agent"
     )
     return swarm
 
@@ -275,8 +299,10 @@ WORKFLOW:
    Then hand off to compliance_drafter.
 3. compliance_drafter: Draft Project Design & Timeline (Section 4) and Evaluation & Sustainability 
    (Section 6). Then hand off to lead_drafter.
-4. lead_drafter: Synthesize all sections into the final application. Save the complete application 
-   using save_application_draft with grant_id='{grant_id}'.
+4. lead_drafter: Synthesize sections. Generate the budget CSV. Formulate the submission checklist. 
+   Save the complete application using save_application_draft with grant_id='{grant_id}'.
+   Then hand off to reviewer_agent.
+5. reviewer_agent: Evaluate the draft. If issues are found, hand back to earlier agents. If perfect, terminate.
 
 Start by retrieving the organization profile and relevant knowledge base documents."""
 
@@ -320,17 +346,21 @@ Start by retrieving the organization profile and relevant knowledge base documen
             org_id=saved_app.get("org_id", "default"),
             grant_title=title,
             sections=[ApplicationSection(**s) for s in saved_app["sections"]],
-            completion_percentage=saved_app.get("completion_percentage", 100.0)
+            completion_percentage=saved_app.get("completion_percentage", 100.0),
+            submission_checklist=saved_app.get("submission_checklist", []),
+            budget_csv_data=saved_app.get("budget_csv_data")
         )
     else:
         raise ValueError("Swarm failed to populate sections natively using the shared state.")
 
-    # Ensure the draft is persisted
+    # Ensure the draft is persisted one final time just in case
     save_result = save_application_draft(
         grant_id=draft_result.grant_id,
         org_id=draft_result.org_id,
         grant_title=draft_result.grant_title,
         sections=[s.model_dump() for s in draft_result.sections],
+        submission_checklist=draft_result.submission_checklist,
+        budget_csv_data=draft_result.budget_csv_data,
     )
     logger.info(f"Persisted application draft {save_result.get('draft_id')} for {draft_result.grant_id}")
 

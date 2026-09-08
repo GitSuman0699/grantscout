@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -12,6 +14,43 @@ from strands import tool
 from backend.storage.local_storage import storage
 
 logger = logging.getLogger(__name__)
+
+@tool
+def generate_budget_csv(grant_id: str, direct_personnel: float, fringe_benefits: float, travel: float, supplies: float, other: float, indirect_rate_pct: float) -> dict[str, Any]:
+    """Generate a structured CSV representing the SF-424 budget template for the grant application.
+    
+    Args:
+        grant_id: The ID of the grant.
+        direct_personnel: Total personnel salaries.
+        fringe_benefits: Total fringe benefits.
+        travel: Total travel costs.
+        supplies: Total supplies costs.
+        other: Total other direct costs.
+        indirect_rate_pct: The approved indirect cost rate percentage (e.g. 10.0).
+        
+    Returns:
+        Dictionary containing 'csv_data' string.
+    """
+    total_direct = direct_personnel + fringe_benefits + travel + supplies + other
+    indirect_costs = total_direct * (indirect_rate_pct / 100.0)
+    total_costs = total_direct + indirect_costs
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Category", "Amount ($)", "Notes"])
+    writer.writerow(["a. Personnel", f"{direct_personnel:.2f}", "Direct Staff Salaries"])
+    writer.writerow(["b. Fringe Benefits", f"{fringe_benefits:.2f}", ""])
+    writer.writerow(["c. Travel", f"{travel:.2f}", ""])
+    writer.writerow(["d. Supplies", f"{supplies:.2f}", ""])
+    writer.writerow(["e. Other", f"{other:.2f}", ""])
+    writer.writerow(["Total Direct Costs", f"{total_direct:.2f}", "Sum of a-e"])
+    writer.writerow([f"Indirect Costs ({indirect_rate_pct}%)", f"{indirect_costs:.2f}", "MTDC Rate"])
+    writer.writerow(["TOTAL REQUESTED", f"{total_costs:.2f}", "Total Direct + Indirect"])
+    
+    csv_str = output.getvalue()
+    
+    return {"csv_data": csv_str, "total_requested": total_costs}
+
 
 @tool
 def update_draft_section(
@@ -102,6 +141,8 @@ def save_application_draft(
     org_id: str,
     grant_title: str,
     sections: list[dict[str, Any]],
+    submission_checklist: list[str] = None,
+    budget_csv_data: str = None,
 ) -> dict[str, Any]:
     """Save a generated grant application draft to storage.
 
@@ -118,6 +159,8 @@ def save_application_draft(
                   - 'is_auto_filled': bool (True if pre-filled from org data)
                   - 'needs_review': bool (True if human review is recommended)
                   - 'word_count': int (number of words in content)
+        submission_checklist: List of requirements for submission (e.g. SAM.gov, SF-424, letters).
+        budget_csv_data: Comma-separated values for the SF-424 budget template.
 
     Returns:
         A dictionary containing the 'draft_id', 'status', and 'saved' boolean.
@@ -141,6 +184,8 @@ def save_application_draft(
             "grant_title": grant_title,
             "sections": sections,
             "completion_percentage": completion_pct,
+            "submission_checklist": submission_checklist or [],
+            "budget_csv_data": budget_csv_data,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
