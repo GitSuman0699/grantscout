@@ -141,8 +141,8 @@ def save_application_draft(
     org_id: str,
     grant_title: str,
     sections: list[dict[str, Any]],
-    submission_checklist: list[str] = None,
-    budget_csv_data: str = None,
+    submission_checklist: list[str] | None = None,
+    budget_csv_data: str | None = None,
 ) -> dict[str, Any]:
     """Save a generated grant application draft to storage.
 
