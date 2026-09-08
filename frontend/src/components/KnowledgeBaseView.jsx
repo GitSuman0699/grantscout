@@ -27,6 +27,7 @@ import {
   indexDocument,
   deleteDocument,
 } from '../services/api';
+import MarkdownRenderer from './MarkdownRenderer';
 
 /**
  * Format raw document file name into human readable title.
@@ -73,7 +74,6 @@ export default function KnowledgeBaseView() {
 
   // Upload Modal State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [uploadMode, setUploadMode] = useState('file'); // 'file' or 'paste'
   const [uploadForm, setUploadForm] = useState({
     doc_name: '',
     category: 'general',
@@ -798,25 +798,7 @@ export default function KnowledgeBaseView() {
               </button>
             </div>
 
-            {/* Upload Mode Selector */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-              <button
-                type="button"
-                onClick={() => setUploadMode('file')}
-                className={`brutalist-btn ${uploadMode === 'file' ? 'btn-primary' : 'btn-outline'}`}
-                style={{ fontSize: '0.85rem', padding: '0.45rem 1rem' }}
-              >
-                📁 Choose File (.md, .txt, .json, .csv)
-              </button>
-              <button
-                type="button"
-                onClick={() => setUploadMode('paste')}
-                className={`brutalist-btn ${uploadMode === 'paste' ? 'btn-primary' : 'btn-outline'}`}
-                style={{ fontSize: '0.85rem', padding: '0.45rem 1rem' }}
-              >
-                ✍️ Direct Text Paste
-              </button>
-            </div>
+            {/* Direct Upload or Paste */}
 
             {uploadError && (
               <div
@@ -838,9 +820,8 @@ export default function KnowledgeBaseView() {
             )}
 
             <form onSubmit={handleUploadSubmit}>
-              {/* File Dropzone (if in file mode) */}
-              {uploadMode === 'file' && (
-                <div
+              {/* File Dropzone */}
+              <div
                   style={{
                     border: '2px dashed var(--border-dark)',
                     background: '#FFFFFF',
@@ -877,7 +858,6 @@ export default function KnowledgeBaseView() {
                     Supports Markdown (.md), Plain Text (.txt), JSON (.json), CSV (.csv)
                   </div>
                 </div>
-              )}
 
               {/* Document Filename and Category */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1.2fr', gap: '1rem', marginBottom: '1rem' }}>
@@ -1386,14 +1366,9 @@ export default function KnowledgeBaseView() {
                         padding: '1.25rem',
                         maxHeight: '320px',
                         overflowY: 'auto',
-                        whiteSpace: 'pre-wrap',
-                        fontFamily: 'var(--font-body)',
-                        fontSize: '0.9rem',
-                        lineHeight: '1.6',
-                        color: 'var(--ink)',
                       }}
                     >
-                      {inspectedDoc.content}
+                      <MarkdownRenderer content={inspectedDoc.content} />
                     </div>
                   </div>
 

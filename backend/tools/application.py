@@ -140,7 +140,7 @@ def save_application_draft(
     grant_id: str,
     org_id: str,
     grant_title: str,
-    sections: list[dict[str, Any]],
+    sections: list[dict[str, Any]] | None = None,
     submission_checklist: list[str] | None = None,
     budget_csv_data: str | None = None,
 ) -> dict[str, Any]:
@@ -168,6 +168,12 @@ def save_application_draft(
     try:
         draft_id = f"draft-{uuid.uuid4().hex[:10]}"
         
+        if sections is None:
+            # Fetch existing sections from the database if LLM didn't provide them
+            apps = storage.list_applications()
+            existing = next((a for a in apps if a.get("grant_id") == grant_id), None)
+            sections = existing.get("sections", []) if existing else []
+
         # Calculate completion and section counts
         total_sections = len(sections)
         auto_filled_count = sum(1 for s in sections if s.get("is_auto_filled", False))

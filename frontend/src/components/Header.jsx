@@ -3,24 +3,11 @@ import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare, PlusCircle, Trash2 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import PersonaSelector from './PersonaSelector';
-import OnboardingModal from './OnboardingModal';
-
 export default function Header() {
   const { isScanning, runScanCycle, handleClearCache, systemHealth, refreshGrants } = useGrants();
   const isHealthy = systemHealth === 'healthy';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [zenMode, setZenMode] = useState(false);
   const location = useLocation();
-
-  // Apply Zen Mode to body
-  useEffect(() => {
-    if (zenMode) {
-      document.body.classList.add('zen-mode');
-    } else {
-      document.body.classList.remove('zen-mode');
-    }
-  }, [zenMode]);
 
   // Auto-close mobile menu on route change
   useEffect(() => {
@@ -30,9 +17,9 @@ export default function Header() {
   const navItems = [
     { to: '/', label: 'HOME', end: true },
     { to: '/pipeline', label: 'PIPELINE', end: true },
-    { to: '/drafts', label: 'APPLICATION DRAFTS', end: true },
+    // { to: '/drafts', label: 'APPLICATION DRAFTS', end: true },
     { to: '/knowledge', label: 'RAG KNOWLEDGE BASE', end: true },
-    { to: '/optimization', label: 'COST OPTIMIZATION', end: true }
+    // { to: '/optimization', label: 'COST OPTIMIZATION', end: true }
   ];
 
   const tickerText = "STRANDS AGENTS SDK • AMAZON BEDROCK TIERED ROUTING • 2 CFR 200 FEDERAL COMPLIANCE AUDITING • MULTI-TENANT NONPROFIT SECTOR PERSONAS • RAG VECTOR RETRIEVAL • GRANTS.GOV REST API • ";
@@ -46,13 +33,7 @@ export default function Header() {
       zIndex: 50,
       width: '100%'
     }}>
-      <OnboardingModal
-        isOpen={onboardingOpen}
-        onClose={() => setOnboardingOpen(false)}
-        onProfileUpdated={() => {
-          if (refreshGrants) refreshGrants();
-        }}
-      />
+
       {/* Top Banner Ticker with Fixed Live Health Badge on Right */}
       <div className="ticker-marquee-container" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         {/* Scrolling Track (Slides underneath the fixed badge) */}
@@ -97,16 +78,15 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Main Header Bar */}
+      {/* Main Header Bar - Top Row */}
       <div style={{
         maxWidth: '1440px',
         margin: '0 auto',
-        padding: '0.85rem 1.5rem',
+        padding: '0.85rem 1.5rem 0.5rem 1.5rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '1rem',
-        flexWrap: 'wrap'
+        gap: '1rem'
       }}>
         {/* Brand Logo */}
         <Link to="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -134,33 +114,44 @@ export default function Header() {
           </div>
         </Link>
 
-        {/* Persona Selector + Onboard Org (Desktop & Tablet) */}
-        <div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <PersonaSelector
-            onPersonaChanged={() => {
-              if (refreshGrants) refreshGrants();
+        {/* Persona Selector & Mobile Hamburger */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <PersonaSelector
+              onPersonaChanged={() => {
+                if (refreshGrants) refreshGrants();
+              }}
+            />
+          </div>
+
+          {/* Mobile Hamburger Toggle Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="mobile-only brutalist-btn btn-outline"
+            aria-label="Toggle navigation menu"
+            style={{
+              padding: '0.45rem 0.6rem',
+              background: mobileMenuOpen ? 'var(--ink)' : 'var(--card-bg)',
+              color: mobileMenuOpen ? 'var(--canvas-bg)' : 'var(--ink)'
             }}
-          />
-          <button
-            onClick={() => setZenMode(!zenMode)}
-            className="brutalist-btn btn-outline"
-            style={{ fontSize: '0.85rem' }}
-            title="Toggle Zen Mode"
           >
-            {zenMode ? '🌙 ZEN MODE' : '☕ FOCUS MODE'}
-          </button>
-          <button
-            onClick={() => setOnboardingOpen(true)}
-            className="brutalist-btn btn-outline"
-            style={{ fontSize: '0.85rem' }}
-            title="Configure Custom Nonprofit Profile"
-          >
-            ⚙ CONFIGURE PROFILE
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
+      </div>
 
-        {/* Desktop Navigation Links — Hidden on Mobile */}
-        <nav className="nav-container desktop-only">
+      {/* Main Header Bar - Bottom Row (Desktop Only) */}
+      <div className="desktop-only" style={{
+        maxWidth: '1440px',
+        margin: '0 auto',
+        padding: '0.2rem 1.5rem 0.85rem 1.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '1rem'
+      }}>
+        {/* Desktop Navigation Links */}
+        <nav className="nav-container">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -186,8 +177,8 @@ export default function Header() {
           ))}
         </nav>
 
-        {/* Desktop Action Buttons — Hidden on Mobile */}
-        <div className="desktop-only" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        {/* Desktop Action Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <button
             onClick={async () => {
               if (window.confirm("Are you sure you want to clear all cached data, stored grants, and activity logs?")) {
@@ -222,20 +213,6 @@ export default function Header() {
             )}
           </button>
         </div>
-
-        {/* Mobile Hamburger Toggle Button — Hidden on Desktop */}
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="mobile-only brutalist-btn btn-outline"
-          aria-label="Toggle navigation menu"
-          style={{
-            padding: '0.45rem 0.6rem',
-            background: mobileMenuOpen ? 'var(--ink)' : 'var(--card-bg)',
-            color: mobileMenuOpen ? 'var(--canvas-bg)' : 'var(--ink)'
-          }}
-        >
-          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
       </div>
 
       {/* Mobile Menu Drawer (Slide Down) */}
@@ -280,17 +257,6 @@ export default function Header() {
 
           {/* Action Buttons inside Mobile Drawer */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            <button
-              onClick={() => {
-                setZenMode(!zenMode);
-                setMobileMenuOpen(false);
-              }}
-              className="brutalist-btn btn-outline"
-              style={{ width: '100%', padding: '0.75rem', fontSize: '1.15rem' }}
-            >
-              {zenMode ? '🌙 DISABLE ZEN MODE' : '☕ ENABLE ZEN MODE'}
-            </button>
-
             <button
               onClick={() => {
                 runScanCycle();

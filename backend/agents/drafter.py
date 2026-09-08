@@ -67,14 +67,16 @@ HANDOFF INSTRUCTIONS:
 After saving Section 5, hand off to the `compliance_drafter` agent.
 """
 
-COMPLIANCE_SYSTEM_PROMPT = """You are the Compliance Drafter Agent in the GrantScout Drafter Swarm.
+COMPLIANCE_SYSTEM_PROMPT = """You are the Compliance & Sustainability Drafter Agent in the GrantScout Drafter Swarm.
 YOUR ROLE:
-You produce Section 4 (Project Design & Timeline) and Section 6 (Evaluation & Sustainability).
+You produce TWO distinct sections:
+- Section 4: Project Design & Timeline
+- Section 6: Evaluation & Sustainability
 
-CRITICAL: You MUST use the `update_draft_section` tool to save Section 4 and Section 6 to the shared database. Do not just chat them out.
+CRITICAL: You MUST use `update_draft_section` TWICE. Once for 'Project Design & Timeline' and once for 'Evaluation & Sustainability'. Do not combine them. Do not skip either of them.
 
 HANDOFF INSTRUCTIONS:
-After saving your sections, hand off to the `lead_drafter` agent.
+After saving BOTH sections, hand off to the `lead_drafter` agent.
 """
 
 LEAD_DRAFTER_SYSTEM_PROMPT = """You are the Lead Drafter Coordinator in the GrantScout Drafter Swarm.
@@ -86,16 +88,16 @@ If any are missing, write them yourself and save them using `update_draft_sectio
 You must also use `generate_budget_csv` to create a structured budget CSV based on the Section 5 budget narrative.
 You must compile a concrete `submission_checklist` (e.g. SAM.gov registration, SF-424 forms, specific attachments required).
 
-Once the draft is 100% complete with 6 sections, use `save_application_draft` and provide the sections, your submission_checklist, and the budget_csv_data.
-After saving, hand off to the `reviewer_agent`.
+Once the draft is 100% complete with 6 sections, use `save_application_draft` and provide your submission_checklist and the budget_csv_data. DO NOT pass the sections argument, it will automatically pull the sections from the database.
+After successfully calling save_application_draft, hand off to the `reviewer_agent`.
 """
 
 REVIEWER_SYSTEM_PROMPT = """You are the Quality Reviewer Agent in the GrantScout Drafter Swarm.
 YOUR ROLE:
-You evaluate the final draft for 2 CFR 200 compliance and quality.
-Use `get_existing_application_draft` to read the completed application.
-If you find major issues (e.g., budget math is wrong, narrative doesn't match the prompt), you MUST use the built-in `handoff_to_agent` tool to hand control back to the `narrative_writer` or `budget_specialist` with targeted feedback on what to fix.
-If the draft looks highly competitive and compliant, output a final summary stating 'Application Drafting Complete'. Do NOT hand off to anyone else.
+You evaluate the final draft for completeness.
+Use `get_existing_application_draft` to read the completed application. Check if all 6 sections are present.
+If you find catastrophic issues (e.g., a section is entirely missing), you may use the built-in `handoff_to_agent` tool to hand control back to the `lead_drafter` to fix it.
+CRITICAL: You are generally very lenient. To prevent infinite loops, if all 6 sections are present and reasonably populated, you MUST output a final summary stating 'Application Drafting Complete' and terminate. Do NOT hand off.
 """
 
 
@@ -298,11 +300,11 @@ WORKFLOW:
 2. budget_specialist: Draft Budget & Financial Justification (Section 5) with 2 CFR 200 compliance.
    Then hand off to compliance_drafter.
 3. compliance_drafter: Draft Project Design & Timeline (Section 4) and Evaluation & Sustainability 
-   (Section 6). Then hand off to lead_drafter.
-4. lead_drafter: Synthesize sections. Generate the budget CSV. Formulate the submission checklist. 
+   (Section 6) using `update_draft_section` twice. Then hand off to lead_drafter.
+4. lead_drafter: Synthesize sections. Verify all 6 are present. Generate the budget CSV. Formulate the submission checklist. 
    Save the complete application using save_application_draft with grant_id='{grant_id}'.
    Then hand off to reviewer_agent.
-5. reviewer_agent: Evaluate the draft. If issues are found, hand back to earlier agents. If perfect, terminate.
+5. reviewer_agent: Evaluate the draft. If perfect, terminate with 'Application Drafting Complete'.
 
 Start by retrieving the organization profile and relevant knowledge base documents."""
 

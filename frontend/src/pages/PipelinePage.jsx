@@ -75,9 +75,9 @@ export default function PipelinePage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
             <span className="tag-badge tag-dark">LIVE DISCOVERY ENGINE</span>
             <span className="tag-badge tag-green">GRANTS.GOV REST API</span>
-            <span className="tag-badge tag-amber" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+            {/* <span className="tag-badge tag-amber" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
               <Clock size={12} /> LISTED AS OF {asOfInfo.dateString}
-            </span>
+            </span> */}
           </div>
 
           <h1 className="font-heading hero-title" style={{ fontSize: '2.8rem', lineHeight: '0.95', color: 'var(--ink)' }}>
@@ -172,9 +172,9 @@ export default function PipelinePage() {
           <span className="font-mono" style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--ink)', letterSpacing: '0.04em' }}>
             FEDERAL GRANTS LISTED AS OF: <span style={{ color: 'var(--mission-green)', backgroundColor: 'var(--mission-green-light)', padding: '0.15rem 0.45rem', border: '1px solid var(--mission-green)', borderRadius: '2px' }}>{asOfInfo.dateString}</span>
           </span>
-          <span className="tag-badge tag-dark" style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>
+          {/* <span className="tag-badge tag-dark" style={{ fontSize: '0.65rem', padding: '0.15rem 0.45rem' }}>
             AUTONOMOUS 24H SYNC
-          </span>
+          </span> */}
         </div>
 
         <div className="font-mono" style={{ fontSize: '0.72rem', color: 'var(--ink-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>

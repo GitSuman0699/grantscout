@@ -107,8 +107,8 @@ async def lifespan(app: FastAPI):
 
     # Start background autonomous scan task
     scan_task = None
-    if config.AUTO_SCAN_ENABLED:
-        scan_task = asyncio.create_task(_background_scan_loop())
+    # if config.AUTO_SCAN_ENABLED:
+    #     scan_task = asyncio.create_task(_background_scan_loop()) # Disabled to save Bedrock usage
 
     yield
 

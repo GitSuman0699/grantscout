@@ -20,8 +20,8 @@ export default function RubricPage() {
   const grant = getGrantById(id);
   // Preserve clean root origin: either '/pipeline', '/drafts', or '/'
   const rawFrom = location.state?.from || '';
-  const fromPath = (rawFrom === '/drafts' || rawFrom === '/' || rawFrom === '/pipeline') 
-    ? rawFrom 
+  const fromPath = (rawFrom === '/drafts' || rawFrom === '/' || rawFrom === '/pipeline')
+    ? rawFrom
     : '/pipeline';
 
   const getBackLabel = (path) => {
@@ -106,7 +106,7 @@ export default function RubricPage() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--ink-muted)' }}>
             {grant.agency || 'Federal Agency'} • ID: {grantId}
           </span>
-          <a
+          {/* <a
             href={officialUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -115,7 +115,7 @@ export default function RubricPage() {
           >
             <span>OFFICIAL NOTICE</span>
             <ExternalLink size={12} />
-          </a>
+          </a> */}
         </div>
 
         <h1 className="font-heading workstation-title" style={{ fontSize: '2.6rem', lineHeight: '1.05', color: 'var(--ink)', marginBottom: '0.65rem' }}>

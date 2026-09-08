@@ -51,14 +51,14 @@ export default function HomePage() {
       {/* 3-Step Autonomous Loop & Mission Overview Banner */}
       <MissionLoopBanner />
 
-      {/* Autonomous Agent Status Indicator */}
+      {/* Autonomous Agent Status Indicator
       {autoScanStatus && (
         <div className="brutalist-card" style={{ padding: '1.5rem', marginBottom: '2rem', borderLeft: '4px solid var(--mission-green)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-            <span className="live-indicator"></span>
-            <span className="font-heading" style={{ fontSize: '1.4rem' }}>AUTONOMOUS MODE ACTIVE</span>
-            <span className="tag-badge tag-green" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-              <Activity size={12} /> SCANNING EVERY {autoScanStatus.scan_interval_hours || 4}H
+            <span className="live-indicator" style={!autoScanStatus.enabled ? { background: 'var(--amber-signal)', boxShadow: 'none', animation: 'none' } : {}}></span>
+            <span className="font-heading" style={{ fontSize: '1.4rem' }}>AUTONOMOUS MODE {autoScanStatus.enabled ? 'ACTIVE' : 'DISABLED'}</span>
+            <span className={`tag-badge ${autoScanStatus.enabled ? 'tag-green' : 'tag-amber'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+              <Activity size={12} /> {autoScanStatus.enabled ? `SCANNING EVERY ${autoScanStatus.scan_interval_hours || 4}H` : 'MANUAL SCANS ONLY'}
             </span>
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', color: 'var(--ink-muted)' }}>
@@ -69,7 +69,7 @@ export default function HomePage() {
             <strong>Grants auto-discovered this session:</strong> {autoScanStatus.grants_discovered_session || 0}
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Live System Metrics Quick Overview */}
       <div style={{ marginBottom: '2rem' }}>
@@ -137,7 +137,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="brutalist-card" style={{ padding: '1.5rem', background: '#FFFFFF' }}>
+        {/* <div className="brutalist-card" style={{ padding: '1.5rem', background: '#FFFFFF' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <span className="tag-badge tag-amber">TIERED ROUTING</span>
             <Zap size={20} color="var(--amber-signal)" />
@@ -152,7 +152,7 @@ export default function HomePage() {
           <Link to="/optimization" style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--ink)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
             VIEW COST METRICS →
           </Link>
-        </div>
+        </div> */}
       </div>
     </div>
   );
