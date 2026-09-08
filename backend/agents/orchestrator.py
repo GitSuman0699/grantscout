@@ -247,11 +247,6 @@ WORKFLOW:
 1. Execute discovery using `execute_discovery_scan`.
 2. For each discovered opportunity, evaluate fit and execute Graph routing using `evaluate_and_route_grant`.
 3. Perform a deadline check across the pipeline using `scan_upcoming_deadlines`.
-4. Synthesize an executive briefing of the complete scan cycle with concrete metrics:
-   - Total opportunities scanned
-   - New grants scored (with breakdown of high/medium/low matches)
-   - Applications auto-drafted
-   - Upcoming deadlines requiring human attention.
 """
 
 
@@ -400,7 +395,7 @@ async def run_orchestrator() -> str:
     agent = create_orchestrator_agent()
     
     def _run():
-        return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Finally, summarize the results.")
+        return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
 
     result = await asyncio.to_thread(_run)
     return str(result)

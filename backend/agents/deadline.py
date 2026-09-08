@@ -27,7 +27,7 @@ WORKFLOW:
    - <= 14 days: Send normal priority reminder
    - <= 30 days: Send low priority planning notice
 3. Use `send_deadline_alert` for each flagged opportunity to add timeline events.
-4. Return a summary of current deadline exposures and urgent action items.
+4. Output the exact phrase "DEADLINE CHECK COMPLETE" and nothing else.
 """
 
 

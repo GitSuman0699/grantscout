@@ -32,7 +32,6 @@ YOUR WORKFLOW:
 3. Use `search_grants` with relevant keywords to find matching opportunities. Run multiple searches with different keyword combinations for broader coverage.
 4. For each grant found, use `check_grant_exists` to see if it's already been discovered.
 5. For NEW grants only, use `fetch_grant_details` to get the full synopsis and eligibility information.
-6. Return a structured summary of all NEW grants discovered, including their titles, agencies, award amounts, deadlines, and synopses.
 
 SEARCH STRATEGY:
 - Extract 3-5 distinct keyword phrases from the org's mission and programs
@@ -41,15 +40,7 @@ SEARCH STRATEGY:
 - Focus strictly on grants with "posted" status that have future deadlines and active packages
 
 OUTPUT FORMAT:
-Provide a clear summary listing each new grant with:
-- Grant ID and title
-- Agency name
-- Award range
-- Deadline
-- Brief synopsis (2-3 sentences)
-- Initial assessment of relevance (high/medium/low)
-
-If no new grants are found, state that clearly. Do NOT fabricate grants.
+Output the exact phrase "SCAN COMPLETE" and nothing else.
 """
 
 
