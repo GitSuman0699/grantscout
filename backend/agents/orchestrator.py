@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+import sys
+import contextlib
+from typing import Any, Optional
 
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
@@ -387,15 +389,22 @@ def create_orchestrator_agent() -> Agent:
     return agent
 
 
-async def run_orchestrator() -> str:
+async def run_orchestrator(status_callback: Optional[Any] = None) -> str:
     """Run the Orchestrator Agent to perform discovery and routing autonomously.
 
     Uses the legacy single-agent mode for the manual /api/agent/scan endpoint.
     """
     agent = create_orchestrator_agent()
     
+    from backend.agents.drafter import StdoutInterceptor
+
     def _run():
-        return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
+        if status_callback:
+            interceptor = StdoutInterceptor(status_callback)
+            with contextlib.redirect_stdout(interceptor): # type: ignore
+                return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
+        else:
+            return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
 
     result = await asyncio.to_thread(_run)
     return str(result)

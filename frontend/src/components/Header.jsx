@@ -3,6 +3,8 @@ import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare, PlusCircle, Trash2 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import PersonaSelector from './PersonaSelector';
+import LiveScanModal from './LiveScanModal';
+
 export default function Header() {
   const { isScanning, runScanCycle, handleClearCache, systemHealth, refreshGrants } = useGrants();
   const isHealthy = systemHealth === 'healthy';
@@ -25,14 +27,16 @@ export default function Header() {
   const tickerText = "STRANDS AGENTS SDK • AMAZON BEDROCK TIERED ROUTING • 2 CFR 200 FEDERAL COMPLIANCE AUDITING • MULTI-TENANT NONPROFIT SECTOR PERSONAS • RAG VECTOR RETRIEVAL • GRANTS.GOV REST API • ";
 
   return (
-    <header style={{
-      borderBottom: '2px solid var(--border-dark)',
-      backgroundColor: 'var(--card-bg)',
-      position: 'sticky',
-      top: 0,
-      zIndex: 50,
-      width: '100%'
-    }}>
+    <>
+      <LiveScanModal />
+      <header style={{
+        borderBottom: '2px solid var(--border-dark)',
+        backgroundColor: 'var(--card-bg)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+        width: '100%'
+      }}>
 
       {/* Top Banner Ticker with Fixed Live Health Badge on Right */}
       <div className="ticker-marquee-container" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -297,5 +301,6 @@ export default function Header() {
         </div>
       )}
     </header>
+    </>
   );
 }

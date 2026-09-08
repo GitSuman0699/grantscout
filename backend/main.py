@@ -610,7 +610,17 @@ async def trigger_scan(
             "message": "Grant scan initiated...",
         })
 
-        result = await run_orchestrator()
+        loop = asyncio.get_running_loop()
+        def on_agent_thought(msg: str):
+            asyncio.run_coroutine_threadsafe(
+                broadcast_event({
+                    "type": "agent_thought",
+                    "message": msg,
+                }),
+                loop
+            )
+
+        result = await run_orchestrator(status_callback=on_agent_thought)
 
         # Dispatch background drafting for any high-scoring grants discovered securely
         loop = asyncio.get_running_loop()

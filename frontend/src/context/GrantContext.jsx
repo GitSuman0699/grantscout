@@ -18,6 +18,7 @@ export function GrantProvider({ children }) {
   const [error, setError] = useState(null);
   const [sectorFilter, setSectorFilter] = useState('ALL');
   const [systemHealth, setSystemHealth] = useState('checking'); // 'healthy' | 'unhealthy' | 'checking'
+  const [scanThoughts, setScanThoughts] = useState([]);
   const sseRef = useRef(null);
 
   // ── Fetch grants from backend ──
@@ -55,6 +56,7 @@ export function GrantProvider({ children }) {
   // ── Run Discovery Cycle (real API call) ──
   const runScanCycle = useCallback(async () => {
     setIsScanning(true);
+    setScanThoughts([]);
     try {
       await apiTriggerScan();
       // Refresh grants and stats after scan completes
@@ -106,6 +108,10 @@ export function GrantProvider({ children }) {
           loadGrants();
           loadStats();
         }
+
+        if (event.type === 'agent_thought' && event.message) {
+          setScanThoughts(prev => [...prev, event.message]);
+        }
       },
       (err) => {
         console.warn('SSE stream error, will reconnect:', err);
@@ -148,6 +154,7 @@ export function GrantProvider({ children }) {
       getGrantById,
       refreshGrants: loadGrants,
       refreshStats: loadStats,
+      scanThoughts,
     }}>
       {children}
     </GrantContext.Provider>

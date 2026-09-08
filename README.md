@@ -42,7 +42,7 @@ While the project has many advanced features, here is the honest reality of the 
 
 - **Frontend**: React + Vite, `react-router-dom`, custom Brutalist UI.
 - **Backend**: Python FastAPI with Server-Sent Events (SSE) for real-time agent telemetry.
-- **Agents**: Strands Agents SDK + Amazon Bedrock (Claude 3.5 Sonnet & Haiku).
+- **Agents**: Strands Agents SDK + Amazon Bedrock (Claude 4.5 Sonnet & Haiku).
 - **RAG**: Custom vector retrieval using Amazon Titan Embeddings V2 and cosine similarity.
 - **MCP**: FastMCP server included for Claude Desktop / Cursor integration.
 
