@@ -7,8 +7,7 @@ to any nonprofit domain.
 
 from __future__ import annotations
 
-from typing import Optional
-from backend.api.models.schemas import NonprofitPersona, OrgProfile, Program, PastGrant
+from backend.api.models.schemas import NonprofitPersona, OrgProfile, PastGrant, Program
 
 PERSONAS: list[NonprofitPersona] = [
     NonprofitPersona(
@@ -99,7 +98,7 @@ PERSONAS: list[NonprofitPersona] = [
 ]
 
 
-def get_persona_by_id(persona_id: str) -> Optional[NonprofitPersona]:
+def get_persona_by_id(persona_id: str) -> NonprofitPersona | None:
     """Retrieve a nonprofit persona by ID."""
     for p in PERSONAS:
         if p.id == persona_id:

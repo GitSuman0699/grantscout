@@ -8,15 +8,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from backend.tools.grants_api import search_grants, fetch_grant_details
-from backend.tools.rag_search import query_knowledge_base
 from backend.agents.matcher import evaluate_grant_structured
 from backend.rag.knowledge_base import knowledge_base
 from backend.storage.local_storage import storage
+from backend.tools.grants_api import fetch_grant_details, search_grants
+from backend.tools.rag_search import query_knowledge_base
 
 logger = logging.getLogger(__name__)
 

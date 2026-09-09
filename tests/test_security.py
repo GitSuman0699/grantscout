@@ -8,14 +8,12 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import jwt
 from fastapi.testclient import TestClient
 
 from backend.config import config
 from backend.main import app
 from backend.security.auth import (
     create_access_token,
-    verify_access_token,
     sanitize_input,
 )
 

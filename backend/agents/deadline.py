@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
+from botocore.config import Config
 from strands import Agent
 from strands.models.bedrock import BedrockModel
-from botocore.config import Config
 
-from backend.config import config
 from backend.tools.notifications import scan_upcoming_deadlines, send_deadline_alert
 
 logger = logging.getLogger(__name__)
@@ -32,6 +30,7 @@ WORKFLOW:
 
 
 from backend.optimization import get_model_for_agent
+
 
 def create_deadline_agent() -> Agent:
     """Create and configure the Deadline Agent.

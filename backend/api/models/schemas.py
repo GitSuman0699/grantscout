@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
-
 
 # ──────────────────────────────────────────────
 #  Enums
@@ -122,14 +120,14 @@ class GrantOpportunity(BaseModel):
     synopsis: str = ""
     award_ceiling: float = 0
     award_floor: float = 0
-    close_date: Optional[str] = None
-    post_date: Optional[str] = None
+    close_date: str | None = None
+    post_date: str | None = None
     applicant_types: list[str] = []
     funding_category: str = ""
 
     # GrantScout processing fields
     status: GrantStatus = GrantStatus.DISCOVERED
-    match_score: Optional[MatchScore] = None
+    match_score: MatchScore | None = None
     match_reasoning: str = ""
     draft_location: str = ""
 
@@ -218,7 +216,7 @@ class ApplicationDraftResult(BaseModel):
         default_factory=list,
         description="Concrete checklist of requirements for submission (e.g. SAM.gov, SF-424, letters).",
     )
-    budget_csv_data: Optional[str] = Field(
+    budget_csv_data: str | None = Field(
         default=None,
         description="Comma-separated values for the SF-424 budget template.",
     )
@@ -251,10 +249,10 @@ class DashboardStats(BaseModel):
     grants_this_week: int = 0
     high_matches: int = 0
     applications_drafted: int = 0
-    next_deadline: Optional[str] = None
-    days_until_deadline: Optional[int] = None
+    next_deadline: str | None = None
+    days_until_deadline: int | None = None
     agent_status: str = "active"
-    last_scan: Optional[datetime] = None
+    last_scan: datetime | None = None
 
 
 # ──────────────────────────────────────────────
@@ -322,7 +320,7 @@ class AgentThoughtEvent(BaseModel):
     model_id: str = ""
     step: str
     thought: str
-    tool_called: Optional[str] = None
+    tool_called: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

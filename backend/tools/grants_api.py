@@ -140,7 +140,7 @@ def search_grants(
             "total_count": 0,
             "grants": [],
             "search_params": {"keywords": keywords},
-            "error": f"API request failed: {str(e)}",
+            "error": f"API request failed: {e!s}",
         }
     except Exception as e:
         logger.error(f"Unexpected error searching grants: {e}")
@@ -148,7 +148,7 @@ def search_grants(
             "total_count": 0,
             "grants": [],
             "search_params": {"keywords": keywords},
-            "error": f"Unexpected error: {str(e)}",
+            "error": f"Unexpected error: {e!s}",
         }
 
 
@@ -241,11 +241,11 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
         logger.error(f"Failed to fetch grant {opportunity_id}: {e}")
         return {
             "grant": None,
-            "error": f"API request failed: {str(e)}",
+            "error": f"API request failed: {e!s}",
         }
     except Exception as e:
         logger.error(f"Unexpected error fetching grant {opportunity_id}: {e}")
         return {
             "grant": None,
-            "error": f"Unexpected error: {str(e)}",
+            "error": f"Unexpected error: {e!s}",
         }

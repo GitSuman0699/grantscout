@@ -12,10 +12,10 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 
 import jwt
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
@@ -41,8 +41,8 @@ class TokenPayload(BaseModel):
     org_id: str = "default"
     role: str = "admin"
     scopes: list[str] = ["read", "write", "agent:execute"]
-    exp: Optional[int] = None
-    iat: Optional[int] = None
+    exp: int | None = None
+    iat: int | None = None
 
 
 class TokenResponse(BaseModel):
@@ -69,7 +69,7 @@ class ClientCredentialsRequest(BaseModel):
 
 def create_access_token(
     data: dict[str, Any],
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: timedelta | None = None,
 ) -> str:
     """Generate a signed JWT access token.
 
@@ -137,7 +137,7 @@ def verify_access_token(token: str) -> TokenPayload:
     except jwt.InvalidTokenError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication token: {str(e)}",
+            detail=f"Invalid authentication token: {e!s}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -148,8 +148,8 @@ def verify_access_token(token: str) -> TokenPayload:
 
 
 async def get_current_auth(
-    bearer_auth: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
-    api_key_header: Optional[str] = Security(api_key_header_scheme),
+    bearer_auth: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
+    api_key_header: str | None = Security(api_key_header_scheme),
 ) -> TokenPayload:
     """Validate incoming request authorization via JWT Bearer or API Key.
 

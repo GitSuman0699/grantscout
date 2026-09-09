@@ -9,8 +9,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -20,23 +20,19 @@ if sys.stdout.encoding != "utf-8" and hasattr(sys.stdout, "reconfigure"):
 if sys.stderr.encoding != "utf-8" and hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
-from typing import AsyncGenerator, Any
+from collections.abc import AsyncGenerator
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from backend.api.models.schemas import (
-    OrgProfile,
-    GrantOpportunity,
     DashboardStats,
-    ActivityEvent,
+    OrgProfile,
 )
 from backend.config import config
+from backend.security.auth import TokenPayload, get_current_auth, sanitize_input
 from backend.storage.local_storage import storage
-from backend.security.auth import get_current_auth, TokenPayload, sanitize_input
-from backend.api.routes.auth import router as auth_router
 
 # Configure logging
 logging.basicConfig(
@@ -149,10 +145,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Include Auth Router
-app.include_router(auth_router)
-
 
 # ──────────────────────────────────────────────
 #  Dashboard Endpoints
@@ -422,7 +414,7 @@ async def trigger_grant_draft(
         # Broadcast start
         await broadcast_event({
             "type": "drafting_started",
-            "message": f"INITIALIZING DRAFTER SWARM...",
+            "message": "INITIALIZING DRAFTER SWARM...",
             "grant_id": grant_id,
         })
         
@@ -473,7 +465,7 @@ async def trigger_grant_draft(
                     broadcast_event({
                         "type": "drafting_failed",
                         "grant_id": grant_id,
-                        "message": f"Auto-drafting failed for '{grant.get('title')}': {str(e)}",
+                        "message": f"Auto-drafting failed for '{grant.get('title')}': {e!s}",
                     }),
                     loop
                 )
@@ -487,7 +479,7 @@ async def trigger_grant_draft(
         logger.error(f"Drafting failed: {e}")
         grant["status"] = "matched"
         storage.save_grant(grant)
-        raise HTTPException(status_code=500, detail=f"Drafting failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Drafting failed: {e!s}")
 
 
 # ──────────────────────────────────────────────
@@ -565,7 +557,7 @@ def execute_background_drafting(grant_id: str, loop: asyncio.AbstractEventLoop):
             broadcast_event({
                 "type": "drafting_failed",
                 "grant_id": grant_id,
-                "message": f"Auto-drafting failed for '{title}': {str(e)}",
+                "message": f"Auto-drafting failed for '{title}': {e!s}",
             }),
             loop
         )
@@ -652,7 +644,7 @@ async def trigger_scan(
         logger.error(f"Scan failed: {e}")
         storage.add_activity({
             "event_type": "error",
-            "message": f"Grant scan failed: {str(e)}",
+            "message": f"Grant scan failed: {e!s}",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
         
@@ -660,12 +652,12 @@ async def trigger_scan(
         asyncio.run_coroutine_threadsafe(
             broadcast_event({
                 "type": "scan_failed",
-                "message": f"Scan failed: {str(e)}"
+                "message": f"Scan failed: {e!s}"
             }),
             asyncio.get_running_loop()
         )
         
-        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Scan failed: {e!s}")
 
 
 @app.post("/api/agent/orchestrate")
@@ -695,7 +687,7 @@ async def trigger_full_orchestration(auth: TokenPayload = Depends(get_current_au
 
     except Exception as e:
         logger.error(f"Orchestration failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Orchestration failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Orchestration failed: {e!s}")
 
 
 @app.post("/api/agent/deadlines")
@@ -709,7 +701,7 @@ async def trigger_deadline_check(auth: TokenPayload = Depends(get_current_auth))
 
     except Exception as e:
         logger.error(f"Deadline sweep failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Deadline sweep failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Deadline sweep failed: {e!s}")
 
 
 @app.post("/api/agent/score/{grant_id}")
@@ -732,7 +724,7 @@ async def trigger_scoring(
         raise
     except Exception as e:
         logger.error(f"Scoring failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Scoring failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Scoring failed: {e!s}")
 
 
 @app.get("/api/agent/status")
@@ -781,9 +773,10 @@ async def health_check():
 #  Multi-Tenant Personas & Onboarding Endpoints
 # ──────────────────────────────────────────────
 
+from pydantic import BaseModel
+
 from backend.storage.personas import PERSONAS, get_persona_by_id, persona_to_org_profile
 from backend.tools.compliance import audit_application_compliance
-from pydantic import BaseModel
 
 
 class PersonaSwitchRequest(BaseModel):
@@ -883,11 +876,10 @@ async def audit_grant_compliance(
 # ──────────────────────────────────────────────
 
 from backend.optimization import (
+    AGENT_TIER_MAP,
+    MODEL_TIERS,
     response_cache,
     token_tracker,
-    get_model_for_agent,
-    MODEL_TIERS,
-    AGENT_TIER_MAP,
 )
 
 

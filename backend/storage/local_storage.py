@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from backend.config import config
 
@@ -57,7 +56,7 @@ class LocalStorage:
         logger.info(f"Saved org profile: {org_id}")
         return org_id
 
-    def get_org_profile(self, org_id: str = "default") -> Optional[dict]:
+    def get_org_profile(self, org_id: str = "default") -> dict | None:
         """Retrieve an organization profile."""
         filepath = self.base_path / "org_profiles" / f"{org_id}.json"
         if filepath.exists():
@@ -88,7 +87,7 @@ class LocalStorage:
                 pass
         return drafted
 
-    def _normalize_grant(self, grant: dict, drafted_set: Optional[set[str]] = None) -> dict:
+    def _normalize_grant(self, grant: dict, drafted_set: set[str] | None = None) -> dict:
         """Ensure match_score has total computed and attach is_drafted boolean."""
         ms = grant.get("match_score")
         if isinstance(ms, dict):
@@ -107,7 +106,7 @@ class LocalStorage:
             grant["is_drafted"] = gid in self._get_drafted_grant_ids()
         return grant
 
-    def get_grant(self, grant_id: str) -> Optional[dict]:
+    def get_grant(self, grant_id: str) -> dict | None:
         """Retrieve a grant opportunity."""
         filepath = self.base_path / "grants" / f"{grant_id}.json"
         if filepath.exists():
@@ -166,7 +165,7 @@ class LocalStorage:
         logger.info(f"Saved application draft: {draft_id}")
         return draft_id
 
-    def get_application(self, draft_id: str) -> Optional[dict]:
+    def get_application(self, draft_id: str) -> dict | None:
         """Retrieve an application draft."""
         filepath = self.base_path / "applications" / f"{draft_id}.json"
         if filepath.exists():

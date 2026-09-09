@@ -13,7 +13,7 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from strands import tool
 

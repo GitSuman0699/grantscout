@@ -1,7 +1,6 @@
 """Quick test script for grants.gov API tools."""
 
 import sys
-import json
 from pathlib import Path
 from typing import Any
 

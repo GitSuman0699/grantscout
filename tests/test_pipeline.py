@@ -8,10 +8,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.storage.local_storage import storage
-from backend.tools.grants_api import search_grants, fetch_grant_details
-from backend.tools.org_profile import retrieve_org_profile, save_matched_grant
 from backend.tools.application import save_application_draft
+from backend.tools.grants_api import search_grants
 from backend.tools.notifications import scan_upcoming_deadlines
+from backend.tools.org_profile import retrieve_org_profile, save_matched_grant
 
 
 class TestGrantScoutPipeline(unittest.TestCase):

@@ -43,11 +43,7 @@ export async function fetchDashboardStats() {
   return res.json();
 }
 
-export async function fetchActivity() {
-  const res = await fetch(`${BASE_URL}/api/dashboard/activity`);
-  if (!res.ok) throw new Error(`Activity fetch failed: ${res.status}`);
-  return res.json();
-}
+
 
 // ─────────────────────────────────────────────
 //  Grants Pipeline
@@ -60,21 +56,7 @@ export async function fetchGrants(status = '') {
   return res.json();
 }
 
-export async function fetchGrantById(grantId) {
-  const res = await fetch(`${BASE_URL}/api/grants/${grantId}`);
-  if (!res.ok) throw new Error(`Grant ${grantId} fetch failed: ${res.status}`);
-  return res.json();
-}
 
-// ─────────────────────────────────────────────
-//  Organization Profile
-// ─────────────────────────────────────────────
-
-export async function fetchOrgProfile() {
-  const res = await fetch(`${BASE_URL}/api/org/profile`);
-  if (!res.ok) throw new Error(`Org profile fetch failed: ${res.status}`);
-  return res.json();
-}
 
 // ─────────────────────────────────────────────
 //  RAG Knowledge Base
@@ -149,11 +131,6 @@ export async function fetchApplications() {
   return [];
 }
 
-export async function fetchApplicationById(draftId) {
-  const res = await fetch(`${BASE_URL}/api/applications/${draftId}`);
-  if (!res.ok) throw new Error(`Application ${draftId} fetch failed: ${res.status}`);
-  return res.json();
-}
 
 export async function updateApplication(draftId, payload) {
   const res = await fetch(`${BASE_URL}/api/applications/${draftId}`, {
@@ -206,17 +183,6 @@ export async function triggerScan() {
   return res.json();
 }
 
-export async function triggerOrchestrate() {
-  const res = await fetch(`${BASE_URL}/api/agent/orchestrate`, {
-    method: 'POST',
-    headers: authHeaders(),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Orchestration trigger failed: ${res.status}`);
-  }
-  return res.json();
-}
 
 export async function fetchAutoScanStatus() {
   const res = await fetch(`${BASE_URL}/api/agent/autoscan/status`);
@@ -271,18 +237,6 @@ export async function switchPersona(personaId) {
   return res.json();
 }
 
-export async function onboardOrganization(profile) {
-  const res = await fetch(`${BASE_URL}/api/org/onboard`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(profile),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Onboarding failed: ${res.status}`);
-  }
-  return res.json();
-}
 
 // ─────────────────────────────────────────────
 //  2 CFR 200 Federal Regulatory Compliance

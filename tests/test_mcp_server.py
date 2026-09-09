@@ -9,14 +9,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.mcp.server import (
-    mcp_server,
-    search_federal_grants,
-    query_organization_knowledge_base,
-    evaluate_grant_fit,
     draft_grant_section,
+    evaluate_grant_fit,
     get_organization_profile_resource,
-    get_grant_pipeline_resource,
-    get_knowledge_base_documents_resource,
+    mcp_server,
+    query_organization_knowledge_base,
+    search_federal_grants,
 )
 
 

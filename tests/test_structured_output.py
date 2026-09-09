@@ -7,15 +7,14 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from backend.api.models.schemas import (
-    GrantEvaluationResult,
-    ApplicationDraftResult,
-    MatchScore,
-    GrantStatus,
-    ApplicationSection,
-)
-from backend.agents.matcher import evaluate_grant_structured
 from backend.agents.drafter import draft_application_structured
+from backend.agents.matcher import evaluate_grant_structured
+from backend.api.models.schemas import (
+    ApplicationDraftResult,
+    GrantEvaluationResult,
+    GrantStatus,
+    MatchScore,
+)
 
 
 class TestStructuredOutputEnforcement(unittest.TestCase):

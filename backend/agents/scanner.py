@@ -9,15 +9,13 @@ seen before are passed to the Matcher Agent for scoring.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
+from botocore.config import Config
 from strands import Agent
 from strands.models.bedrock import BedrockModel
-from botocore.config import Config
 
-from backend.config import config
-from backend.tools.grants_api import search_grants, fetch_grant_details
-from backend.tools.org_profile import retrieve_org_profile, check_grant_exists
+from backend.tools.grants_api import fetch_grant_details, search_grants
+from backend.tools.org_profile import check_grant_exists, retrieve_org_profile
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +43,7 @@ Output the exact phrase "SCAN COMPLETE" and nothing else.
 
 
 from backend.optimization import get_model_for_agent
+
 
 def create_scanner_agent() -> Agent:
     """Create and configure the Scanner Agent.

@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any
-import requests
 
+import requests
 from strands import tool
 
-from backend.storage.local_storage import storage
 from backend.config import config
+from backend.storage.local_storage import storage
 
 logger = logging.getLogger(__name__)
 

@@ -14,15 +14,15 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Add project root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from backend.agents.matcher import evaluate_grant_structured
 from backend.agents.drafter import draft_application_structured
+from backend.agents.matcher import evaluate_grant_structured
+from backend.api.models.schemas import GrantEvaluationResult
 from backend.tools.rag_search import query_knowledge_base
-from backend.api.models.schemas import GrantEvaluationResult, GrantStatus
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +243,7 @@ def evaluate_single_case(test_case: dict) -> TestCaseResult:
     except Exception as e:
         result.latency_ms = (time.perf_counter() - start) * 1000
         result.passed = False
-        result.errors.append(f"Exception: {str(e)}")
+        result.errors.append(f"Exception: {e!s}")
 
     return result
 

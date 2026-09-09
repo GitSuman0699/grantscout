@@ -8,7 +8,7 @@ application drafting.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any
 
 from strands import tool
@@ -46,7 +46,7 @@ def retrieve_org_profile(org_id: str = "default") -> dict[str, Any]:
             }
     except Exception as e:
         logger.error(f"Error retrieving org profile: {e}")
-        return {"profile": None, "error": f"Failed to retrieve profile: {str(e)}"}
+        return {"profile": None, "error": f"Failed to retrieve profile: {e!s}"}
 
 
 @tool

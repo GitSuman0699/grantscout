@@ -7,12 +7,12 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from backend.storage.local_storage import storage
 from backend.storage.personas import (
     PERSONAS,
     get_persona_by_id,
     persona_to_org_profile,
 )
-from backend.storage.local_storage import storage
 
 
 class TestNonprofitPersonas(unittest.TestCase):

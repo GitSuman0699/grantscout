@@ -15,24 +15,21 @@ The Graph uses conditional edges to implement intelligent routing:
 from __future__ import annotations
 
 import asyncio
-import logging
-import sys
 import contextlib
-from typing import Any, Optional
+import logging
+from typing import Any
 
+from botocore.config import Config
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
 from strands.multiagent.graph import GraphBuilder
-from botocore.config import Config
 
-from backend.config import config
-from backend.tools.org_profile import retrieve_org_profile
-from backend.tools.grants_api import search_grants, fetch_grant_details
-from backend.storage.local_storage import storage
-from backend.agents.scanner import create_scanner_agent, is_active_opportunity
-from backend.agents.matcher import score_grant
-from backend.agents.drafter import draft_application_for_grant
 from backend.agents.deadline import run_deadline_check
+from backend.agents.matcher import score_grant
+from backend.agents.scanner import is_active_opportunity
+from backend.storage.local_storage import storage
+from backend.tools.grants_api import fetch_grant_details, search_grants
+from backend.tools.org_profile import retrieve_org_profile
 
 logger = logging.getLogger(__name__)
 
@@ -356,7 +353,10 @@ def build_orchestration_graph():
 
 
 # Import tools needed by drafter node
-from backend.tools.application import save_application_draft, get_existing_application_draft
+from backend.tools.application import (
+    get_existing_application_draft,
+    save_application_draft,
+)
 
 
 def create_orchestrator_agent() -> Agent:
@@ -389,7 +389,7 @@ def create_orchestrator_agent() -> Agent:
     return agent
 
 
-async def run_orchestrator(status_callback: Optional[Any] = None) -> str:
+async def run_orchestrator(status_callback: Any | None = None) -> str:
     """Run the Orchestrator Agent to perform discovery and routing autonomously.
 
     Uses the legacy single-agent mode for the manual /api/agent/scan endpoint.

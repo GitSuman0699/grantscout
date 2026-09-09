@@ -14,24 +14,31 @@ The Swarm uses the strands.multiagent.swarm.Swarm class with:
 
 from __future__ import annotations
 
-import sys
-import contextlib
 import asyncio
+import contextlib
 import logging
+import sys
 from typing import Any
 
+from botocore.config import Config
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 from strands.multiagent.swarm import Swarm
-from botocore.config import Config
 
-from backend.config import config
-from backend.optimization import get_model_for_agent
-from backend.tools.org_profile import retrieve_org_profile
-from backend.tools.application import save_application_draft, get_existing_application_draft, update_draft_section, generate_budget_csv
-from backend.tools.rag_search import query_knowledge_base
-from backend.tools.compliance import audit_application_compliance, calculate_mtdc_compliance
 from backend.api.models.schemas import ApplicationDraftResult, ApplicationSection
+from backend.optimization import get_model_for_agent
+from backend.tools.application import (
+    generate_budget_csv,
+    get_existing_application_draft,
+    save_application_draft,
+    update_draft_section,
+)
+from backend.tools.compliance import (
+    audit_application_compliance,
+    calculate_mtdc_compliance,
+)
+from backend.tools.org_profile import retrieve_org_profile
+from backend.tools.rag_search import query_knowledge_base
 
 logger = logging.getLogger(__name__)
 

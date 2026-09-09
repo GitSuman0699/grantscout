@@ -9,16 +9,15 @@ and <50 are archived silently.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
+from botocore.config import Config
 from strands import Agent
 from strands.models.bedrock import BedrockModel
-from botocore.config import Config
 
-from backend.config import config
+from backend.api.models.schemas import GrantEvaluationResult
 from backend.tools.org_profile import retrieve_org_profile, save_matched_grant
 from backend.tools.rag_search import query_knowledge_base
-from backend.api.models.schemas import GrantEvaluationResult, MatchScore, GrantStatus
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +58,7 @@ ROUTING CRITERIA:
 
 
 from backend.optimization import get_model_for_agent
+
 
 def create_matcher_agent() -> Agent:
     """Create and configure the Matcher Agent.

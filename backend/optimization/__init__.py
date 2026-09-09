@@ -129,7 +129,7 @@ class ResponseCache:
         raw = f"{namespace}:{query}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
-    def get(self, namespace: str, query: str) -> Optional[Any]:
+    def get(self, namespace: str, query: str) -> Any | None:
         """Retrieve a cached response if it exists and is not expired."""
         key = self._make_key(namespace, query)
         if key in self._cache:
@@ -380,8 +380,9 @@ def estimate_tokens(text: str) -> int:
 #  Token Tracker Integration
 # ──────────────────────────────────────────────
 
-from strands import Agent
 import functools
+
+from strands import Agent
 
 _original_agent_call = Agent.__call__
 

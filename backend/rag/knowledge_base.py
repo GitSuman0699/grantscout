@@ -11,11 +11,9 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import re
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import boto3
 from botocore.config import Config
@@ -49,7 +47,7 @@ class SearchResult(BaseModel):
 class KnowledgeBase:
     """Vector knowledge base for nonprofit organizational context."""
 
-    def __init__(self, storage_dir: Optional[str] = None):
+    def __init__(self, storage_dir: str | None = None):
         self.storage_dir = Path(storage_dir or (Path(config.LOCAL_STORAGE_PATH) / "knowledge_base"))
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.index_file = self.storage_dir / "vector_index.json"
@@ -180,7 +178,7 @@ class KnowledgeBase:
         logger.info(f"Indexed document '{doc_name}' into {len(new_chunks)} chunks (category: {category}).")
         return len(new_chunks)
 
-    def search(self, query: str, top_k: int = 3, category: Optional[str] = None) -> list[SearchResult]:
+    def search(self, query: str, top_k: int = 3, category: str | None = None) -> list[SearchResult]:
         """Perform semantic similarity search against indexed document chunks.
 
         Args:
@@ -245,7 +243,7 @@ class KnowledgeBase:
 
         return list(doc_stats.values())
 
-    def get_document(self, doc_name: str) -> Optional[dict[str, Any]]:
+    def get_document(self, doc_name: str) -> dict[str, Any] | None:
         """Retrieve the reconstructed full content and metadata of a specific document."""
         doc_chunks = [c for c in self.chunks if c.doc_name == doc_name]
         if not doc_chunks:

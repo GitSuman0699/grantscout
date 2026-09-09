@@ -11,19 +11,15 @@ from backend.optimization import (
     ModelTier,
     ResponseCache,
     TokenTracker,
-    get_model_for_agent,
-    MODEL_TIERS,
-    AGENT_TIER_MAP,
     compress_grant_synopsis,
     estimate_tokens,
-    response_cache,
-    token_tracker,
+    get_model_for_agent,
 )
 from tests.eval_harness import (
-    run_full_evaluation,
-    evaluate_rag_retrieval,
-    evaluate_drafter_completeness,
     EVAL_CORPUS,
+    evaluate_drafter_completeness,
+    evaluate_rag_retrieval,
+    run_full_evaluation,
 )
 
 
