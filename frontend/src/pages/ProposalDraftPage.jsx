@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, Copy, Check, Sparkles, Target, Building2, Calendar,
@@ -67,6 +67,21 @@ export default function ProposalDraftPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const thoughtsEndRef = useRef(null);
+  const sectionScrollRef = useRef(null);
+  const [sectionScrollPositions, setSectionScrollPositions] = useState({});
+
+  useEffect(() => {
+    if (thoughtsEndRef.current) {
+      thoughtsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [agentThoughts]);
+
+  useEffect(() => {
+    if (sectionScrollRef.current) {
+      sectionScrollRef.current.scrollTop = sectionScrollPositions[activeSectionIdx] || 0;
+    }
+  }, [activeSectionIdx, isEditMode]);
 
   // Preserve clean root origin: either '/pipeline', '/drafts', or '/'
   const rawFrom = location.state?.from || '';
@@ -663,16 +678,25 @@ export default function ProposalDraftPage() {
                     />
                   </div>
                 ) : (
-                  <div style={{
-                    background: 'var(--canvas-bg, #FAF8F5)',
-                    border: '2px solid var(--border-dark)',
-                    padding: '2rem',
-                    borderRadius: '0',
-                    fontSize: '0.95rem',
-                    boxShadow: 'var(--shadow-offset-sm, 2px 2px 0px var(--border-dark))',
-                    height: '500px',
-                    overflowY: 'auto'
-                  }}>
+                  <div 
+                    ref={sectionScrollRef}
+                    onScroll={(e) => {
+                      setSectionScrollPositions(prev => ({
+                        ...prev,
+                        [activeSectionIdx]: e.target.scrollTop
+                      }));
+                    }}
+                    style={{
+                      background: 'var(--canvas-bg, #FAF8F5)',
+                      border: '2px solid var(--border-dark)',
+                      padding: '2rem',
+                      borderRadius: '0',
+                      fontSize: '0.95rem',
+                      boxShadow: 'var(--shadow-offset-sm, 2px 2px 0px var(--border-dark))',
+                      height: '500px',
+                      overflowY: 'auto'
+                    }}
+                  >
                     <MarkdownRenderer content={activeSection.content} />
                   </div>
                 )}
@@ -773,6 +797,7 @@ export default function ProposalDraftPage() {
                     </div>
                   );
                 })}
+                <div ref={thoughtsEndRef} />
               </div>
             ) : (
               <button
