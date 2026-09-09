@@ -101,10 +101,16 @@ export function GrantProvider({ children }) {
           event.type === 'scan_completed' ||
           event.type === 'drafting_started' ||
           event.type === 'application_drafted' ||
-          event.type === 'drafting_failed' ||
           event.type === 'orchestration_completed' ||
           event.type === 'cache_cleared'
         ) {
+          loadGrants();
+          loadStats();
+        }
+
+        if (event.type === 'drafting_failed' || event.type === 'scan_failed') {
+          setError(event.message || 'An error occurred during background processing.');
+          // Still load stats so UI reflects matched/aborted states
           loadGrants();
           loadStats();
         }
@@ -155,6 +161,7 @@ export function GrantProvider({ children }) {
       refreshGrants: loadGrants,
       refreshStats: loadStats,
       scanThoughts,
+      setError,
     }}>
       {children}
     </GrantContext.Provider>

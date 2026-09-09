@@ -460,6 +460,13 @@ async def trigger_grant_draft(
                 )
             except Exception as e:
                 logger.error(f"Drafting failed in background: {e}")
+                
+                # Rollback incomplete drafts
+                apps = storage.list_applications()
+                matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+                if matched_app and matched_app.get("draft_id"):
+                    storage.delete_application(matched_app["draft_id"])
+                    
                 grant["status"] = "matched"
                 storage.save_grant(grant)
                 asyncio.run_coroutine_threadsafe(
@@ -648,6 +655,16 @@ async def trigger_scan(
             "message": f"Grant scan failed: {str(e)}",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
+        
+        # Broadcast the failure so the UI can display a toast
+        asyncio.run_coroutine_threadsafe(
+            broadcast_event({
+                "type": "scan_failed",
+                "message": f"Scan failed: {str(e)}"
+            }),
+            asyncio.get_running_loop()
+        )
+        
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
 

@@ -4,6 +4,7 @@ import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare, PlusCirc
 import { useGrants } from '../context/GrantContext';
 import PersonaSelector from './PersonaSelector';
 import LiveScanModal from './LiveScanModal';
+import GlobalErrorToast from './GlobalErrorToast';
 
 export default function Header() {
   const { isScanning, runScanCycle, handleClearCache, systemHealth, refreshGrants } = useGrants();
@@ -29,6 +30,7 @@ export default function Header() {
   return (
     <>
       <LiveScanModal />
+      <GlobalErrorToast />
       <header style={{
         borderBottom: '2px solid var(--border-dark)',
         backgroundColor: 'var(--card-bg)',

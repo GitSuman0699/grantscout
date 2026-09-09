@@ -343,6 +343,9 @@ Start by retrieving the organization profile and relevant knowledge base documen
     saved_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
     
     if saved_app and saved_app.get("sections"):
+        if len(saved_app["sections"]) < 6:
+            raise RuntimeError(f"Incomplete draft: Expected 6 sections, but Swarm only generated {len(saved_app['sections'])} before stopping.")
+            
         draft_result = ApplicationDraftResult(
             grant_id=grant_id,
             org_id=saved_app.get("org_id", "default"),
