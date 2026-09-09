@@ -31,6 +31,8 @@ YOUR WORKFLOW:
 4. For each grant found, use `check_grant_exists` to see if it's already been discovered.
 5. For NEW grants only, use `fetch_grant_details` to get the full synopsis and eligibility information.
 
+CRITICAL: The system relies on the automated tool calls. You must NOT output conversational text, pleasantries, or summaries. Save tokens and time by remaining completely silent EXCEPT for tool invocations and the final JSON response.
+
 SEARCH STRATEGY:
 - Extract 3-5 distinct keyword phrases from the org's mission and programs
 - Always use targeted exact phrases in quotes (e.g., '"STEM education"', '"robotics"') to avoid noisy subword stemming
