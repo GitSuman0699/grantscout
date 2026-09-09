@@ -14,6 +14,57 @@ Built for the Agents for Humans Hackathon, GrantScout is a multi-agent system bu
 4. **Drafts**: Uses a **4-agent Swarm** (Narrative, Budget, Compliance, Lead Drafter) to generate a structured 6-section grant application.
 5. **RAG**: Grounds the narrative using a Knowledge Base that indexes uploaded organizational documents via **Amazon Titan Text Embeddings V2**.
 
+### 🏗️ Architecture Diagram
+
+```mermaid
+graph TD
+    %% Styling
+    classDef frontend fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
+    classDef backend fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
+    classDef agents fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
+    classDef external fill:#6366f1,stroke:#4338ca,stroke-width:2px,color:#fff
+    classDef storage fill:#64748b,stroke:#334155,stroke-width:2px,color:#fff
+
+    subgraph User Interface
+        UI[React / Vite Frontend]:::frontend
+    end
+
+    subgraph Core System
+        API[FastAPI Backend]:::backend
+        DB[(Local JSON Storage)]:::storage
+        
+        subgraph Autonomous Agents
+            Scan[Scanner Agent]:::agents
+            Match[Matcher Agent]:::agents
+            
+            subgraph Drafter Swarm
+                Lead[Lead Drafter]:::agents
+                Narrative[Narrative Agent]:::agents
+                Budget[Budget Agent]:::agents
+                Compliance[Compliance Agent]:::agents
+            end
+        end
+    end
+
+    subgraph External APIs
+        Grants[Grants.gov REST API]:::external
+        Bedrock[Amazon Bedrock<br>Claude / Titan]:::external
+    end
+
+    %% Connections
+    UI <-->|REST| API
+    API <-->|Reads/Writes| DB
+    API -->|Triggers| Scan
+    
+    Scan <-->|Searches| Grants
+    Scan -->|Passes Results| Match
+    Match -->|Routes High-Fit| Lead
+    
+    Lead --> Narrative & Budget & Compliance
+    
+    Scan & Match & Lead & Narrative & Budget & Compliance <-->|LLM & Embeddings| Bedrock
+```
+
 ## 🛠️ Brutally Honest Implementation Details
 
 While the project has many advanced features, here is the honest reality of the implementation:
