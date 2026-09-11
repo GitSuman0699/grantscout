@@ -10,7 +10,36 @@ import json
 import logging
 from typing import Any
 
+import os
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+
+# Host header whitelist for DNS rebinding protection
+render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME", "grantscout-api.onrender.com")
+
+transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        "localhost:*",
+        "127.0.0.1:*",
+        "[::1]:*",
+        render_host,
+        f"{render_host}:*",
+    ],
+    allowed_origins=[
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+        f"https://{render_host}",
+        f"https://{render_host}:*",
+    ],
+)
+
+# Initialize FastMCP Server
+mcp_server = FastMCP(
+    name="GrantScout MCP",
+    instructions="GrantScout Model Context Protocol server providing live federal grants discovery, nonprofit RAG retrieval, application drafting, and deadline monitoring.",
+    transport_security=transport_security,
+)
 
 from backend.rag.knowledge_base import knowledge_base
 from backend.storage.local_storage import storage
@@ -32,11 +61,6 @@ from backend.tools.notifications import (
 
 logger = logging.getLogger(__name__)
 
-# Initialize FastMCP Server
-mcp_server = FastMCP(
-    name="GrantScout MCP",
-    instructions="GrantScout Model Context Protocol server providing live federal grants discovery, nonprofit RAG retrieval, application drafting, and deadline monitoring.",
-)
 
 # ──────────────────────────────────────────────
 #  Register All 15 Production Tools
