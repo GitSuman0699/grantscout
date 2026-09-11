@@ -1462,6 +1462,8 @@ async def get_autoscan_status():
 
 
 @app.get("/health")
+@app.get("/healthz")
+@app.get("/api/health")
 async def health_check():
     """API health check endpoint."""
     return {
