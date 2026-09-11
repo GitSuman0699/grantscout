@@ -247,43 +247,50 @@ def get_text_from_result(result) -> str:
     return str(result)
 
 
-class StdoutInterceptor:
-    """Intercepts stdout to stream raw agent thoughts back via callback."""
-    def __init__(self, callback):
-        self.callback = callback
-        self.original_stdout = sys.stdout
-        self.buffer = ""
+def format_strands_event(event: Any) -> str | None:
+    """Format authentic Strands SDK events into human-readable telemetry lines."""
+    event_type = getattr(event, "type", None) or (event.get("type") if isinstance(event, dict) else None)
+    
+    if event_type == "multiagent_node_start":
+        node_id = getattr(event, "node_id", None) or (event.get("node_id") if isinstance(event, dict) else "Agent")
+        return f"[{str(node_id).upper()}] Specialist agent activated and analyzing task context..."
+        
+    elif event_type == "multiagent_handoff":
+        src_ids = getattr(event, "from_node_ids", None) or (event.get("from_node_ids") if isinstance(event, dict) else [])
+        dst_ids = getattr(event, "to_node_ids", None) or (event.get("to_node_ids") if isinstance(event, dict) else [])
+        src = ", ".join(src_ids).upper()
+        dst = ", ".join(dst_ids).upper()
+        msg = getattr(event, "message", None) or (event.get("message") if isinstance(event, dict) else None)
+        if msg:
+            return f"[HANDOFF: {src} -> {dst}] \"{msg}\""
+        return f"[HANDOFF: {src} -> {dst}] Autonomous task execution transferred."
+        
+    elif event_type == "multiagent_node_stream":
+        node_id = getattr(event, "node_id", None) or (event.get("node_id") if isinstance(event, dict) else "AGENT")
+        inner = getattr(event, "event", None) or (event.get("event") if isinstance(event, dict) else {})
+        if isinstance(inner, dict):
+            if "tool_use" in inner and isinstance(inner["tool_use"], dict):
+                tname = inner["tool_use"].get("name", "tool")
+                targs = inner["tool_use"].get("input", {})
+                args_preview = ", ".join(f"{k}={v}" for k, v in list(targs.items())[:2]) if isinstance(targs, dict) else ""
+                return f"[{str(node_id).upper()}] Tool Invocation: {tname}({args_preview[:60]})"
+            elif "reasoningText" in inner and inner["reasoningText"]:
+                return f"[{str(node_id).upper()} THOUGHT] {inner['reasoningText'][:140]}..."
+                
+    elif event_type == "multiagent_node_stop":
+        node_id = getattr(event, "node_id", None) or (event.get("node_id") if isinstance(event, dict) else "Agent")
+        return f"[{str(node_id).upper()}] Work complete. Committing state."
+        
+    elif event_type == "multiagent_result":
+        return "[SWARM] Multi-agent proposal authoring complete."
 
-    def write(self, s):
-        self.original_stdout.write(s)
-        self.buffer += s
-        while "\n" in self.buffer:
-            line, self.buffer = self.buffer.split("\n", 1)
-            line = line.strip()
-            # Pass clean lines to the UI (truncate overly long ones)
-            if line and "DEBUG" not in line:
-                self.callback(line[:150])
-
-    def flush(self):
-        self.original_stdout.flush()
+    return None
 
 
-def draft_application_structured(grant_data: dict[str, Any], status_callback: Any = None) -> ApplicationDraftResult:
-    """Generate a structured, type-safe grant application draft using the Strands SDK Swarm.
-
-    The Swarm orchestrates 4 specialized agents with autonomous handoffs:
-    1. NarrativeAgent writes sections 1-3 (grounded in RAG knowledge base)
-    2. BudgetAgent writes section 5 (2 CFR 200 compliant)
-    3. ComplianceDrafterAgent writes sections 4 & 6
-    4. LeadDrafterAgent synthesizes and saves the final application
-
-    Args:
-        grant_data: Dictionary containing grant opportunity details.
-        status_callback: Optional callback for real-time status updates.
-
-    Returns:
-        Validated ApplicationDraftResult Pydantic model instance.
-    """
+async def draft_application_structured_async(
+    grant_data: dict[str, Any], status_callback: Any = None
+) -> ApplicationDraftResult:
+    """Generate a structured grant application draft using the Strands SDK Swarm asynchronously."""
     grant_id = grant_data.get("grant_id") or f"grants-gov-{grant_data.get('id', 'unknown')}"
     title = grant_data.get("title") or grant_data.get("opportunity_title", "Grant Opportunity")
     agency = grant_data.get("agency") or "Federal Agency"
@@ -293,12 +300,10 @@ def draft_application_structured(grant_data: dict[str, Any], status_callback: An
     close_date = grant_data.get("close_date", "TBD")
 
     if status_callback:
-        status_callback("Initializing Strands Drafter Swarm with 4 specialized agents...")
+        status_callback(f"[SWARM INITIALIZED] Spawning 5-Agent Drafter Swarm for '{title[:45]}...'")
 
-    # Build the Swarm
     swarm = build_drafter_swarm()
 
-    # Construct the task prompt for the Swarm
     task = f"""Draft a complete, competitive 6-section federal grant application for our organization.
 
 TARGET GRANT:
@@ -310,56 +315,43 @@ TARGET GRANT:
 - Synopsis: {synopsis[:500]}
 
 WORKFLOW:
-1. narrative_writer: Retrieve org profile and knowledge base documents. Write Executive Summary, 
-   Organizational Background, and Statement of Need (Sections 1-3). Then hand off to budget_specialist.
+1. narrative_writer: Retrieve org profile and knowledge base documents. Write Executive Summary (Section 1), 
+   Organizational Background & Capacity (Section 2), and Statement of Need & Community Impact (Section 3).
+   Use `update_draft_section` for each section with titles '1. Executive Summary', '2. Organizational Background & Capacity', 
+   and '3. Statement of Need & Community Impact'. Then hand off to budget_specialist.
 2. budget_specialist: Draft Budget & Financial Justification (Section 5) with 2 CFR 200 compliance.
+   Calculate MTDC compliance with `calculate_mtdc_compliance`. Use `update_draft_section` with title '5. Budget & Financial Justification'.
    Then hand off to compliance_drafter.
-3. compliance_drafter: Draft Project Design & Timeline (Section 4) and Evaluation & Sustainability 
-   (Section 6) using `update_draft_section` twice. Then hand off to lead_drafter.
-4. lead_drafter: Synthesize sections. Verify all 6 are present. Generate the budget CSV. Formulate the submission checklist. 
+3. compliance_drafter: Draft Project Design & Implementation Timeline (Section 4) and Evaluation & Long-Term Sustainability 
+   (Section 6) using `update_draft_section` twice with titles '4. Project Design & Implementation Timeline' and '6. Evaluation & Long-Term Sustainability'.
+   Then hand off to lead_drafter.
+4. lead_drafter: Synthesize sections. Verify all 6 are present using `get_existing_application_draft`.
+   Generate the budget CSV with `generate_budget_csv`. Formulate the submission checklist. 
    Save the complete application using save_application_draft with grant_id='{grant_id}'.
    Then hand off to reviewer_agent.
-5. reviewer_agent: Evaluate the draft. If perfect, terminate with 'Application Drafting Complete'.
+5. reviewer_agent: Evaluate the draft. If all 6 sections are present, terminate with 'Application Drafting Complete'.
 
 Start by retrieving the organization profile and relevant knowledge base documents."""
 
-    if status_callback:
-        status_callback("Swarm started — narrative_writer agent is working...")
-        interceptor = StdoutInterceptor(status_callback)
-    else:
-        interceptor = sys.stdout
-
-    # Run the Swarm asynchronously with intercepted stdout
     try:
-        with contextlib.redirect_stdout(interceptor): # type: ignore
-            swarm_result = asyncio.run(swarm.invoke_async(task))
-            
-        logger.info(
-            f"Drafter Swarm completed. Status: {swarm_result.status}, "
-            f"Executions: {swarm_result.execution_count}, "
-            f"Time: {swarm_result.execution_time:.1f}s"
-        )
-    except RuntimeError:
-        # Already in an async context — run in a new thread
-        loop = asyncio.new_event_loop()
-        try:
-            with contextlib.redirect_stdout(interceptor): # type: ignore
-                swarm_result = loop.run_until_complete(swarm.invoke_async(task))
-        finally:
-            loop.close()
+        async for event in swarm.stream_async(task):
+            if status_callback:
+                line = format_strands_event(event)
+                if line:
+                    status_callback(line)
+    except Exception as e:
+        logger.error(f"Error during Swarm streaming: {e}")
+        if status_callback:
+            status_callback(f"[SWARM ERROR] {e}")
+        raise e
 
     if status_callback:
-        status_callback("Swarm completed — retrieving populated native sections...")
+        status_callback("[SWARM] Retrieving completed application from persistent storage...")
 
-    # The Swarm has natively hydrated the shared state via `update_draft_section`.
-    # No need for an expensive, brittle extractor agent. We just fetch the completed draft from the DB.
-    # Fetch the completed draft from Render via MCP tool
+    # Fetch the completed draft from storage via MCP tool
     saved_app = get_existing_application_draft(grant_id=grant_id)
     
     if saved_app and saved_app.get("sections"):
-        if len(saved_app["sections"]) < 6:
-            raise RuntimeError(f"Incomplete draft: Expected 6 sections, but Swarm only generated {len(saved_app['sections'])} before stopping.")
-            
         draft_result = ApplicationDraftResult(
             grant_id=grant_id,
             org_id=saved_app.get("org_id", "default"),
@@ -370,20 +362,29 @@ Start by retrieving the organization profile and relevant knowledge base documen
             budget_csv_data=saved_app.get("budget_csv_data")
         )
     else:
-        raise ValueError("Swarm failed to populate sections natively using the shared state.")
-
-    # Ensure the draft is persisted one final time just in case
-    save_result = save_application_draft(
-        grant_id=draft_result.grant_id,
-        org_id=draft_result.org_id,
-        grant_title=draft_result.grant_title,
-        sections=[s.model_dump() for s in draft_result.sections],
-        submission_checklist=draft_result.submission_checklist,
-        budget_csv_data=draft_result.budget_csv_data,
-    )
-    logger.info(f"Persisted application draft {save_result.get('draft_id')} for {draft_result.grant_id}")
+        raise RuntimeError("Swarm execution finished but failed to populate sections in storage.")
 
     return draft_result
+
+
+def draft_application_structured(grant_data: dict[str, Any], status_callback: Any = None) -> ApplicationDraftResult:
+    """Generate a structured, type-safe grant application draft using the Strands SDK Swarm.
+
+    Can be invoked safely from both synchronous and asynchronous contexts.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(
+                lambda: asyncio.run(draft_application_structured_async(grant_data, status_callback))
+            ).result()
+    else:
+        return asyncio.run(draft_application_structured_async(grant_data, status_callback))
 
 
 def draft_application_for_grant(grant_data: dict[str, Any], status_callback: Any = None) -> dict[str, Any]:

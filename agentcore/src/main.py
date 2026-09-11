@@ -45,9 +45,20 @@ async def _invoke_agent(prompt: str, mcp_url: str):
                 tools_list = await session.list_tools()
                 logger.info(f"Connected to MCP Server. Loaded {len(tools_list.tools)} tools.")
 
-                # Run the full orchestration graph
-                result = await run_full_orchestration_cycle(prompt=prompt)
-                return result
+                # Intent routing: Check if prompt is for proposal drafting or discovery orchestration
+                if "draft" in prompt.lower():
+                    import re
+                    from agents.drafter import draft_application_structured_async
+                    grant_id_match = re.search(r"(?:grants-gov-)?[0-9]{5,10}", prompt)
+                    gid = grant_id_match.group(0) if grant_id_match else "unknown"
+                    if not gid.startswith("grants-gov-") and gid.isdigit():
+                        gid = f"grants-gov-{gid}"
+                    result = await draft_application_structured_async({"grant_id": gid})
+                    return result.model_dump()
+                else:
+                    # Run the full discovery graph DAG
+                    result = await run_full_orchestration_cycle(prompt=prompt)
+                    return result
 
     except Exception as e:
         logger.error(f"Failed to execute agent loop: {e}")

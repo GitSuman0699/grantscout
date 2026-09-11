@@ -5,8 +5,8 @@
  * Base URL and API Key are injected via Vite env variables.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-const API_KEY = import.meta.env.VITE_API_KEY || 'gs_live_*****';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://*****';
+const API_KEY = import.meta.env.VITE_API_KEY || '*******';
 
 /**
  * Authenticated headers (for agent action endpoints that require X-API-Key).

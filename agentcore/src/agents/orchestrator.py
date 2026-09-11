@@ -385,25 +385,61 @@ def create_orchestrator_agent(remote_tools: list[Any] | None = None) -> Agent:
     return agent
 
 
+def format_graph_event(event: Any) -> str | None:
+    """Format authentic Strands SDK Graph DAG events into human-readable telemetry lines."""
+    event_type = getattr(event, "type", None) or (event.get("type") if isinstance(event, dict) else None)
+    
+    if event_type == "multiagent_node_start":
+        node_id = getattr(event, "node_id", None) or (event.get("node_id") if isinstance(event, dict) else "Node")
+        return f"[{str(node_id).upper()}] Node activated in GrantScout Discovery Graph DAG."
+        
+    elif event_type == "multiagent_handoff":
+        src_ids = getattr(event, "from_node_ids", None) or (event.get("from_node_ids") if isinstance(event, dict) else [])
+        dst_ids = getattr(event, "to_node_ids", None) or (event.get("to_node_ids") if isinstance(event, dict) else [])
+        src = ", ".join(src_ids).upper()
+        dst = ", ".join(dst_ids).upper()
+        msg = getattr(event, "message", None) or (event.get("message") if isinstance(event, dict) else None)
+        if msg:
+            return f"[GRAPH ROUTING: {src} -> {dst}] \"{msg}\""
+        return f"[GRAPH ROUTING: {src} -> {dst}] Evaluated edge condition. Advancing pipeline stage."
+        
+    elif event_type == "multiagent_node_stream":
+        node_id = getattr(event, "node_id", None) or (event.get("node_id") if isinstance(event, dict) else "AGENT")
+        inner = getattr(event, "event", None) or (event.get("event") if isinstance(event, dict) else {})
+        if isinstance(inner, dict):
+            if "tool_use" in inner and isinstance(inner["tool_use"], dict):
+                tname = inner["tool_use"].get("name", "tool")
+                targs = inner["tool_use"].get("input", {})
+                args_preview = ", ".join(f"{k}={v}" for k, v in list(targs.items())[:2]) if isinstance(targs, dict) else ""
+                return f"[{str(node_id).upper()}] Tool Invocation: {tname}({args_preview[:60]})"
+            elif "reasoningText" in inner and inner["reasoningText"]:
+                return f"[{str(node_id).upper()} THOUGHT] {inner['reasoningText'][:140]}..."
+                
+    elif event_type == "multiagent_node_stop":
+        node_id = getattr(event, "node_id", None) or (event.get("node_id") if isinstance(event, dict) else "Node")
+        return f"[{str(node_id).upper()}] Node processing complete."
+        
+    elif event_type == "multiagent_result":
+        return "[GRAPH] Discovery Graph DAG orchestration complete."
+
+    return None
+
+
 async def run_orchestrator(remote_tools: list[Any] | None = None, status_callback: Any | None = None) -> str:
-    """Run the Orchestrator Agent to perform discovery and routing autonomously.
-
-    Uses the legacy single-agent mode for the manual /api/agent/scan endpoint.
-    """
-    agent = create_orchestrator_agent(remote_tools)
-
-    def _run():
-        if status_callback:
-            status_callback("Starting scan...")
-        return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
-
-    result = await asyncio.to_thread(_run)
-    return str(result)
+    """Run the Orchestrator to perform discovery and routing autonomously via the Strands Graph DAG."""
+    summary = await run_full_orchestration_cycle(remote_tools=remote_tools, status_callback=status_callback)
+    return f"ORCHESTRATION COMPLETE: {summary}"
 
 
-async def run_graph_orchestration_cycle(prompt: str = "", remote_tools: list[Any] | None = None) -> dict[str, Any]:
-    """Execute the complete GrantScout pipeline as a Strands SDK Graph DAG."""
+async def run_graph_orchestration_cycle(
+    prompt: str = "",
+    remote_tools: list[Any] | None = None,
+    status_callback: Any | None = None,
+) -> dict[str, Any]:
+    """Execute the complete GrantScout pipeline as a Strands SDK Graph DAG with live event streaming."""
     logger.info("Starting GrantScout Graph DAG orchestration cycle...")
+    if status_callback:
+        status_callback("[GRAPH INITIALIZED] Building GrantScout Discovery Graph DAG (Scanner -> Matcher -> Drafter / Deadline)...")
 
     graph = build_orchestration_graph(remote_tools)
 
@@ -415,30 +451,49 @@ async def run_graph_orchestration_cycle(prompt: str = "", remote_tools: list[Any
         "Deadline: check all active grants for upcoming deadlines."
     )
 
-    result = await graph.invoke_async(task)
+    completed_nodes: list[str] = []
+    total_nodes = 4
+    status = "completed"
+
+    try:
+        async for event in graph.stream_async(task):
+            event_type = getattr(event, "type", None) or (event.get("type") if isinstance(event, dict) else None)
+            if event_type == "multiagent_node_stop":
+                nid = getattr(event, "node_id", None) or (event.get("node_id") if isinstance(event, dict) else None)
+                if nid and nid not in completed_nodes:
+                    completed_nodes.append(str(nid))
+            elif event_type == "multiagent_result":
+                res_status = getattr(event, "status", None) or (event.get("status") if isinstance(event, dict) else None)
+                if res_status:
+                    status = str(res_status)
+
+            if status_callback:
+                line = format_graph_event(event)
+                if line:
+                    status_callback(line)
+    except Exception as e:
+        logger.error(f"Error during Graph DAG streaming: {e}")
+        if status_callback:
+            status_callback(f"[GRAPH ERROR] {e}")
+        raise e
 
     summary = {
-        "status": result.status,
-        "completed_nodes": result.completed_nodes,
-        "total_nodes": result.total_nodes,
-        "execution_time": result.execution_time,
-        "execution_count": result.execution_count,
-        "failed_nodes": result.failed_nodes,
+        "status": status,
+        "completed_nodes": completed_nodes,
+        "total_nodes": total_nodes,
     }
-
-    logger.info(
-        f"Graph DAG cycle complete. "
-        f"Nodes: {result.completed_nodes}/{result.total_nodes}, "
-        f"Time: {result.execution_time:.1f}s, "
-        f"Status: {result.status}"
-    )
+    logger.info(f"Graph DAG cycle complete. Nodes: {len(completed_nodes)}/{total_nodes}, Status: {status}")
     return summary
 
 
-async def run_full_orchestration_cycle(prompt: str = "", remote_tools: list[Any] | None = None) -> dict[str, Any]:
-    """Execute a complete autonomous scan, match, draft, and deadline cycle."""
+async def run_full_orchestration_cycle(
+    prompt: str = "",
+    remote_tools: list[Any] | None = None,
+    status_callback: Any | None = None,
+) -> dict[str, Any]:
+    """Execute a complete autonomous scan, match, draft, and deadline cycle via Graph DAG."""
     try:
-        return await run_graph_orchestration_cycle(prompt, remote_tools)
+        return await run_graph_orchestration_cycle(prompt, remote_tools, status_callback)
     except Exception as e:
         logger.error(f"Graph DAG execution failed: {e}")
         raise e

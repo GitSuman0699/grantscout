@@ -118,7 +118,7 @@ export function GrantProvider({ children }) {
           loadStats();
         }
 
-        if (event.type === 'agent_thought' && event.message) {
+        if (event.type === 'agent_thought' && event.message && !event.grant_id) {
           setScanThoughts(prev => [...prev, event.message]);
         }
       },

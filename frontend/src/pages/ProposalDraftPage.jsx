@@ -969,11 +969,11 @@ export default function ProposalDraftPage() {
               </>
             )}
 
-            {/* {isDrafting && (
+            {isDrafting && (
               <p style={{ color: 'var(--ink-muted)', fontSize: '1rem' }}>
                 Bedrock Claude is synthesizing your proposal. Follow progress in the telemetry stream above.
               </p>
-            )} */}
+            )}
           </div>
         </div>
       )}
