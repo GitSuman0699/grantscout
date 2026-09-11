@@ -318,6 +318,18 @@ export default function ProposalDraftPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadBudgetCSV = () => {
+    if (!draft || !draft.budget_csv_data) return;
+    const docTitle = draft.grant_title || grant?.title || 'Grant_Budget';
+    const blob = new Blob([draft.budget_csv_data], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${docTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_sf424_budget.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleSaveSection = async () => {
     if (!draft || !draft.sections) return;
     setIsSaving(true);
@@ -620,6 +632,18 @@ export default function ProposalDraftPage() {
                 {copiedAll ? 'COPIED ALL SECTIONS' : 'COPY FULL PROPOSAL'}
               </button>
 
+              {draft.budget_csv_data && (
+                <button
+                  onClick={handleDownloadBudgetCSV}
+                  className="brutalist-btn btn-outline"
+                  style={{ fontSize: '0.85rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#F0FDF4', borderColor: '#166534', color: '#166534' }}
+                  title="Download SF-424 Budget Line-Item CSV Spreadsheet"
+                >
+                  <FileText size={14} />
+                  SF-424 BUDGET CSV
+                </button>
+              )}
+
               <button
                 onClick={handleDownloadMarkdown}
                 className="brutalist-btn btn-primary"
@@ -785,6 +809,37 @@ export default function ProposalDraftPage() {
 
               {/* Main Content Area: Editor or Formatted Markdown Preview */}
               <div style={{ flex: 1, marginBottom: '1.5rem' }}>
+                {activeTitle.toLowerCase().includes('budget') && draft.budget_csv_data && (
+                  <div style={{
+                    margin: '0 0 1.25rem 0',
+                    padding: '1rem 1.25rem',
+                    background: '#F0FDF4',
+                    border: '2px solid #166534',
+                    boxShadow: '3px 3px 0px #166534',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem'
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#166534', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>📊</span> SF-424 FEDERAL BUDGET SPREADSHEET TOOL (2 CFR 200 COMPLIANT)
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#14532D', marginTop: '0.2rem' }}>
+                        The Budget Specialist Agent itemized Personnel, Fringe Benefits, Travel, Supplies, and 10% MTDC De Minimis Indirect Costs.
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleDownloadBudgetCSV}
+                      className="brutalist-btn btn-primary"
+                      style={{ fontSize: '0.8rem', padding: '0.45rem 0.95rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#166534', color: '#FFF' }}
+                    >
+                      <Download size={13} />
+                      DOWNLOAD SF-424 CSV
+                    </button>
+                  </div>
+                )}
                 {isEditMode ? (
                   <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--ink-muted)', marginBottom: '0.5rem' }}>

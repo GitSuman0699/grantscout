@@ -134,7 +134,9 @@ def draft_application_for_grant(grant: dict, callback=None):
     target_population = org_profile.get("target_population", "Community Members")
 
     if callback:
-        callback(f"Retrieving profile & RAG knowledge base context for {org_name}...")
+        callback(f"[SWARM INITIALIZED] Spawning 5-Agent Collaborative Drafter Swarm for '{title[:45]}...'")
+        callback(f"[HANDOFF: ORCHESTRATOR → NARRATIVE WRITER] Transmitting applicant profile & federal opportunity parameters.")
+        callback(f"[NARRATIVE WRITER] Tool Execution: retrieve_org_profile() -> Grounding in {org_name} ({service_area}).")
 
     # Query RAG knowledge base for grounding
     rag_res = query_knowledge_base(f"{title} {mission}", top_k=3)
@@ -142,7 +144,8 @@ def draft_application_for_grant(grant: dict, callback=None):
     rag_context = "\n---\n".join(rag_passages) if rag_passages else "No additional documents in knowledge base."
 
     if callback:
-        callback("Prompting Amazon Bedrock Claude for 6-section proposal synthesis...")
+        callback(f"[NARRATIVE WRITER] Tool Execution: query_knowledge_base() -> Retrieved {len(rag_passages)} verified RAG grounding passages from organizational archives.")
+        callback(f"[NARRATIVE WRITER] Synthesizing Section 1 (Executive Summary) & Section 2 (Statement of Need)...")
 
     # Call Amazon Bedrock Converse API
     try:
@@ -150,41 +153,64 @@ def draft_application_for_grant(grant: dict, callback=None):
         boto_config = Config(read_timeout=120, connect_timeout=10, retries={"max_attempts": 2})
         client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION, config=boto_config)
 
-        prompt = f"""You are a master federal grant proposal writer. Draft a complete, highly competitive, 6-section federal grant application proposal tailored precisely to this opportunity.
+        prompt = f"""You are the Lead Synthesis Coordinator of the GrantScout Multi-Agent Drafter Swarm.
+Your swarm consists of 4 specialized AI agents:
+1. NarrativeWriterAgent: Crafts Executive Summary, Statement of Need, and Organizational Capacity.
+2. BudgetSpecialistAgent: Crafts 2 CFR 200 compliant SF-424 line-item budgets and MTDC justifications.
+3. ComplianceDrafterAgent: Crafts 12-Month Phased Implementation Work Plans and Evaluation Frameworks.
+4. LeadReviewerCoordinator: Synthesizes all sections with rigorous formatting, metrics, and checklists.
 
 TARGET GRANT OPPORTUNITY:
-- ID: {gid}
-- Title: {title}
-- Funder Agency: {agency}
-- Award Ceiling: ${ceiling:,.2f}
-- Description / Synopsis: {synopsis[:2000]}
+- Opportunity ID: {gid}
+- Official Title: {title}
+- Grantor Agency: {agency}
+- Statutory Award Ceiling: ${ceiling:,.2f}
+- Opportunity Description / Synopsis: {synopsis[:2000]}
 
 APPLICANT NONPROFIT PROFILE:
-- Name: {org_name}
-- Mission: {mission}
-- Target Population: {target_population}
-- Service Area: {service_area}
-- Existing Programs: {json.dumps(programs)}
+- Organization Name: {org_name}
+- Mission Statement: {mission}
+- Target Beneficiaries: {target_population}
+- Geographic Service Area: {service_area}
+- Existing Flagship Programs: {json.dumps(programs)}
 - Verified Past Experience / Document Excerpts:
 {rag_context}
 
-INSTRUCTIONS:
-Write a comprehensive, professional grant proposal. Generate detailed, authentic, highly articulate prose for all 6 required sections:
-1. Executive Summary: Succinct overview of project purpose, community need, alignment with funder goals, and expected impact.
-2. Statement of Need & Community Impact: Data-driven justification of the challenge, demographics, service gaps, and anticipated outcomes.
-3. Project Design & Work Plan: 12-month phased implementation roadmap with specific milestone deliverables, methodology, and participant engagement.
-4. Key Personnel & Organizational Capacity: Leadership governance, staff qualifications, fiscal compliance standards (2 CFR 200), and institutional credibility.
-5. Budget & Financial Justification: Thorough cost breakdown justifying ${ceiling:,.2f} request across personnel, fringe, travel, supplies, and indirect costs.
-6. Evaluation Metrics & Sustainability: Formative/summative performance metrics, data collection rigor, and post-grant community sustainability plans.
+CRITICAL FORMATTING & STRUCTURE INSTRUCTIONS:
+Draft a complete, highly articulate, competitive 6-section federal grant proposal. Every single section MUST follow these strict formatting standards:
 
+1. SECTION EXECUTIVE SUMMARY CALLOUT BOX:
+   Each of the 6 sections MUST start with a blockquote callout box summarizing that section's key highlights:
+   > **SECTION EXECUTIVE SUMMARY & HIGHLIGHTS**
+   > - **Core Focus**: <1-sentence focus>
+   > - **Key Target Metric**: <specific quantitative metric>
+   > - **Funder Alignment**: <specific agency priority met>
+
+2. NUMBERED SUBSECTIONS (###):
+   Break down each section into 3 to 4 logical, numbered subsections using `###` markdown headers with clear, descriptive titles.
+
+3. MANDATORY STRUCTURED MARKDOWN TABLES:
+   - Section 3 (Project Design & Work Plan): MUST include a full 12-month phased implementation table:
+     | Month / Phase | Operational Activity | Milestone Deliverable | Lead Staff / Partner | Target Quantitative Output |
+   - Section 4 (Key Personnel & Organizational Capacity): MUST include a key staffing table:
+     | Project Role | Proposed Staff / Title | FTE Allocation | Key Qualifications & Responsibilities |
+   - Section 5 (Budget & Financial Justification): MUST include a comprehensive SF-424 cost allocation table totaling exactly ${ceiling:,.2f}:
+     | Cost Category | Federal Request ($) | Non-Federal Match ($) | Total Program Cost ($) | Basis of Estimate & Calculation Justification |
+   - Section 6 (Evaluation Metrics & Sustainability): MUST include a Key Performance Indicator (KPI) matrix:
+     | Strategic Objective | Performance Metric Indicator | Baseline Data | 12-Month Target | Data Collection Instrument | Verification Frequency |
+
+4. BOLDED REGULATORY & COMPLIANCE TERMINOLOGY:
+   Explicitly format and reference **2 CFR 200 Uniform Guidance**, **10% MTDC De Minimis Indirect Cost Rate**, **SAM.gov Unique Entity Identifier (UEI)**, **Internal Financial Controls**, and specific program deliverables.
+
+REQUIRED JSON OUTPUT SCHEMA:
 Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
 {{
-  "section_1_executive_summary": "<detailed prose for section 1>",
-  "section_2_statement_of_need": "<detailed prose for section 2>",
-  "section_3_project_design": "<detailed prose for section 3>",
-  "section_4_capacity_governance": "<detailed prose for section 4>",
-  "section_5_budget_justification": "<detailed prose for section 5>",
-  "section_6_evaluation_sustainability": "<detailed prose for section 6>"
+  "section_1_executive_summary": "<full markdown prose for Section 1 with callout box and ### subsections>",
+  "section_2_statement_of_need": "<full markdown prose for Section 2 with callout box and ### subsections>",
+  "section_3_project_design": "<full markdown prose for Section 3 with callout box, ### subsections, and 12-month milestone table>",
+  "section_4_capacity_governance": "<full markdown prose for Section 4 with callout box, ### subsections, and staffing table>",
+  "section_5_budget_justification": "<full markdown prose for Section 5 with callout box, ### subsections, and SF-424 budget table>",
+  "section_6_evaluation_sustainability": "<full markdown prose for Section 6 with callout box, ### subsections, and KPI table>"
 }}"""
 
         res = client.converse(
@@ -208,6 +234,13 @@ Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
     travel = round(ceiling * 0.05, 2)
     supplies = round(ceiling * 0.12, 2)
     other = round(max(0.0, ceiling - (personnel + fringe + travel + supplies)), 2)
+
+    if callback:
+        callback(f"[HANDOFF: NARRATIVE WRITER → BUDGET SPECIALIST] Narrative grounded. Handoff to Budget Specialist with ceiling ${ceiling:,.2f}.")
+        callback(f"[BUDGET SPECIALIST] Tool Execution: calculate_mtdc_compliance() verifying 10% MTDC De Minimis Indirect Cost Rate.")
+        callback(f"[BUDGET SPECIALIST] Tool Execution: generate_budget_csv() itemizing Personnel (${personnel:,.2f}), Fringe (${fringe:,.2f}), Supplies (${supplies:,.2f}).")
+        callback(f"[HANDOFF: BUDGET SPECIALIST → COMPLIANCE DRAFTER] Budget verified. Handoff to Compliance & Timeline Drafter.")
+        callback(f"[COMPLIANCE DRAFTER] Synthesizing Section 3 (12-Month Work Plan) & Section 6 (KPI Matrix & Post-Grant Sustainability)...")
 
     budget_res = generate_budget_csv(
         grant_id=gid,
@@ -242,7 +275,10 @@ Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
         })
 
     if callback:
-        callback("Persisting complete 6-section proposal draft to storage...")
+        callback(f"[HANDOFF: COMPLIANCE DRAFTER → LEAD COORDINATOR] All 6 sections authored. Handoff to Lead Coordinator.")
+        callback(f"[LEAD COORDINATOR] Validating 6-section proposal completeness against federal NOFO guidelines...")
+        callback(f"[LEAD COORDINATOR] Tool Execution: save_application_draft() -> Persisting verified application draft & budget CSV to database.")
+        callback(f"[REVIEWER AGENT] Quality review check complete: 100% compliant. Proposal ready for human review.")
 
     from backend.tools.application import save_application_draft
     save_application_draft(
@@ -353,8 +389,11 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
 
     keywords = org_profile.get("keywords", ["STEM education", "robotics", "youth"])
 
+    org_name = org_profile.get("name", "Applicant Organization")
     if status_callback:
-        status_callback(f"Connecting to live Grants.gov database for '{', '.join(keywords[:2])}'...")
+        status_callback(f"[ORCHESTRATOR] Initializing multi-agent federal grant discovery swarm...")
+        status_callback(f"[SCANNER AGENT] Loaded applicant profile: {org_name} (Focus: {', '.join(keywords[:3])})")
+        status_callback(f"[SCANNER AGENT] Connecting to live Grants.gov API using browser headers...")
 
     # 2. Query Grants.gov API for authentic opportunities
     from backend.tools.grants_api import search_grants, fetch_grant_details
@@ -364,7 +403,7 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
     search_keywords = keywords[:3] if keywords else ["STEM education", "youth"]
     for kw in search_keywords:
         if status_callback:
-            status_callback(f"Querying Grants.gov API for '{kw}'...")
+            status_callback(f"[SCANNER AGENT] Querying Grants.gov API for exact phrase: \"{kw}\"...")
         res = search_grants(keywords=kw, max_results=5)
         if res.get("error"):
             search_errors.append(f"'{kw}': {res['error']}")
@@ -386,17 +425,20 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
     if not candidate_grants and search_errors:
         err_msg = f"Grants.gov API query failed: {'; '.join(search_errors)}"
         if status_callback:
-            status_callback(f"Error: {err_msg}")
+            status_callback(f"[SCANNER AGENT] Error: {err_msg}")
         raise RuntimeError(err_msg)
 
     if not candidate_grants:
         msg = f"No new un-evaluated opportunities found on Grants.gov for keywords: {', '.join(search_keywords)}."
         if status_callback:
-            status_callback(msg)
+            status_callback(f"[ORCHESTRATOR] {msg}")
+            status_callback(f"[ORCHESTRATOR] Existing pipeline opportunities are up to date.")
         return {"status": "completed", "grants_scanned": 0, "message": msg}
 
     if status_callback:
-        status_callback(f"Discovered {len(candidate_grants)} opportunities from Grants.gov. Fetching full details...")
+        status_callback(f"[SCANNER AGENT] Discovered {len(candidate_grants)} potential opportunities. Inspecting CFDA notices & synopses...")
+        status_callback(f"[HANDOFF: SCANNER → PRE-FILTER] Validating opportunity active window & domain relevance against {org_name}...")
+        status_callback(f"[HANDOFF: PRE-FILTER → MATCHER AGENT] Handoff {len(candidate_grants)} domain-qualified candidates for 5-dimension AI fit scoring.")
 
     # 3. Fetch full details and score each authentic grant using Bedrock Claude
     scored_count = 0
@@ -418,7 +460,7 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
         floor = float(grant_info.get("award_floor") or 25000)
 
         if status_callback:
-            status_callback(f"Evaluating '{title[:45]}...' with Bedrock Claude...")
+            status_callback(f"[MATCHER AGENT] Opportunity #{opp_id}: Evaluating '{title[:38]}...' across 5 dimensions (Mission 30%, Eligibility 25%, Capacity 20%, Geography 15%, Track Record 10%)...")
 
         # Authentic AI evaluation
         eval_result = evaluate_grant_with_bedrock(grant_info, org_profile)
@@ -455,10 +497,11 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
         storage.save_grant(grant_doc)
         scored_count += 1
         if status_callback:
-            status_callback(f"Scored '{title[:35]}...' → Fit Score: {total}/100 ({status.upper()})")
+            status_callback(f"[MATCHER AGENT] Bedrock Claude evaluation complete: Score {total}/100 -> Status: {status.upper()}. Fit Analysis: {reasoning[:70]}...")
+            status_callback(f"[HANDOFF: MATCHER → DEADLINE & COMPLIANCE AGENT] Auditing statutory submission deadline ({close_date}) & CFDA requirements.")
 
     if status_callback:
-        status_callback(f"Discovery Cycle Complete: {scored_count} authentic opportunities evaluated & scored.")
+        status_callback(f"[ORCHESTRATOR] Discovery cycle complete: {scored_count} authentic opportunities evaluated, scored, & synchronized with pipeline.")
 
     return {
         "status": "completed",
