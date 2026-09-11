@@ -9,11 +9,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependencies
-COPY pyproject.toml requirements.txt ./
+# Install uv
+RUN pip install uv
 
-# Install python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy project definition
+COPY pyproject.toml ./
+
+# Install python dependencies via uv
+RUN uv pip install --system -e .
 
 # Copy application source code
 COPY backend/ ./backend/

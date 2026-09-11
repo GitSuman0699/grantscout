@@ -25,20 +25,18 @@ from strands import Agent
 from strands.models.bedrock import BedrockModel
 from strands.multiagent.swarm import Swarm
 
-from backend.api.models.schemas import ApplicationDraftResult, ApplicationSection
-from backend.optimization import get_model_for_agent
-from backend.tools.application import (
+from shared.api.models.schemas import ApplicationDraftResult, ApplicationSection
+from shared.optimization import get_model_for_agent
+from mcp_tools import (
     generate_budget_csv,
     get_existing_application_draft,
     save_application_draft,
     update_draft_section,
-)
-from backend.tools.compliance import (
     audit_application_compliance,
     calculate_mtdc_compliance,
+    retrieve_org_profile,
+    query_knowledge_base,
 )
-from backend.tools.org_profile import retrieve_org_profile
-from backend.tools.rag_search import query_knowledge_base
 
 logger = logging.getLogger(__name__)
 
@@ -355,9 +353,8 @@ Start by retrieving the organization profile and relevant knowledge base documen
 
     # The Swarm has natively hydrated the shared state via `update_draft_section`.
     # No need for an expensive, brittle extractor agent. We just fetch the completed draft from the DB.
-    from backend.storage.local_storage import storage
-    apps = storage.list_applications()
-    saved_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+    # Fetch the completed draft from Render via MCP tool
+    saved_app = get_existing_application_draft(grant_id=grant_id)
     
     if saved_app and saved_app.get("sections"):
         if len(saved_app["sections"]) < 6:

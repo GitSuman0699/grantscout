@@ -6,7 +6,7 @@
  */
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-const API_KEY = import.meta.env.VITE_API_KEY || '';
+const API_KEY = import.meta.env.VITE_API_KEY || 'gs_live_*****';
 
 /**
  * Authenticated headers (for agent action endpoints that require X-API-Key).

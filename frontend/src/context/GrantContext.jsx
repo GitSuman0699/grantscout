@@ -14,6 +14,7 @@ export function GrantProvider({ children }) {
   const [grants, setGrants] = useState([]);
   const [dashboardStats, setDashboardStats] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sectorFilter, setSectorFilter] = useState('ALL');
@@ -135,12 +136,28 @@ export function GrantProvider({ children }) {
 
   // ── Clear System Cache ──
   const handleClearCache = useCallback(async () => {
+    setIsClearing(true);
+    setError(null);
     try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.clear();
+      }
+      setGrants([]);
+      setDashboardStats(prev => prev ? {
+        ...prev,
+        grants_discovered: 0,
+        grants_this_week: 0,
+        high_matches: 0,
+        applications_drafted: 0,
+        pipeline_value: '$0K',
+      } : null);
       await clearSystemCache();
       await Promise.all([loadGrants(), loadStats()]);
     } catch (err) {
       console.error('Clear cache failed:', err.message);
       setError(`Clear cache failed: ${err.message}`);
+    } finally {
+      setIsClearing(false);
     }
   }, [loadGrants, loadStats]);
 
@@ -150,6 +167,7 @@ export function GrantProvider({ children }) {
       setGrants,
       dashboardStats,
       isScanning,
+      isClearing,
       isLoading,
       error,
       systemHealth,

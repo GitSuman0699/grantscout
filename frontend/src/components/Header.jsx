@@ -7,7 +7,7 @@ import LiveScanModal from './LiveScanModal';
 import GlobalErrorToast from './GlobalErrorToast';
 
 export default function Header() {
-  const { isScanning, runScanCycle, handleClearCache, systemHealth, refreshGrants } = useGrants();
+  const { isScanning, isClearing, runScanCycle, handleClearCache, systemHealth, refreshGrants } = useGrants();
   const isHealthy = systemHealth === 'healthy';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -184,18 +184,23 @@ export default function Header() {
           {/* Desktop Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <button
-              onClick={async () => {
-                if (window.confirm("Are you sure you want to clear all cached data, stored grants, and activity logs?")) {
-                  await handleClearCache();
-                }
-              }}
-              disabled={isScanning}
+              onClick={handleClearCache}
+              disabled={isScanning || isClearing}
               className="brutalist-btn btn-outline"
               style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
               title="Purge all cached responses, grants, and activity logs"
             >
-              <Trash2 size={14} />
-              CLEAR CACHE
+              {isClearing ? (
+                <>
+                  <Activity className="animate-spin" size={14} />
+                  CLEARING...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={14} />
+                  CLEAR CACHE
+                </>
+              )}
             </button>
 
             <button
@@ -285,17 +290,24 @@ export default function Header() {
 
               <button
                 onClick={async () => {
-                  if (window.confirm("Are you sure you want to clear all cached data, stored grants, and activity logs?")) {
-                    await handleClearCache();
-                    setMobileMenuOpen(false);
-                  }
+                  await handleClearCache();
+                  setMobileMenuOpen(false);
                 }}
-                disabled={isScanning}
+                disabled={isScanning || isClearing}
                 className="brutalist-btn btn-outline"
                 style={{ width: '100%', padding: '0.6rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
               >
-                <Trash2 size={16} />
-                CLEAR SYSTEM CACHE
+                {isClearing ? (
+                  <>
+                    <Activity className="animate-spin" size={16} />
+                    CLEARING...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    CLEAR SYSTEM CACHE
+                  </>
+                )}
               </button>
             </div>
           </div>

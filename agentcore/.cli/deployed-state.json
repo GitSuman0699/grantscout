@@ -1,0 +1,17 @@
+{
+  "targets": {
+    "default": {
+      "resources": {
+        "runtimes": {
+          "grantscout_decoupled_agent": {
+            "runtimeId": "grantscout_grantscout_decoupled_agent-G78xoNByJ7",
+            "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:630877783523:runtime/grantscout_grantscout_decoupled_agent-G78xoNByJ7",
+            "roleArn": "arn:aws:iam::630877783523:role/AgentCore-grantscout-defa-ApplicationAgentGrantscou-y4dlhXtdFuRi"
+          }
+        },
+        "stackName": "AgentCore-grantscout-default",
+        "deployHash": "3042b27f5f3c5a04"
+      }
+    }
+  }
+}

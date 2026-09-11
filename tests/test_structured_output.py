@@ -6,10 +6,11 @@ from pathlib import Path
 
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "agentcore" / "src"))
 
-from backend.agents.drafter import draft_application_structured
-from backend.agents.matcher import evaluate_grant_structured
-from backend.api.models.schemas import (
+from agents.drafter import draft_application_structured
+from agents.matcher import evaluate_grant_structured
+from shared.api.models.schemas import (
     ApplicationDraftResult,
     GrantEvaluationResult,
     GrantStatus,

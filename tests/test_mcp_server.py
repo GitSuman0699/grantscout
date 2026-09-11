@@ -8,14 +8,12 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from backend.mcp.server import (
-    draft_grant_section,
-    evaluate_grant_fit,
+from backend.mcp_endpoints.server import (
     get_organization_profile_resource,
     mcp_server,
-    query_organization_knowledge_base,
-    search_federal_grants,
 )
+from backend.tools.grants_api import search_grants
+from backend.tools.rag_search import query_knowledge_base
 
 
 class TestMCPServer(unittest.TestCase):
@@ -27,15 +25,24 @@ class TestMCPServer(unittest.TestCase):
         self.assertTrue("GrantScout" in (mcp_server.instructions or ""))
 
     def test_02_mcp_tools_registered(self):
-        """Verify all essential GrantScout tools are declared on the server."""
-        # FastMCP stores tools in its tool manager
+        """Verify all 15 production GrantScout tools are declared on the server."""
         tool_names = [t.name for t in mcp_server._tool_manager.list_tools()]
         expected_tools = [
-            "search_federal_grants",
-            "fetch_grant_opportunity",
-            "query_organization_knowledge_base",
-            "evaluate_grant_fit",
-            "draft_grant_section",
+            "search_grants",
+            "fetch_grant_details",
+            "retrieve_org_profile",
+            "check_grant_exists",
+            "save_matched_grant",
+            "query_knowledge_base",
+            "generate_budget_csv",
+            "update_draft_section",
+            "save_application_draft",
+            "get_existing_application_draft",
+            "calculate_mtdc_compliance",
+            "audit_application_compliance",
+            "send_deadline_alert",
+            "send_external_notification",
+            "scan_upcoming_deadlines",
         ]
         for tool_name in expected_tools:
             self.assertIn(tool_name, tool_names)
@@ -54,38 +61,13 @@ class TestMCPServer(unittest.TestCase):
         self.assertIn("draft_grant_proposal", prompt_names)
 
     def test_05_execute_mcp_knowledge_base_query(self):
-        """Verify query_organization_knowledge_base tool returns valid JSON matching documents."""
-        raw_json = query_organization_knowledge_base(query="STEM math grade improvement", top_k=2)
-        data = json.loads(raw_json)
+        """Verify query_knowledge_base tool returns valid dict matching documents."""
+        data = query_knowledge_base(query="STEM math grade improvement", top_k=2)
         self.assertIn("passages", data)
         self.assertTrue(len(data["passages"]) > 0)
         self.assertTrue(any("85%" in p["excerpt"] for p in data["passages"]))
 
-    def test_06_execute_mcp_evaluate_grant_fit(self):
-        """Verify evaluate_grant_fit tool produces valid structured evaluation JSON."""
-        raw_json = evaluate_grant_fit(
-            title="Youth Technology and AI Mentorship",
-            synopsis="Community grant for hands-on youth STEM and coding instruction in Atlanta.",
-            agency="NSF",
-            award_ceiling=50000,
-        )
-        data = json.loads(raw_json)
-        self.assertIn("match_score", data)
-        self.assertIn("recommended_action", data)
-        self.assertTrue(data["match_score"]["total"] >= 50)
-
-    def test_07_execute_mcp_draft_grant_section(self):
-        """Verify draft_grant_section tool produces grounded prose text."""
-        text = draft_grant_section(
-            section_name="Statement of Need",
-            grant_title="Youth STEM Academy",
-            agency="Dept of Education",
-        )
-        self.assertIn("Youth Education Alliance", text)
-        self.assertIn("Statement of Need", text)
-        self.assertTrue(len(text) > 100)
-
-    def test_08_read_mcp_profile_resource(self):
+    def test_06_read_mcp_profile_resource(self):
         """Verify reading grantscout://profile resource returns valid organization JSON."""
         raw_json = get_organization_profile_resource()
         data = json.loads(raw_json)
@@ -93,18 +75,11 @@ class TestMCPServer(unittest.TestCase):
         self.assertEqual(data["name"], "Youth Education Alliance")
         self.assertEqual(data["org_id"], "default")
 
-
-    def test_09_execute_mcp_search_federal_grants(self):
-        """Verify search_federal_grants tool forwards correct parameters to search_grants."""
-        raw_json = search_federal_grants(keyword="STEM education", max_results=2)
-        data = json.loads(raw_json)
+    def test_07_execute_mcp_search_grants(self):
+        """Verify search_grants tool returns valid dictionary with grants list."""
+        data = search_grants(keywords="STEM education", max_results=2)
         self.assertIn("grants", data)
         self.assertIsNone(data.get("error"))
-
-        # Test keywords alias
-        raw_json_alias = search_federal_grants(keywords="STEM education", max_results=2)
-        data_alias = json.loads(raw_json_alias)
-        self.assertIn("grants", data_alias)
 
 
 if __name__ == "__main__":

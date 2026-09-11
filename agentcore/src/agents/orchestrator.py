@@ -24,12 +24,23 @@ from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
 from strands.multiagent.graph import GraphBuilder
 
-from backend.agents.deadline import run_deadline_check
-from backend.agents.matcher import score_grant
-from backend.agents.scanner import is_active_opportunity
-from backend.storage.local_storage import storage
-from backend.tools.grants_api import fetch_grant_details, search_grants
-from backend.tools.org_profile import retrieve_org_profile
+# Dynamic MCP tools injected from mcp_tools proxy module
+from mcp_tools import (
+    search_grants,
+    fetch_grant_details,
+    save_matched_grant,
+    retrieve_org_profile,
+    check_grant_exists,
+    scan_upcoming_deadlines,
+    save_application_draft,
+    get_existing_application_draft,
+    update_draft_section,
+    generate_budget_csv,
+    send_deadline_alert,
+)
+from agents.scanner import is_active_opportunity
+from agents.matcher import evaluate_grant_structured, score_grant
+from agents.deadline import run_deadline_check
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +91,8 @@ def execute_discovery_scan() -> dict[str, Any]:
     Returns:
         Dictionary containing the list of newly found grant opportunities.
     """
-    profile_data = storage.get_org_profile("default")
+    profile_res = retrieve_org_profile()
+    profile_data = profile_res.get("profile") if isinstance(profile_res, dict) and "profile" in profile_res else profile_res
     if not profile_data:
         return {"count": 0, "grants": [], "error": "No org profile found"}
 
@@ -115,12 +127,16 @@ def execute_discovery_scan() -> dict[str, Any]:
     new_grants = []
     for g in candidate_grants:
         gid = f"grants-gov-{g.get('id')}"
-        if storage.grant_exists(gid):
-            continue
+        try:
+            exists_res = check_grant_exists(grant_id=gid)
+            if exists_res.get("exists"):
+                continue
+        except Exception as e:
+            logger.warning(f"Check exists failed for {gid}: {e}")
 
         # Fetch full opportunity details
         try:
-            detail_res = fetch_grant_details(opportunity_id=int(g.get("id")))
+            detail_res = fetch_grant_details(opportunity_id=str(g.get("id")))
             grant_info = detail_res.get("grant") or g
             grant_info["grant_id"] = gid
         except Exception as e:
@@ -169,46 +185,25 @@ def evaluate_and_route_grant(grant_info: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Routing decision and match score details.
     """
-    # Run evaluation
-    score_analysis = score_grant(grant_info)
-    
-    gid = grant_info.get("grant_id") or f"grants-gov-{grant_info.get('id')}"
-    saved_grant = storage.get_grant(gid)
-    
-    if not saved_grant:
-        return {"grant_id": gid, "action": "unrecorded", "score": 0, "analysis": score_analysis}
+    # Run structured evaluation via Matcher Agent (persists via MCP tool save_matched_grant)
+    evaluation = evaluate_grant_structured(grant_info, persist=True)
+    gid = evaluation.grant_id
+    total_score = evaluation.match_score.total
 
-    match_score = saved_grant.get("match_score", {})
-    if isinstance(match_score, dict):
-        total_score = match_score.get(
-            "total",
-            sum(v for k, v in match_score.items() if k != "total" and isinstance(v, (int, float))),
-        )
-    else:
-        total_score = 0
-    
     action = "flagged_for_review"
     draft_status = None
 
     if total_score >= 80:
         action = "auto_draft_queued"
-        # Mark grant for asynchronous autonomous drafting without blocking discovery
-        saved_grant["status"] = "drafting"
-        saved_grant["is_drafting"] = True
-        storage.save_grant(saved_grant)
         draft_status = "queued"
     elif total_score < 50:
         action = "archived_silently"
-        saved_grant["status"] = "archived"
-        storage.save_grant(saved_grant)
     else:
         action = "flagged_for_review"
-        saved_grant["status"] = "matched"
-        storage.save_grant(saved_grant)
 
     return {
         "grant_id": gid,
-        "title": saved_grant.get("title"),
+        "title": grant_info.get("title", "Grant Opportunity"),
         "total_score": total_score,
         "action": action,
         "draft_status": draft_status,
@@ -254,8 +249,8 @@ WORKFLOW:
 # ──────────────────────────────────────────────
 
 
-from backend.optimization import get_model_for_agent
-from backend.tools.notifications import scan_upcoming_deadlines
+from shared.optimization import get_model_for_agent
+from mcp_tools import scan_upcoming_deadlines
 
 
 def _create_bedrock_model(agent_name: str) -> BedrockModel:
@@ -274,57 +269,62 @@ def _create_bedrock_model(agent_name: str) -> BedrockModel:
 
 def _has_high_score_grants(state) -> bool:
     """Graph edge condition: only route to Drafter node if high-scoring grants (≥80) are queued.
-
-    This is the conditional routing logic that replaces the old if/elif/else block.
-    The Graph's conditional edge system evaluates this function to decide whether
-    the Drafter node should be activated.
+    Evaluates the string output of the Matcher node to see if drafting was queued.
     """
-    grants = storage.list_grants()
-    return any(
-        g.get("status") == "drafting" or g.get("is_drafting")
-        for g in grants
-    )
+    state_str = str(state).lower()
+    return "auto_draft_queued" in state_str or "drafting" in state_str
 
 
-def build_orchestration_graph():
+def build_orchestration_graph(remote_tools: list[Any] | None = None):
     """Build the GrantScout pipeline as a real Strands SDK Graph DAG.
 
     Graph Topology:
         Scanner → Matcher → Drafter (conditional: high-scoring grants exist)
                           → Deadline (always)
-
-    Uses GraphBuilder from strands.multiagent.graph with:
-    - 4 agent nodes (Scanner, Matcher, Drafter, Deadline)
-    - 3 edges (Scanner→Matcher, Matcher→Drafter conditional, Matcher→Deadline)
-    - Conditional edge routing via _has_high_score_grants()
     """
-    # Create specialized agents for each graph node
+    scanner_tools: list[Any] = [execute_discovery_scan, retrieve_org_profile, search_grants, fetch_grant_details]
+    matcher_tools: list[Any] = [evaluate_and_route_grant, retrieve_org_profile, save_matched_grant]
+    drafter_tools: list[Any] = [retrieve_org_profile, save_application_draft, get_existing_application_draft, update_draft_section, generate_budget_csv]
+    deadline_tools: list[Any] = [scan_upcoming_deadlines, send_deadline_alert]
+
+    if remote_tools:
+        for t in remote_tools:
+            name = getattr(t, "tool_name", getattr(t, "__name__", ""))
+            if name in ["execute_discovery_scan", "search_grants"]:
+                scanner_tools.append(t)
+            elif name in ["evaluate_and_route_grant", "save_matched_grant"]:
+                matcher_tools.append(t)
+            elif name in ["save_application_draft", "update_draft_section"]:
+                drafter_tools.append(t)
+            elif name in ["scan_upcoming_deadlines"]:
+                deadline_tools.append(t)
+
     scanner_agent = Agent(
         name="scanner",
         model=_create_bedrock_model("scanner"),
         system_prompt=SCANNER_GRAPH_PROMPT,
-        tools=[execute_discovery_scan, retrieve_org_profile],
+        tools=scanner_tools,
     )
 
     matcher_agent = Agent(
         name="matcher",
         model=_create_bedrock_model("matcher"),
         system_prompt=MATCHER_GRAPH_PROMPT,
-        tools=[evaluate_and_route_grant, retrieve_org_profile],
+        tools=matcher_tools,
     )
 
     drafter_agent = Agent(
         name="drafter",
         model=_create_bedrock_model("drafter"),
         system_prompt=DRAFTER_GRAPH_PROMPT,
-        tools=[retrieve_org_profile, save_application_draft, get_existing_application_draft],
+        tools=drafter_tools,
     )
 
     deadline_agent = Agent(
         name="deadline",
         model=_create_bedrock_model("deadline"),
         system_prompt=DEADLINE_GRAPH_PROMPT,
-        tools=[scan_upcoming_deadlines],
+        tools=deadline_tools,
     )
 
     # Build the Graph DAG using Strands SDK GraphBuilder
@@ -352,14 +352,10 @@ def build_orchestration_graph():
     return graph
 
 
-# Import tools needed by drafter node
-from backend.tools.application import (
-    get_existing_application_draft,
-    save_application_draft,
-)
+# Drafter tools are now dynamically injected via MCP
 
 
-def create_orchestrator_agent() -> Agent:
+def create_orchestrator_agent(remote_tools: list[Any] | None = None) -> Agent:
     """Create and configure the Orchestrator Agent (legacy single-agent mode).
 
     This is maintained for backward compatibility with the /api/agent/scan endpoint.
@@ -375,57 +371,43 @@ def create_orchestrator_agent() -> Agent:
         boto_client_config=Config(read_timeout=3600, connect_timeout=900, retries={'max_attempts': 3, 'mode': 'standard'})
     )
 
+    tools: list[Any] = [execute_discovery_scan, evaluate_and_route_grant, retrieve_org_profile]
+    if remote_tools:
+        tools.extend(remote_tools)
+
     agent = Agent(
         model=model,
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
-        tools=[
-            execute_discovery_scan,
-            evaluate_and_route_grant,
-            retrieve_org_profile,
-        ],
+        tools=tools,
     )
 
     logger.info("Orchestrator Agent initialized")
     return agent
 
 
-async def run_orchestrator(status_callback: Any | None = None) -> str:
+async def run_orchestrator(remote_tools: list[Any] | None = None, status_callback: Any | None = None) -> str:
     """Run the Orchestrator Agent to perform discovery and routing autonomously.
 
     Uses the legacy single-agent mode for the manual /api/agent/scan endpoint.
     """
-    agent = create_orchestrator_agent()
-    
-    from backend.agents.drafter import StdoutInterceptor
+    agent = create_orchestrator_agent(remote_tools)
 
     def _run():
         if status_callback:
-            interceptor = StdoutInterceptor(status_callback)
-            with contextlib.redirect_stdout(interceptor): # type: ignore
-                return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
-        else:
-            return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
+            status_callback("Starting scan...")
+        return agent("Execute a complete autonomous scan using execute_discovery_scan. Then, for EVERY new grant opportunity found, use evaluate_and_route_grant to score and route it. Output the exact phrase 'ORCHESTRATION COMPLETE' and nothing else.")
 
     result = await asyncio.to_thread(_run)
     return str(result)
 
 
-async def run_graph_orchestration_cycle() -> dict[str, Any]:
-    """Execute the complete GrantScout pipeline as a Strands SDK Graph DAG.
-
-    This is the primary execution path that uses GraphBuilder for deterministic,
-    conditional multi-agent routing. The Graph topology is:
-
-        Scanner → Matcher → Drafter (conditional) + Deadline
-
-    Returns:
-        Comprehensive summary dictionary of the orchestration run.
-    """
+async def run_graph_orchestration_cycle(prompt: str = "", remote_tools: list[Any] | None = None) -> dict[str, Any]:
+    """Execute the complete GrantScout pipeline as a Strands SDK Graph DAG."""
     logger.info("Starting GrantScout Graph DAG orchestration cycle...")
 
-    graph = build_orchestration_graph()
+    graph = build_orchestration_graph(remote_tools)
 
-    task = (
+    task = prompt or (
         "Run the complete GrantScout discovery cycle. "
         "Scanner: scan for new federal grants matching the org profile. "
         "Matcher: score each discovered grant and route based on fit score. "
@@ -453,16 +435,10 @@ async def run_graph_orchestration_cycle() -> dict[str, Any]:
     return summary
 
 
-async def run_full_orchestration_cycle() -> dict[str, Any]:
-    """Execute a complete autonomous scan, match, draft, and deadline cycle.
-
-    Runs the Graph DAG asynchronously.
-
-    Returns:
-        Comprehensive summary dictionary of the orchestration run.
-    """
+async def run_full_orchestration_cycle(prompt: str = "", remote_tools: list[Any] | None = None) -> dict[str, Any]:
+    """Execute a complete autonomous scan, match, draft, and deadline cycle."""
     try:
-        return await run_graph_orchestration_cycle()
+        return await run_graph_orchestration_cycle(prompt, remote_tools)
     except Exception as e:
         logger.error(f"Graph DAG execution failed: {e}")
         raise e

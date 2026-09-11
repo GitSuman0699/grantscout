@@ -34,6 +34,7 @@ dependencies = [
     "uuid6>=2024.7.10",
     "PyJWT>=2.8.0",
     "mcp>=1.0.0",
+    "mangum>=0.17.0",
 ]
 
 [project.optional-dependencies]
@@ -45,3 +46,11 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["backend*"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+extraPaths = [
+    ".",
+    "agentcore/src"
+]

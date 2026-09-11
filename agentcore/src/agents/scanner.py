@@ -14,8 +14,8 @@ from botocore.config import Config
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 
-from backend.tools.grants_api import fetch_grant_details, search_grants
-from backend.tools.org_profile import check_grant_exists, retrieve_org_profile
+from mcp_tools import fetch_grant_details, search_grants, check_grant_exists, retrieve_org_profile
+from shared.optimization import get_model_for_agent
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +44,8 @@ Output the exact phrase "SCAN COMPLETE" and nothing else.
 """
 
 
-from backend.optimization import get_model_for_agent
-
-
 def create_scanner_agent() -> Agent:
-    """Create and configure the Scanner Agent.
-
-    Returns:
-        A Strands Agent configured for grant discovery.
-    """
+    """Create and configure the Scanner Agent."""
     model_cfg = get_model_for_agent("scanner")
     model = BedrockModel(
         model_id=model_cfg.model_id,
@@ -88,11 +81,9 @@ def is_active_opportunity(
     from datetime import datetime, timezone
     now_dt = datetime.now(timezone.utc)
 
-    # 1. Require active workspace application packages (so Apply button is enabled on Grants.gov)
     if not has_packages:
         return False
 
-    # 2. Fiscal Year check
     if fiscal_year is not None:
         try:
             if fiscal_year < 2026:
@@ -100,13 +91,11 @@ def is_active_opportunity(
         except (ValueError, TypeError):
             pass
 
-    # 3. Legacy years in title
     title_lower = title.lower()
     for yr in ["2019", "2020", "2021", "2022", "2023", "2024"]:
         if yr in title_lower:
             return False
 
-    # 4. Check close date
     if close_date in ("Ongoing", "TBD", "Rolling"):
         return True
 

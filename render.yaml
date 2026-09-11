@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: grantscout-api
+    env: python
+    plan: free
+    buildCommand: "pip install uv && uv pip install --system -e ."
+    startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: PORT
+        value: 8000
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: SECRET_KEY
+        value: grantscout-sec-key-6f8b9e4a3d2c1b0a9f8e7d6c5b4a3210
+      - key: MASTER_API_KEY
+        value: gs_live_8f7e6d5c4b3a210987654321
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AGENTCORE_RUNTIME_ARN
+        value: arn:aws:bedrock-agentcore:us-east-1:630877783523:runtime/grantscout_grantscout_decoupled_agent-G78xoNByJ7
+      - key: AGENTCORE_AGENT_ID
+        value: grantscout_grantscout_decoupled_agent-G78xoNByJ7
+      - key: USE_LOCAL_STORAGE
+        value: "true"
+      - key: LOCAL_STORAGE_PATH
+        value: ./data

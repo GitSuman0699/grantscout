@@ -15,9 +15,8 @@ from botocore.config import Config
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 
-from backend.api.models.schemas import GrantEvaluationResult
-from backend.tools.org_profile import retrieve_org_profile, save_matched_grant
-from backend.tools.rag_search import query_knowledge_base
+from shared.api.models.schemas import GrantEvaluationResult
+from mcp_tools import retrieve_org_profile, save_matched_grant, query_knowledge_base
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ ROUTING CRITERIA:
 """
 
 
-from backend.optimization import get_model_for_agent
+from shared.optimization import get_model_for_agent
 
 
 def create_matcher_agent() -> Agent:

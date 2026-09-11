@@ -8,7 +8,8 @@ from botocore.config import Config
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 
-from backend.tools.notifications import scan_upcoming_deadlines, send_deadline_alert
+from mcp_tools import scan_upcoming_deadlines, send_deadline_alert
+from shared.optimization import get_model_for_agent
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +30,8 @@ WORKFLOW:
 """
 
 
-from backend.optimization import get_model_for_agent
-
-
 def create_deadline_agent() -> Agent:
-    """Create and configure the Deadline Agent.
-
-    Returns:
-        A Strands Agent configured for deadline tracking.
-    """
+    """Create and configure the Deadline Agent."""
     model_cfg = get_model_for_agent("deadline")
     model = BedrockModel(
         model_id=model_cfg.model_id,
@@ -59,11 +53,7 @@ def create_deadline_agent() -> Agent:
 
 
 def run_deadline_check() -> str:
-    """Execute a deadline sweep across all pipeline opportunities.
-
-    Returns:
-        Summary of monitored deadlines and alerts generated.
-    """
+    """Execute a deadline sweep across all pipeline opportunities."""
     agent = create_deadline_agent()
     result = agent("Perform a comprehensive deadline check across all active grant opportunities. Issue alerts for any impending deadlines and summarize the schedule.")
     return str(result)

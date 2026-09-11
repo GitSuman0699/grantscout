@@ -16,12 +16,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Add project root
+# Add project root and agentcore/src
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "agentcore" / "src"))
 
-from backend.agents.drafter import draft_application_structured
-from backend.agents.matcher import evaluate_grant_structured
-from backend.api.models.schemas import GrantEvaluationResult
+try:
+    from agents.drafter import draft_application_structured
+    from agents.matcher import evaluate_grant_structured
+except ImportError:
+    from agentcore.src.agents.drafter import draft_application_structured
+    from agentcore.src.agents.matcher import evaluate_grant_structured
+
+from shared.api.models.schemas import GrantEvaluationResult
 from backend.tools.rag_search import query_knowledge_base
 
 logger = logging.getLogger(__name__)
@@ -425,9 +431,10 @@ def print_report(report: EvalReport, rag_results: dict, drafter_results: dict):
 def main():
     """Run the complete evaluation harness."""
     import sys
-    if hasattr(sys.stdout, "reconfigure"):
+    reconfig = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfig):
         try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            reconfig(encoding="utf-8", errors="replace")
         except Exception:
             pass
     print("\n🧪 Running GrantScout Evaluation Harness...\n")
