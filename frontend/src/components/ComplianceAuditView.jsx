@@ -5,8 +5,14 @@ export default function ComplianceAuditView({ grantId, draftId, budgetContent, p
   const [audit, setAudit] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const auditedKeyRef = React.useRef(null);
 
   const runAudit = async () => {
+    if (!grantId || !draftId) return;
+    const auditKey = `${grantId}_${draftId}`;
+    if (auditedKeyRef.current === auditKey) return;
+    auditedKeyRef.current = auditKey;
+
     setLoading(true);
     setError(null);
     try {
@@ -18,13 +24,14 @@ export default function ComplianceAuditView({ grantId, draftId, budgetContent, p
       setAudit(res);
     } catch (err) {
       setError(err.message || 'Audit failed');
+      auditedKeyRef.current = null;
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (grantId) {
+    if (grantId && draftId) {
       runAudit();
     }
   }, [grantId, draftId]);

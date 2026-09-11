@@ -209,7 +209,7 @@ Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
     supplies = round(ceiling * 0.12, 2)
     other = round(max(0.0, ceiling - (personnel + fringe + travel + supplies)), 2)
 
-    generate_budget_csv(
+    budget_res = generate_budget_csv(
         grant_id=gid,
         direct_personnel=personnel,
         fringe_benefits=fringe,
@@ -219,7 +219,7 @@ Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
         indirect_rate_pct=10.0,
     )
 
-    # Persist all 6 AI-synthesized sections
+    # Persist all 6 AI-synthesized sections in a single atomic write
     sections_map = [
         ("1. Executive Summary", sections_data.get("section_1_executive_summary")),
         ("2. Statement of Need & Community Impact", sections_data.get("section_2_statement_of_need")),
@@ -229,18 +229,29 @@ Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
         ("6. Evaluation Metrics & Sustainability", sections_data.get("section_6_evaluation_sustainability")),
     ]
 
+    sections_list = []
     for title_sec, content in sections_map:
         if not content:
             raise RuntimeError(f"AI Drafter generated incomplete proposal: missing '{title_sec}'.")
-        if callback:
-            callback(f"Persisting validated section: {title_sec}...")
-        update_draft_section(
-            grant_id=gid,
-            org_id="default",
-            grant_title=title,
-            section_title=title_sec,
-            content=content,
-        )
+        sections_list.append({
+            "title": title_sec,
+            "content": content,
+            "is_auto_filled": True,
+            "needs_review": True,
+            "word_count": len(content.split()),
+        })
+
+    if callback:
+        callback("Persisting complete 6-section proposal draft to storage...")
+
+    from backend.tools.application import save_application_draft
+    save_application_draft(
+        grant_id=gid,
+        org_id="default",
+        grant_title=title,
+        sections=sections_list,
+        budget_csv_data=budget_res.get("csv_data"),
+    )
 
     if callback:
         callback("Proposal drafting complete — 6 authentic sections synthesized by Bedrock Claude.")

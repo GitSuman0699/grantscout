@@ -131,7 +131,7 @@ export default function ProposalDraftPage() {
       }
     }
     loadDraft();
-  }, [grant, id]);
+  }, [grant?.grant_id, grant?.id, id]);
 
   // Live SSE listener for background auto-drafting
   useEffect(() => {
@@ -149,15 +149,14 @@ export default function ProposalDraftPage() {
           setIsDrafting(true);
           setAgentThoughts(prev => [...prev, data.message ? data.message.toUpperCase() : 'DRAFTER SWARM STARTED...']);
         } else if (data.type === 'application_drafted') {
+          setIsDrafting(false);
           fetchApplications().then((appsData) => {
             const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
             const updated = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
             if (updated) {
               setDraft(updated);
-              setIsDrafting(false);
             }
           });
-          if (refreshGrants) refreshGrants();
         } else if (data.type === 'drafting_failed') {
           setIsDrafting(false);
           setDraftError(data.message || 'Auto-drafting failed in background.');

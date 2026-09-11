@@ -162,12 +162,13 @@ def save_application_draft(
         A dictionary containing the 'draft_id', 'status', and 'saved' boolean.
     """
     try:
-        draft_id = f"draft-{uuid.uuid4().hex[:10]}"
+        # Check if draft already exists for this grant to preserve draft_id
+        apps = storage.list_applications()
+        existing = next((a for a in apps if a.get("grant_id") == grant_id), None)
+        draft_id = existing.get("draft_id") if existing else f"draft-{uuid.uuid4().hex[:10]}"
+        created_at = existing.get("created_at") if existing else datetime.now(timezone.utc).isoformat()
         
         if sections is None:
-            # Fetch existing sections from the database if LLM didn't provide them
-            apps = storage.list_applications()
-            existing = next((a for a in apps if a.get("grant_id") == grant_id), None)
             sections = existing.get("sections", []) if existing else []
 
         # Calculate completion and section counts
