@@ -394,10 +394,12 @@ def format_graph_event(event: Any) -> str | None:
         return f"[{str(node_id).upper()}] Node activated in GrantScout Discovery Graph DAG."
         
     elif event_type == "multiagent_handoff":
-        src_ids = getattr(event, "from_node_ids", None) or (event.get("from_node_ids") if isinstance(event, dict) else [])
-        dst_ids = getattr(event, "to_node_ids", None) or (event.get("to_node_ids") if isinstance(event, dict) else [])
-        src = ", ".join(src_ids).upper()
-        dst = ", ".join(dst_ids).upper()
+        raw_src = getattr(event, "from_node_ids", None) or (event.get("from_node_ids") if isinstance(event, dict) else [])
+        raw_dst = getattr(event, "to_node_ids", None) or (event.get("to_node_ids") if isinstance(event, dict) else [])
+        src_list: list[str] = [str(x) for x in raw_src] if isinstance(raw_src, (list, tuple)) else ([str(raw_src)] if raw_src else [])
+        dst_list: list[str] = [str(x) for x in raw_dst] if isinstance(raw_dst, (list, tuple)) else ([str(raw_dst)] if raw_dst else [])
+        src = ", ".join(src_list).upper()
+        dst = ", ".join(dst_list).upper()
         msg = getattr(event, "message", None) or (event.get("message") if isinstance(event, dict) else None)
         if msg:
             return f"[GRAPH ROUTING: {src} -> {dst}] \"{msg}\""
