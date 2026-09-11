@@ -12,3 +12,10 @@ if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+from pathlib import Path
+
+# Ensure agentcore/src is on sys.path so its internal modules (mcp_tools, agents, shared) resolve cleanly
+_agentcore_src = str(Path(__file__).resolve().parent.parent / "agentcore" / "src")
+if _agentcore_src not in sys.path:
+    sys.path.insert(0, _agentcore_src)
