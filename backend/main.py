@@ -147,18 +147,35 @@ def draft_application_for_grant(grant: dict, callback=None):
         callback(f"[NARRATIVE WRITER] Tool Execution: query_knowledge_base() -> Retrieved {len(rag_passages)} verified RAG grounding passages from organizational archives.")
         callback(f"[NARRATIVE WRITER] Synthesizing Section 1 (Executive Summary) & Section 2 (Statement of Need)...")
 
-    # Helper for robust JSON extraction from LLM response
-    def _parse_llm_json(raw_text: str) -> dict:
-        clean = re.sub(r"^```json\s*", "", raw_text, flags=re.MULTILINE)
-        clean = re.sub(r"```$", "", clean, flags=re.MULTILINE).strip()
-        try:
-            return json.loads(clean)
-        except json.JSONDecodeError:
-            # Robust fallback: extract json substring between first { and last }
-            match = re.search(r"(\{.*\})", clean, re.DOTALL)
-            if match:
-                return json.loads(match.group(1))
-            raise
+    # Robust delimiter-based section extractor (immune to JSON escape and quote corruption)
+    def _extract_section(text: str, tag_name: str, fallback_whole_text_if_single: bool = False) -> str:
+        # Match <<<TAG>>> or variants like # <<<TAG>>>, **<<<TAG>>>**, etc. up to the next <<<ANY_TAG>>> or end of text
+        pattern = rf"(?:[#*`\s]*<<<\s*{re.escape(tag_name)}\s*>>>[*`\s]*)(.*?)(?=(?:[#*`\s]*<<<\s*[A-Z0-9_]+\s*>>>[*`\s]*)|$)"
+        match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+        if match and match.group(1).strip():
+            clean = match.group(1).strip()
+            clean = re.sub(r"^```(?:markdown)?\s*", "", clean, flags=re.MULTILINE)
+            clean = re.sub(r"```$", "", clean, flags=re.MULTILINE).strip()
+            return clean
+
+        # Fallback regex if tag format has spaces or minor variation
+        alt_name = tag_name.replace("_", "[ _-]")
+        pattern_alt = rf"(?:#+\s*|<<<\s*|\*\*\s*){alt_name}(?:\s*>>>|\s*\*\*|\n)(.*?)(?=(?:#+\s*|<<<\s*|\*\*\s*)SECTION[ _-][0-9]|$)"
+        match_alt = re.search(pattern_alt, text, re.DOTALL | re.IGNORECASE)
+        if match_alt and match_alt.group(1).strip():
+            clean = match_alt.group(1).strip()
+            clean = re.sub(r"^```(?:markdown)?\s*", "", clean, flags=re.MULTILINE)
+            clean = re.sub(r"```$", "", clean, flags=re.MULTILINE).strip()
+            return clean
+
+        # If allowed, fall back to entire text (useful for single-section prompts where the whole response is the markdown)
+        if fallback_whole_text_if_single and text.strip():
+            clean = text.strip()
+            clean = re.sub(r"^```(?:markdown)?\s*", "", clean, flags=re.MULTILINE)
+            clean = re.sub(r"```$", "", clean, flags=re.MULTILINE).strip()
+            return clean
+
+        return ""
 
     from botocore.config import Config
     boto_config = Config(read_timeout=90, connect_timeout=10, retries={"max_attempts": 2})
@@ -205,12 +222,17 @@ FORMATTING INSTRUCTIONS:
 3. Section 4 MUST include a Staffing & Leadership Allocation markdown table:
    | Project Role | Proposed Staff / Title | FTE Allocation | Key Qualifications & Responsibilities |
 
-Return ONLY valid JSON matching this schema with NO markdown wrapping:
-{{
-  "section_1_executive_summary": "<full markdown prose for Section 1 with callout box and ### subsections>",
-  "section_2_statement_of_need": "<full markdown prose for Section 2 with callout box and ### subsections>",
-  "section_4_capacity_governance": "<full markdown prose for Section 4 with callout box, ### subsections, and staffing table>"
-}}"""
+CRITICAL OUTPUT FORMAT:
+Do NOT output JSON. Output pure, native Markdown using these exact section delimiter tags:
+
+<<<SECTION_1_EXECUTIVE_SUMMARY>>>
+[Your Section 1 markdown prose, callout box, and subsections here]
+
+<<<SECTION_2_STATEMENT_OF_NEED>>>
+[Your Section 2 markdown prose, callout box, and subsections here]
+
+<<<SECTION_4_CAPACITY_GOVERNANCE>>>
+[Your Section 4 markdown prose, callout box, staffing table, and subsections here]"""
 
         res_narrative = client.converse(
             modelId=config.BEDROCK_FAST_MODEL_ID,
@@ -218,8 +240,9 @@ Return ONLY valid JSON matching this schema with NO markdown wrapping:
             inferenceConfig={"temperature": 0.3, "maxTokens": 6000}
         )
         raw_narrative = res_narrative["output"]["message"]["content"][0]["text"].strip()
-        data_narrative = _parse_llm_json(raw_narrative)
-        sections_data.update(data_narrative)
+        sections_data["section_1_executive_summary"] = _extract_section(raw_narrative, "SECTION_1_EXECUTIVE_SUMMARY")
+        sections_data["section_2_statement_of_need"] = _extract_section(raw_narrative, "SECTION_2_STATEMENT_OF_NEED")
+        sections_data["section_4_capacity_governance"] = _extract_section(raw_narrative, "SECTION_4_CAPACITY_GOVERNANCE")
 
         # =====================================================================
         # AGENT 2: BUDGET SPECIALIST (Section 5 & Budget CSV)
@@ -274,10 +297,11 @@ FORMATTING INSTRUCTIONS:
 3. MUST include a complete SF-424 Cost Allocation markdown table totaling exactly ${ceiling:,.2f}:
    | Cost Category | Federal Request ($) | Non-Federal Match ($) | Total Program Cost ($) | Basis of Estimate & Calculation Justification |
 
-Return ONLY valid JSON matching this schema with NO markdown wrapping:
-{{
-  "section_5_budget_justification": "<full markdown prose for Section 5 with callout box, ### subsections, and SF-424 table>"
-}}"""
+CRITICAL OUTPUT FORMAT:
+Do NOT output JSON. Output pure, native Markdown using this exact section delimiter tag:
+
+<<<SECTION_5_BUDGET_JUSTIFICATION>>>
+[Your Section 5 markdown prose, callout box, subsections, and complete SF-424 budget table here]"""
 
         res_budget = client.converse(
             modelId=config.BEDROCK_FAST_MODEL_ID,
@@ -285,8 +309,7 @@ Return ONLY valid JSON matching this schema with NO markdown wrapping:
             inferenceConfig={"temperature": 0.3, "maxTokens": 4000}
         )
         raw_budget = res_budget["output"]["message"]["content"][0]["text"].strip()
-        data_budget = _parse_llm_json(raw_budget)
-        sections_data.update(data_budget)
+        sections_data["section_5_budget_justification"] = _extract_section(raw_budget, "SECTION_5_BUDGET_JUSTIFICATION", fallback_whole_text_if_single=True)
 
         # =====================================================================
         # AGENT 3: COMPLIANCE & TIMELINE DRAFTER (Sections 3 & 6)
@@ -324,11 +347,14 @@ FORMATTING INSTRUCTIONS:
 4. Section 6 MUST include a Key Performance Indicator (KPI) matrix:
    | Strategic Objective | Performance Metric Indicator | Baseline Data | 12-Month Target | Data Collection Instrument | Verification Frequency |
 
-Return ONLY valid JSON matching this schema with NO markdown wrapping:
-{{
-  "section_3_project_design": "<full markdown prose for Section 3 with callout box, ### subsections, and 12-month milestone table>",
-  "section_6_evaluation_sustainability": "<full markdown prose for Section 6 with callout box, ### subsections, and KPI table>"
-}}"""
+CRITICAL OUTPUT FORMAT:
+Do NOT output JSON. Output pure, native Markdown using these exact section delimiter tags:
+
+<<<SECTION_3_PROJECT_DESIGN>>>
+[Your Section 3 markdown prose, callout box, subsections, and 12-month milestone table here]
+
+<<<SECTION_6_EVALUATION_SUSTAINABILITY>>>
+[Your Section 6 markdown prose, callout box, subsections, and KPI table here]"""
 
         res_compliance = client.converse(
             modelId=config.BEDROCK_FAST_MODEL_ID,
@@ -336,8 +362,8 @@ Return ONLY valid JSON matching this schema with NO markdown wrapping:
             inferenceConfig={"temperature": 0.3, "maxTokens": 6000}
         )
         raw_compliance = res_compliance["output"]["message"]["content"][0]["text"].strip()
-        data_compliance = _parse_llm_json(raw_compliance)
-        sections_data.update(data_compliance)
+        sections_data["section_3_project_design"] = _extract_section(raw_compliance, "SECTION_3_PROJECT_DESIGN")
+        sections_data["section_6_evaluation_sustainability"] = _extract_section(raw_compliance, "SECTION_6_EVALUATION_SUSTAINABILITY")
 
     except Exception as e:
         logger.error(f"Amazon Bedrock collaborative drafting failed for grant {gid}: {e}")
