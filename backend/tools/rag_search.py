@@ -5,14 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from strands import tool
-
 from backend.rag.knowledge_base import knowledge_base
 
 logger = logging.getLogger(__name__)
 
 
-@tool
 def query_knowledge_base(query: str, top_k: int = 3, category: str = "") -> dict[str, Any]:
     """Search the nonprofit organization's indexed document library for verified facts and past outcomes.
 

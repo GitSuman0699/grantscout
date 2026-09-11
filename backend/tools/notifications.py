@@ -7,15 +7,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
-from strands import tool
-
 from backend.config import config
 from backend.storage.local_storage import storage
 
 logger = logging.getLogger(__name__)
 
 
-@tool
 def send_deadline_alert(
     grant_id: str,
     grant_title: str,
@@ -66,7 +63,6 @@ def send_deadline_alert(
         return {"delivered": False, "error": str(e)}
 
 
-@tool
 def send_external_notification(
     channel: str,
     subject: str,
@@ -99,7 +95,6 @@ def send_external_notification(
     return {"delivered": True, "channel": "dashboard"}
 
 
-@tool
 def scan_upcoming_deadlines() -> dict[str, Any]:
     """Scan all active grants in the pipeline and identify upcoming deadlines.
 

@@ -382,62 +382,61 @@ def estimate_tokens(text: str) -> int:
 
 import functools
 
-from strands import Agent
+try:
+    from strands import Agent
 
-_original_agent_call = Agent.__call__
+    _original_agent_call = Agent.__call__
 
-@functools.wraps(_original_agent_call)
-def _tracking_agent_call(self, *args, **kwargs):
-    result = _original_agent_call(self, *args, **kwargs)
-    
-    try:
-        in_tokens = 0
-        out_tokens = 0
-        cached = False
+    @functools.wraps(_original_agent_call)
+    def _tracking_agent_call(self, *args, **kwargs):
+        result = _original_agent_call(self, *args, **kwargs)
         
-        if hasattr(result, "metrics") and result.metrics:
-            usage = getattr(result.metrics, "accumulated_usage", {})
-            if isinstance(usage, dict):
-                in_tokens = usage.get("inputTokens", 0)
-                out_tokens = usage.get("outputTokens", 0)
-                # Detect prompt caching
-                if usage.get("cacheReadInputTokens", 0) > 0:
-                    cached = True
-                
-        sys_prompt = getattr(self, "system_prompt", "")
-        if not isinstance(sys_prompt, str):
-            sys_prompt = str(sys_prompt)
-        sys_prompt = sys_prompt.lower()
-        
-        agent_name = "unknown"
-        if "scanner" in sys_prompt:
-            agent_name = "scanner"
-        elif "matcher" in sys_prompt or "score" in sys_prompt:
-            agent_name = "matcher"
-        elif "narrative writer" in sys_prompt:
-            agent_name = "narrative_writer"
-        elif "budget specialist" in sys_prompt:
-            agent_name = "budget_specialist"
-        elif "compliance & sustainability drafter" in sys_prompt:
-            agent_name = "compliance_drafter"
-        elif "lead drafter" in sys_prompt or "generate a structured" in sys_prompt:
-            agent_name = "lead_drafter"
-        elif "drafter" in sys_prompt:
-            agent_name = "drafter"
-        elif "orchestrator" in sys_prompt:
-            agent_name = "orchestrator"
-        elif "deadline" in sys_prompt:
-            agent_name = "deadline"
+        try:
+            in_tokens = 0
+            out_tokens = 0
+            cached = False
             
-        token_tracker.log_usage(agent_name, in_tokens, out_tokens, cached=cached)
-    except Exception as e:
-        logger.warning(f"Failed to track tokens: {e}")
-        
-    return result
+            if hasattr(result, "metrics") and result.metrics:
+                usage = getattr(result.metrics, "accumulated_usage", {})
+                if isinstance(usage, dict):
+                    in_tokens = usage.get("inputTokens", 0)
+                    out_tokens = usage.get("outputTokens", 0)
+                    # Detect prompt caching
+                    if usage.get("cacheReadInputTokens", 0) > 0:
+                        cached = True
+                    
+            sys_prompt = getattr(self, "system_prompt", "")
+            if not isinstance(sys_prompt, str):
+                sys_prompt = str(sys_prompt)
+            sys_prompt = sys_prompt.lower()
+            
+            agent_name = "unknown"
+            if "scanner" in sys_prompt:
+                agent_name = "scanner"
+            elif "matcher" in sys_prompt or "score" in sys_prompt:
+                agent_name = "matcher"
+            elif "narrative writer" in sys_prompt:
+                agent_name = "narrative_writer"
+            elif "budget specialist" in sys_prompt:
+                agent_name = "budget_specialist"
+            elif "compliance & sustainability drafter" in sys_prompt:
+                agent_name = "compliance_drafter"
+            elif "lead drafter" in sys_prompt or "generate a structured" in sys_prompt:
+                agent_name = "lead_drafter"
+            elif "drafter" in sys_prompt:
+                agent_name = "drafter"
+            elif "orchestrator" in sys_prompt:
+                agent_name = "orchestrator"
+            elif "deadline" in sys_prompt:
+                agent_name = "deadline"
+                
+            token_tracker.log_usage(agent_name, in_tokens, out_tokens, cached=cached)
+        except Exception as e:
+            logger.warning(f"Failed to track tokens: {e}")
+            
+        return result
 
-# HACKATHON NOTE: We are monkey-patching strands.Agent.__call__ here to globally
-# intercept all agent invocations and log their token usage to our TokenTracker.
-# In a real production deployment, we would build this into a proper Strands middleware 
-# or callback handler, but for the hackathon MVP, this ensures we track costs
-# for every agent without modifying all of our individual agent definitions.
-Agent.__call__ = _tracking_agent_call
+    Agent.__call__ = _tracking_agent_call
+except ImportError:
+    pass
+

@@ -15,7 +15,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from strands import tool
 
 from backend.api.models.schemas import ComplianceAuditResult, ComplianceFinding
 from backend.storage.local_storage import storage
@@ -84,7 +83,6 @@ def parse_indirect_rate(budget_text: str) -> tuple[float, bool]:
     return 10.0, True
 
 
-@tool
 def calculate_mtdc_compliance(direct_costs: float, indirect_costs: float) -> dict[str, Any]:
     """Deterministically calculate and verify the 2 CFR 200.414(f) 10% de minimis indirect cost rate.
     
@@ -108,7 +106,6 @@ def calculate_mtdc_compliance(direct_costs: float, indirect_costs: float) -> dic
     }
 
 
-@tool
 def audit_application_compliance(
     grant_id: str,
     draft_id: str = "",

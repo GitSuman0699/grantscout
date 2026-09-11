@@ -11,14 +11,11 @@ import logging
 from datetime import timezone
 from typing import Any
 
-from strands import tool
-
 from backend.storage.local_storage import storage
 
 logger = logging.getLogger(__name__)
 
 
-@tool
 def retrieve_org_profile(org_id: str = "default") -> dict[str, Any]:
     """Retrieve the nonprofit organization's profile including mission, programs, and past grants.
 
@@ -49,7 +46,6 @@ def retrieve_org_profile(org_id: str = "default") -> dict[str, Any]:
         return {"profile": None, "error": f"Failed to retrieve profile: {e!s}"}
 
 
-@tool
 def save_matched_grant(
     grant_id: str,
     title: str,
@@ -139,7 +135,6 @@ def save_matched_grant(
         return {"grant_id": grant_id, "saved": False, "error": str(e)}
 
 
-@tool
 def check_grant_exists(grant_id: str) -> dict[str, Any]:
     """Check if a grant already exists in the database to avoid duplicate processing.
 

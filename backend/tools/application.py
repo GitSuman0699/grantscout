@@ -9,13 +9,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from strands import tool
-
 from backend.storage.local_storage import storage
 
 logger = logging.getLogger(__name__)
 
-@tool
+
 def generate_budget_csv(grant_id: str, direct_personnel: float, fringe_benefits: float, travel: float, supplies: float, other: float, indirect_rate_pct: float) -> dict[str, Any]:
     """Generate a structured CSV representing the SF-424 budget template for the grant application.
     
@@ -52,7 +50,6 @@ def generate_budget_csv(grant_id: str, direct_personnel: float, fringe_benefits:
     return {"csv_data": csv_str, "total_requested": total_costs}
 
 
-@tool
 def update_draft_section(
     grant_id: str,
     org_id: str,
@@ -135,7 +132,6 @@ def update_draft_section(
         return {"saved": False, "error": str(e)}
 
 
-@tool
 def save_application_draft(
     grant_id: str,
     org_id: str,
@@ -227,7 +223,6 @@ def save_application_draft(
         return {"draft_id": None, "saved": False, "error": str(e)}
 
 
-@tool
 def get_existing_application_draft(grant_id: str) -> dict[str, Any]:
     """Retrieve an existing application draft for a given grant ID.
 

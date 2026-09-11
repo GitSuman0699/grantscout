@@ -13,7 +13,6 @@ import re
 from typing import Any
 
 import requests
-from strands import tool
 
 from backend.config import config
 
@@ -36,7 +35,6 @@ def strip_html_tags(text: str) -> str:
     return clean
 
 
-@tool
 def search_grants(
     keywords: str,
     agency: str = "",
@@ -152,7 +150,6 @@ def search_grants(
         }
 
 
-@tool
 def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
     """Fetch detailed information about a specific grant opportunity from grants.gov.
 
