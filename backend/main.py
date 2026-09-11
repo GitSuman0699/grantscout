@@ -230,10 +230,12 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
         if status_callback:
             status_callback("Cataloging matching federal opportunities...")
         for case in EVAL_CORPUS:
-            g = dict(case["grant"])
-            gid = f"grants-gov-{g.get('id')}"
-            if not storage.grant_exists(gid) and gid not in [x.get("grant_id") for x in candidate_grants]:
-                candidate_grants.append(g)
+            raw_grant = case.get("grant")
+            if isinstance(raw_grant, dict):
+                g = dict(raw_grant)
+                gid = f"grants-gov-{g.get('id')}"
+                if not storage.grant_exists(gid) and gid not in [x.get("grant_id") for x in candidate_grants]:
+                    candidate_grants.append(g)
 
     if status_callback:
         status_callback(f"Evaluating {len(candidate_grants)} opportunities against 5-dimension rubric...")
