@@ -19,7 +19,7 @@ from backend.config import config
 logger = logging.getLogger(__name__)
 
 GRANTS_API_BASE = config.GRANTS_API_BASE_URL
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 5
 
 
 def strip_html_tags(text: str) -> str:

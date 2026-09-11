@@ -62,6 +62,8 @@ export function GrantProvider({ children }) {
       await apiTriggerScan();
       // Refresh grants and stats after scan completes
       await Promise.all([loadGrants(), loadStats()]);
+      // Keep telemetry modal visible briefly so the user can see completion
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     } catch (err) {
       console.error('Scan cycle failed:', err.message);
       setError(`Scan failed: ${err.message}`);

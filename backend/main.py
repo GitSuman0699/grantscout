@@ -48,6 +48,9 @@ import os
 
 def _invoke_remote_agent(prompt: str) -> bool:
     """Trigger AWS AgentCore remotely if configured with a valid deployed runtime ARN or agent ID."""
+    if os.environ.get("USE_REMOTE_AGENTCORE", "false").lower() not in ("true", "1"):
+        return False
+
     runtime_arn = os.environ.get("AGENTCORE_RUNTIME_ARN") or os.environ.get("AGENTCORE_AGENT_ID")
     if not runtime_arn or runtime_arn == "default_agent_id":
         return False
@@ -55,15 +58,27 @@ def _invoke_remote_agent(prompt: str) -> bool:
     # Check if this is an AgentCore runtime ARN
     if "bedrock-agentcore" in runtime_arn or "runtime/" in runtime_arn:
         try:
-            client = boto3.client("bedrock-agentcore", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+            from botocore.config import Config
+            config_boto = Config(read_timeout=60, connect_timeout=10, retries={"max_attempts": 1})
+            client = boto3.client("bedrock-agentcore", region_name=os.environ.get("AWS_REGION", "us-east-1"), config=config_boto)
             payload_data: dict[str, Any] = {"inputText": prompt}
-            mcp_url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("RENDER_MCP_URL")
-            if mcp_url:
-                payload_data["mcpUrl"] = mcp_url
-            client.invoke_agent_runtime(
+            mcp_url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("RENDER_MCP_URL") or "https://grantscout-api.onrender.com/mcp"
+            payload_data["mcpUrl"] = mcp_url
+            res = client.invoke_agent_runtime(
                 agentRuntimeArn=runtime_arn,
                 payload=json.dumps(payload_data).encode("utf-8")
             )
+            body_bytes = res.get("response").read()
+            body_str = body_bytes.decode("utf-8")
+            try:
+                body_json = json.loads(body_str)
+                out = body_json.get("output", "")
+            except Exception:
+                out = body_str
+            if "Agent Error:" in out or ("Error" in out and len(out) < 200):
+                logger.error(f"Remote AgentCore returned error: {out}")
+                return False
+            logger.info(f"Remote AgentCore completed: {out[:100]}")
             return True
         except Exception as e:
             logger.error(f"Remote AgentCore trigger failed: {e}")
@@ -190,12 +205,15 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
     """Run discovery and scoring orchestration. Triggers cloud AgentCore if configured, or runs local engine."""
     if _invoke_remote_agent("Run grant scan and orchestration"):
         if status_callback:
-            status_callback("Triggered AWS AgentCore cloud container...")
-        return {
-            "status": "triggered_remotely",
-            "grants_scanned": 0,
-            "result_preview": "ORCHESTRATION COMPLETE (Remote)",
-        }
+            status_callback("AWS AgentCore multi-agent swarm completed scan & scoring in cloud.")
+        grants = storage.list_grants()
+        if len(grants) > 0:
+            return {
+                "status": "completed",
+                "grants_scanned": len(grants),
+                "result_preview": f"AgentCore Swarm completed. {len(grants)} grants active.",
+            }
+        logger.info("Remote agent returned 0 grants; executing resilient local discovery engine.")
 
     # Local Engine execution
     if status_callback:
@@ -384,7 +402,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"   Storage: Local ({config.LOCAL_STORAGE_PATH})")
     logger.info(f"   Model: {config.BEDROCK_MODEL_ID}")
     logger.info(f"   Security: {'Enabled (JWT + API Key)' if config.AUTH_ENABLED else 'Disabled (Dev Mode)'}")
-    logger.info(f"   Auto-Scan: {'Enabled' if config.AUTO_SCAN_ENABLED else 'Disabled'} (every {config.SCAN_INTERVAL_HOURS}h)")
+    # Ensure default organization profile exists
+    if not storage.get_org_profile("default"):
+        from backend.storage.personas import PERSONAS, persona_to_org_profile
+        default_profile = persona_to_org_profile(PERSONAS[0])
+        storage.save_org_profile(default_profile.model_dump())
+        logger.info("🌱 Seeded default organization profile: Youth Education Alliance")
 
     # Start background autonomous scan task
     scan_task: asyncio.Task[Any] | None = None
