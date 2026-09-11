@@ -275,6 +275,11 @@ export function createSSEStream(onEvent, onError) {
   eventSource.addEventListener('agent_thought', handleEvent);
   eventSource.addEventListener('drafting_started', handleEvent);
   eventSource.addEventListener('application_drafted', handleEvent);
+  eventSource.addEventListener('drafting_failed', handleEvent);
+  eventSource.addEventListener('scan_completed', handleEvent);
+  eventSource.addEventListener('scan_failed', handleEvent);
+  eventSource.addEventListener('auto_scan_started', handleEvent);
+  eventSource.addEventListener('auto_scan_completed', handleEvent);
   eventSource.addEventListener('update', handleEvent);
 
   eventSource.onerror = (e) => {

@@ -133,41 +133,68 @@ export default function ProposalDraftPage() {
     loadDraft();
   }, [grant?.grant_id, grant?.id, id]);
 
-  // Live SSE listener for background auto-drafting
+  const draftSseRef = useRef(null);
+
+  // Helper to cleanly dispose any active drafting stream
+  const disposeDraftStream = () => {
+    if (draftSseRef.current) {
+      try {
+        draftSseRef.current.close();
+      } catch (e) {
+        console.warn('Error closing SSE stream:', e);
+      }
+      draftSseRef.current = null;
+    }
+  };
+
+  // Ensure stream is always disposed on component unmount
   useEffect(() => {
-    if (draft) return;
+    return () => {
+      disposeDraftStream();
+    };
+  }, []);
+
+  // Listen to background drafting ONLY if grant was already drafting when page opened
+  useEffect(() => {
+    if (draft) {
+      disposeDraftStream();
+      return;
+    }
     const grantId = grant?.grant_id || grant?.id || id;
     if (!grantId) return;
 
-    const sse = createSSEStream((data) => {
-      if (!data) return;
-      const targetId = data.grant_id;
-      if (targetId && String(targetId) === String(grantId)) {
-        if (data.type === 'agent_thought' && data.message) {
-          setAgentThoughts(prev => [...prev, data.message.toUpperCase()]);
-        } else if (data.type === 'drafting_started') {
-          setIsDrafting(true);
-          setAgentThoughts(prev => [...prev, data.message ? data.message.toUpperCase() : 'DRAFTER SWARM STARTED...']);
-        } else if (data.type === 'application_drafted') {
-          setIsDrafting(false);
-          fetchApplications().then((appsData) => {
-            const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
-            const updated = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
-            if (updated) {
-              setDraft(updated);
-            }
-          });
-        } else if (data.type === 'drafting_failed') {
-          setIsDrafting(false);
-          setDraftError(data.message || 'Auto-drafting failed in background.');
+    if ((grant?.status === 'drafting' || grant?.is_drafting) && !draftSseRef.current) {
+      setIsDrafting(true);
+      draftSseRef.current = createSSEStream((data) => {
+        if (!data) return;
+        const targetId = data.grant_id;
+        if (targetId && String(targetId) === String(grantId)) {
+          if (data.type === 'agent_thought' && data.message) {
+            setAgentThoughts(prev => [...prev, data.message.toUpperCase()]);
+          } else if (data.type === 'application_drafted') {
+            disposeDraftStream();
+            setIsDrafting(false);
+            fetchApplications().then((appsData) => {
+              const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
+              const updated = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
+              if (updated) {
+                setDraft(updated);
+              }
+            });
+            if (refreshGrants) refreshGrants();
+          } else if (data.type === 'drafting_failed') {
+            disposeDraftStream();
+            setIsDrafting(false);
+            setDraftError(data.message || 'Auto-drafting failed in background.');
+          }
         }
-      }
-    });
+      });
+    }
 
     return () => {
-      if (sse) sse.close();
+      disposeDraftStream();
     };
-  }, [grant, id, draft, refreshGrants]);
+  }, [grant?.status, grant?.is_drafting, draft, grant?.grant_id, grant?.id, id]);
 
   const sections = draft?.sections || [];
   const activeSection = sections[activeSectionIdx] || sections[0] || {};
@@ -180,22 +207,42 @@ export default function ProposalDraftPage() {
 
   const handleGenerateDraft = async () => {
     if (!grant) return;
+
+    // 1. Immediately dispose any lingering stream before starting fresh
+    disposeDraftStream();
+
     setIsDrafting(true);
     setDraftError(null);
     setDraft(null);
     setAgentThoughts(['INITIALIZING DRAFTER SWARM...']);
 
-    let sse;
-    try {
-      sse = createSSEStream(
-        (data) => {
-          if (data && data.message) {
+    const grantId = grant.grant_id || grant.id;
+
+    // 2. Open ONE managed SSE stream for this drafting session
+    draftSseRef.current = createSSEStream(
+      (data) => {
+        if (!data) return;
+        const targetId = data.grant_id;
+        if (!targetId || String(targetId) === String(grantId)) {
+          if (data.type === 'agent_thought' && data.message) {
             setAgentThoughts(prev => [...prev, data.message.toUpperCase()]);
+          } else if (data.type === 'drafting_failed') {
+            disposeDraftStream();
+            setIsDrafting(false);
+            setDraftError(data.message || 'Auto-drafting failed in cloud.');
+          } else if (data.type === 'application_drafted') {
+            disposeDraftStream();
+            setIsDrafting(false);
           }
-        },
-        (err) => console.warn('SSE stream error:', err)
-      );
-      const grantId = grant.grant_id || grant.id;
+        }
+      },
+      (err) => {
+        console.warn('SSE stream error, disposing:', err);
+        disposeDraftStream();
+      }
+    );
+
+    try {
       const res = await triggerDraft(grantId);
       if (res && res.application) {
         setDraft(res.application);
@@ -217,7 +264,8 @@ export default function ProposalDraftPage() {
       setDraft(null);
       setDraftError(err.message || 'Failed to generate draft proposal.');
     } finally {
-      if (sse) sse.close();
+      // 3. ALWAYS dispose stream on completion or error
+      disposeDraftStream();
       setIsDrafting(false);
     }
   };
