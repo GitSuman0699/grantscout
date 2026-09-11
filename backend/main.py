@@ -147,112 +147,211 @@ def draft_application_for_grant(grant: dict, callback=None):
         callback(f"[NARRATIVE WRITER] Tool Execution: query_knowledge_base() -> Retrieved {len(rag_passages)} verified RAG grounding passages from organizational archives.")
         callback(f"[NARRATIVE WRITER] Synthesizing Section 1 (Executive Summary) & Section 2 (Statement of Need)...")
 
-    # Call Amazon Bedrock Converse API
+    # Helper for robust JSON extraction from LLM response
+    def _parse_llm_json(raw_text: str) -> dict:
+        clean = re.sub(r"^```json\s*", "", raw_text, flags=re.MULTILINE)
+        clean = re.sub(r"```$", "", clean, flags=re.MULTILINE).strip()
+        try:
+            return json.loads(clean)
+        except json.JSONDecodeError:
+            # Robust fallback: extract json substring between first { and last }
+            match = re.search(r"(\{.*\})", clean, re.DOTALL)
+            if match:
+                return json.loads(match.group(1))
+            raise
+
+    from botocore.config import Config
+    boto_config = Config(read_timeout=90, connect_timeout=10, retries={"max_attempts": 2})
+    client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION, config=boto_config)
+
+    sections_data = {}
+
     try:
-        from botocore.config import Config
-        boto_config = Config(read_timeout=120, connect_timeout=10, retries={"max_attempts": 2})
-        client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION, config=boto_config)
+        # =====================================================================
+        # AGENT 1: NARRATIVE WRITER (Sections 1, 2, 4)
+        # =====================================================================
+        if callback:
+            callback(f"[NARRATIVE WRITER] Synthesizing Section 1 (Executive Summary), Section 2 (Statement of Need), & Section 4 (Staffing & Capacity)...")
 
-        prompt = f"""You are the Lead Synthesis Coordinator of the GrantScout Multi-Agent Drafter Swarm.
-Your swarm consists of 4 specialized AI agents:
-1. NarrativeWriterAgent: Crafts Executive Summary, Statement of Need, and Organizational Capacity.
-2. BudgetSpecialistAgent: Crafts 2 CFR 200 compliant SF-424 line-item budgets and MTDC justifications.
-3. ComplianceDrafterAgent: Crafts 12-Month Phased Implementation Work Plans and Evaluation Frameworks.
-4. LeadReviewerCoordinator: Synthesizes all sections with rigorous formatting, metrics, and checklists.
+        prompt_narrative = f"""You are the Narrative Writer Agent in the GrantScout Multi-Agent Drafter Swarm.
+Your task is to draft 3 core organizational narrative sections for this federal grant opportunity:
+- Section 1: Executive Summary
+- Section 2: Statement of Need & Community Impact
+- Section 4: Key Personnel & Organizational Capacity
 
-TARGET GRANT OPPORTUNITY:
+TARGET GRANT:
 - Opportunity ID: {gid}
-- Official Title: {title}
+- Title: {title}
 - Grantor Agency: {agency}
-- Statutory Award Ceiling: ${ceiling:,.2f}
-- Opportunity Description / Synopsis: {synopsis[:2000]}
+- Award Ceiling: ${ceiling:,.2f}
+- Description: {synopsis[:1500]}
 
 APPLICANT NONPROFIT PROFILE:
-- Organization Name: {org_name}
-- Mission Statement: {mission}
+- Name: {org_name}
+- Mission: {mission}
 - Target Beneficiaries: {target_population}
-- Geographic Service Area: {service_area}
-- Existing Flagship Programs: {json.dumps(programs)}
+- Service Area: {service_area}
+- Existing Programs: {json.dumps(programs)}
 - Verified Past Experience / Document Excerpts:
 {rag_context}
 
-CRITICAL FORMATTING & STRUCTURE INSTRUCTIONS:
-Draft a complete, highly articulate, competitive 6-section federal grant proposal. Every single section MUST follow these strict formatting standards:
-
-1. SECTION EXECUTIVE SUMMARY CALLOUT BOX:
-   Each of the 6 sections MUST start with a blockquote callout box summarizing that section's key highlights:
+FORMATTING INSTRUCTIONS:
+1. Each section MUST begin with an executive callout box:
    > **SECTION EXECUTIVE SUMMARY & HIGHLIGHTS**
    > - **Core Focus**: <1-sentence focus>
    > - **Key Target Metric**: <specific quantitative metric>
    > - **Funder Alignment**: <specific agency priority met>
+2. Use numbered `###` subsections (e.g. `### 1.1 Project Title & Strategic Focus`, `### 2.1 Demographics & Disparities`).
+3. Section 4 MUST include a Staffing & Leadership Allocation markdown table:
+   | Project Role | Proposed Staff / Title | FTE Allocation | Key Qualifications & Responsibilities |
 
-2. NUMBERED SUBSECTIONS (###):
-   Break down each section into 3 to 4 logical, numbered subsections using `###` markdown headers with clear, descriptive titles.
-
-3. MANDATORY STRUCTURED MARKDOWN TABLES:
-   - Section 3 (Project Design & Work Plan): MUST include a full 12-month phased implementation table:
-     | Month / Phase | Operational Activity | Milestone Deliverable | Lead Staff / Partner | Target Quantitative Output |
-   - Section 4 (Key Personnel & Organizational Capacity): MUST include a key staffing table:
-     | Project Role | Proposed Staff / Title | FTE Allocation | Key Qualifications & Responsibilities |
-   - Section 5 (Budget & Financial Justification): MUST include a comprehensive SF-424 cost allocation table totaling exactly ${ceiling:,.2f}:
-     | Cost Category | Federal Request ($) | Non-Federal Match ($) | Total Program Cost ($) | Basis of Estimate & Calculation Justification |
-   - Section 6 (Evaluation Metrics & Sustainability): MUST include a Key Performance Indicator (KPI) matrix:
-     | Strategic Objective | Performance Metric Indicator | Baseline Data | 12-Month Target | Data Collection Instrument | Verification Frequency |
-
-4. BOLDED REGULATORY & COMPLIANCE TERMINOLOGY:
-   Explicitly format and reference **2 CFR 200 Uniform Guidance**, **10% MTDC De Minimis Indirect Cost Rate**, **SAM.gov Unique Entity Identifier (UEI)**, **Internal Financial Controls**, and specific program deliverables.
-
-REQUIRED JSON OUTPUT SCHEMA:
-Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
+Return ONLY valid JSON matching this schema with NO markdown wrapping:
 {{
   "section_1_executive_summary": "<full markdown prose for Section 1 with callout box and ### subsections>",
   "section_2_statement_of_need": "<full markdown prose for Section 2 with callout box and ### subsections>",
+  "section_4_capacity_governance": "<full markdown prose for Section 4 with callout box, ### subsections, and staffing table>"
+}}"""
+
+        res_narrative = client.converse(
+            modelId=config.BEDROCK_FAST_MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": prompt_narrative}]}],
+            inferenceConfig={"temperature": 0.3, "maxTokens": 6000}
+        )
+        raw_narrative = res_narrative["output"]["message"]["content"][0]["text"].strip()
+        data_narrative = _parse_llm_json(raw_narrative)
+        sections_data.update(data_narrative)
+
+        # =====================================================================
+        # AGENT 2: BUDGET SPECIALIST (Section 5 & Budget CSV)
+        # =====================================================================
+        personnel = round(ceiling * 0.55, 2)
+        fringe = round(personnel * 0.22, 2)
+        travel = round(ceiling * 0.05, 2)
+        supplies = round(ceiling * 0.12, 2)
+        other = round(max(0.0, ceiling - (personnel + fringe + travel + supplies)), 2)
+        indirect_costs = round(ceiling * 0.10, 2)
+
+        if callback:
+            callback(f"[HANDOFF: NARRATIVE WRITER → BUDGET SPECIALIST] Narrative complete. Handoff to Budget Specialist with ceiling ${ceiling:,.2f}.")
+            callback(f"[BUDGET SPECIALIST] Tool Execution: calculate_mtdc_compliance() verifying 10% MTDC De Minimis Indirect Cost Rate.")
+            callback(f"[BUDGET SPECIALIST] Tool Execution: generate_budget_csv() itemizing Personnel (${personnel:,.2f}), Fringe (${fringe:,.2f}), Supplies (${supplies:,.2f}).")
+            callback(f"[BUDGET SPECIALIST] Synthesizing Section 5 (Line-Item Budget Justification & SF-424 Cost Table)...")
+
+        budget_res = generate_budget_csv(
+            grant_id=gid,
+            direct_personnel=personnel,
+            fringe_benefits=fringe,
+            travel=travel,
+            supplies=supplies,
+            other=other,
+            indirect_rate_pct=10.0,
+        )
+
+        prompt_budget = f"""You are the Budget Specialist Agent in the GrantScout Multi-Agent Drafter Swarm.
+Your task is to draft Section 5: Budget & Financial Justification for this federal grant application.
+
+TARGET GRANT:
+- Title: {title}
+- Agency: {agency}
+- Total Federal Request: ${ceiling:,.2f}
+
+CALCULATED COST ALLOCATION (2 CFR 200 / 10% MTDC DE MINIMIS):
+- Direct Personnel: ${personnel:,.2f} (55%)
+- Fringe Benefits: ${fringe:,.2f} (22% of personnel)
+- Supplies & Materials: ${supplies:,.2f} (12%)
+- Program Travel: ${travel:,.2f} (5%)
+- Other Direct Costs: ${other:,.2f}
+- Indirect Costs: ${indirect_costs:,.2f} (10% MTDC De Minimis Rate)
+- Total Request: ${ceiling:,.2f}
+
+FORMATTING INSTRUCTIONS:
+1. Begin with an executive callout box:
+   > **SECTION EXECUTIVE SUMMARY & HIGHLIGHTS**
+   > - **Core Focus**: Total federal request of ${ceiling:,.2f} aligned with 2 CFR 200 Uniform Guidance
+   > - **Key Target Metric**: MTDC 10% de minimis indirect rate compliance
+   > - **Funder Alignment**: Transparent line-item fiscal justification
+2. Use numbered `###` subsections (`### 5.1 Budget Methodology & MTDC Rate`, `### 5.2 Line-Item Cost Justification`, `### 5.3 Financial Internal Controls`).
+3. MUST include a complete SF-424 Cost Allocation markdown table totaling exactly ${ceiling:,.2f}:
+   | Cost Category | Federal Request ($) | Non-Federal Match ($) | Total Program Cost ($) | Basis of Estimate & Calculation Justification |
+
+Return ONLY valid JSON matching this schema with NO markdown wrapping:
+{{
+  "section_5_budget_justification": "<full markdown prose for Section 5 with callout box, ### subsections, and SF-424 table>"
+}}"""
+
+        res_budget = client.converse(
+            modelId=config.BEDROCK_FAST_MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": prompt_budget}]}],
+            inferenceConfig={"temperature": 0.3, "maxTokens": 4000}
+        )
+        raw_budget = res_budget["output"]["message"]["content"][0]["text"].strip()
+        data_budget = _parse_llm_json(raw_budget)
+        sections_data.update(data_budget)
+
+        # =====================================================================
+        # AGENT 3: COMPLIANCE & TIMELINE DRAFTER (Sections 3 & 6)
+        # =====================================================================
+        if callback:
+            callback(f"[HANDOFF: BUDGET SPECIALIST → COMPLIANCE DRAFTER] Budget verified. Handoff to Compliance & Timeline Drafter.")
+            callback(f"[COMPLIANCE DRAFTER] Synthesizing Section 3 (12-Month Work Plan Roadmap) & Section 6 (KPI Matrix & Post-Grant Sustainability)...")
+
+        prompt_compliance = f"""You are the Compliance & Implementation Agent in the GrantScout Multi-Agent Drafter Swarm.
+Your task is to draft 2 crucial execution and evaluation sections:
+- Section 3: Project Design & Work Plan (12-Month Phased Implementation Roadmap)
+- Section 6: Evaluation Metrics & Long-Term Post-Grant Sustainability
+
+TARGET GRANT:
+- Opportunity ID: {gid}
+- Title: {title}
+- Grantor Agency: {agency}
+- Description: {synopsis[:1500]}
+
+APPLICANT NONPROFIT PROFILE:
+- Name: {org_name}
+- Mission: {mission}
+- Target Beneficiaries: {target_population}
+- Existing Programs: {json.dumps(programs)}
+
+FORMATTING INSTRUCTIONS:
+1. Each section MUST begin with an executive callout box:
+   > **SECTION EXECUTIVE SUMMARY & HIGHLIGHTS**
+   > - **Core Focus**: <1-sentence focus>
+   > - **Key Target Metric**: <specific quantitative metric>
+   > - **Funder Alignment**: <specific agency priority met>
+2. Use numbered `###` subsections.
+3. Section 3 MUST include a full 12-month phased implementation milestone table:
+   | Month / Phase | Operational Activity | Milestone Deliverable | Lead Staff / Partner | Target Quantitative Output |
+4. Section 6 MUST include a Key Performance Indicator (KPI) matrix:
+   | Strategic Objective | Performance Metric Indicator | Baseline Data | 12-Month Target | Data Collection Instrument | Verification Frequency |
+
+Return ONLY valid JSON matching this schema with NO markdown wrapping:
+{{
   "section_3_project_design": "<full markdown prose for Section 3 with callout box, ### subsections, and 12-month milestone table>",
-  "section_4_capacity_governance": "<full markdown prose for Section 4 with callout box, ### subsections, and staffing table>",
-  "section_5_budget_justification": "<full markdown prose for Section 5 with callout box, ### subsections, and SF-424 budget table>",
   "section_6_evaluation_sustainability": "<full markdown prose for Section 6 with callout box, ### subsections, and KPI table>"
 }}"""
 
-        res = client.converse(
+        res_compliance = client.converse(
             modelId=config.BEDROCK_FAST_MODEL_ID,
-            messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"temperature": 0.3, "maxTokens": 16000}
+            messages=[{"role": "user", "content": [{"text": prompt_compliance}]}],
+            inferenceConfig={"temperature": 0.3, "maxTokens": 6000}
         )
-
-        raw_output = res["output"]["message"]["content"][0]["text"].strip()
-        clean_json = re.sub(r"^```json\s*", "", raw_output, flags=re.MULTILINE)
-        clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
-        sections_data = json.loads(clean_json)
+        raw_compliance = res_compliance["output"]["message"]["content"][0]["text"].strip()
+        data_compliance = _parse_llm_json(raw_compliance)
+        sections_data.update(data_compliance)
 
     except Exception as e:
-        logger.error(f"Amazon Bedrock drafting failed for grant {gid}: {e}")
+        logger.error(f"Amazon Bedrock collaborative drafting failed for grant {gid}: {e}")
         raise RuntimeError(f"AI Proposal Drafting Failed: {e!s}")
 
-    # Generate SF-424 Budget CSV itemization
-    personnel = round(ceiling * 0.55, 2)
-    fringe = round(personnel * 0.22, 2)
-    travel = round(ceiling * 0.05, 2)
-    supplies = round(ceiling * 0.12, 2)
-    other = round(max(0.0, ceiling - (personnel + fringe + travel + supplies)), 2)
-
+    # =====================================================================
+    # AGENT 4: LEAD COORDINATOR (Assembly, Validation, and Storage)
+    # =====================================================================
     if callback:
-        callback(f"[HANDOFF: NARRATIVE WRITER → BUDGET SPECIALIST] Narrative grounded. Handoff to Budget Specialist with ceiling ${ceiling:,.2f}.")
-        callback(f"[BUDGET SPECIALIST] Tool Execution: calculate_mtdc_compliance() verifying 10% MTDC De Minimis Indirect Cost Rate.")
-        callback(f"[BUDGET SPECIALIST] Tool Execution: generate_budget_csv() itemizing Personnel (${personnel:,.2f}), Fringe (${fringe:,.2f}), Supplies (${supplies:,.2f}).")
-        callback(f"[HANDOFF: BUDGET SPECIALIST → COMPLIANCE DRAFTER] Budget verified. Handoff to Compliance & Timeline Drafter.")
-        callback(f"[COMPLIANCE DRAFTER] Synthesizing Section 3 (12-Month Work Plan) & Section 6 (KPI Matrix & Post-Grant Sustainability)...")
+        callback(f"[HANDOFF: COMPLIANCE DRAFTER → LEAD COORDINATOR] All 6 sections authored. Handoff to Lead Coordinator.")
+        callback(f"[LEAD COORDINATOR] Validating 6-section proposal completeness against federal NOFO guidelines...")
+        callback(f"[LEAD COORDINATOR] Tool Execution: save_application_draft() -> Persisting verified application draft & budget CSV to database.")
+        callback(f"[REVIEWER AGENT] Quality review check complete: 100% compliant. Proposal ready for human review.")
 
-    budget_res = generate_budget_csv(
-        grant_id=gid,
-        direct_personnel=personnel,
-        fringe_benefits=fringe,
-        travel=travel,
-        supplies=supplies,
-        other=other,
-        indirect_rate_pct=10.0,
-    )
-
-    # Persist all 6 AI-synthesized sections in a single atomic write
     sections_map = [
         ("1. Executive Summary", sections_data.get("section_1_executive_summary")),
         ("2. Statement of Need & Community Impact", sections_data.get("section_2_statement_of_need")),
@@ -273,12 +372,6 @@ Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
             "needs_review": True,
             "word_count": len(content.split()),
         })
-
-    if callback:
-        callback(f"[HANDOFF: COMPLIANCE DRAFTER → LEAD COORDINATOR] All 6 sections authored. Handoff to Lead Coordinator.")
-        callback(f"[LEAD COORDINATOR] Validating 6-section proposal completeness against federal NOFO guidelines...")
-        callback(f"[LEAD COORDINATOR] Tool Execution: save_application_draft() -> Persisting verified application draft & budget CSV to database.")
-        callback(f"[REVIEWER AGENT] Quality review check complete: 100% compliant. Proposal ready for human review.")
 
     from backend.tools.application import save_application_draft
     save_application_draft(
