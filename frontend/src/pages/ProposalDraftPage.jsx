@@ -3,7 +3,7 @@ import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, Copy, Check, Sparkles, Target, Building2, Calendar,
   DollarSign, Loader2, ArrowRight, ExternalLink, FileText, CheckCircle2,
-  Edit3, Eye, Save, RefreshCw, ShieldCheck, BookOpen, Layers
+  Edit3, Eye, Save, RefreshCw, ShieldCheck, BookOpen, Layers, AlertTriangle
 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft, createSSEStream, updateApplication } from '../services/api';
@@ -183,6 +183,7 @@ export default function ProposalDraftPage() {
     if (!grant) return;
     setIsDrafting(true);
     setDraftError(null);
+    setDraft(null);
     setAgentThoughts(['INITIALIZING DRAFTER SWARM...']);
 
     let sse;
@@ -205,16 +206,20 @@ export default function ProposalDraftPage() {
         const appsData = await fetchApplications();
         const appsList = Array.isArray(appsData) ? appsData : (appsData?.applications || []);
         const updated = appsList.find(a => (a.grant_id === grantId || a.id === grantId));
-        if (updated) setDraft(updated);
+        if (updated) {
+          setDraft(updated);
+        } else {
+          throw new Error('Draft synthesis completed, but no application document was returned.');
+        }
       }
       if (refreshGrants) refreshGrants();
     } catch (err) {
       console.error('Drafting failed:', err);
+      setDraft(null);
       setDraftError(err.message || 'Failed to generate draft proposal.');
     } finally {
       if (sse) sse.close();
       setIsDrafting(false);
-      setAgentThoughts([]);
     }
   };
 
@@ -437,6 +442,74 @@ export default function ProposalDraftPage() {
         </div>
       </div>
 
+      {/* Error Alert Banner */}
+      {draftError && (
+        <div style={{
+          padding: '1.15rem 1.5rem',
+          background: '#FFF5F5',
+          border: '3px solid #E53E3E',
+          color: '#C53030',
+          marginBottom: '1.5rem',
+          boxShadow: '4px 4px 0px #E53E3E',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '1rem',
+        }}>
+          <AlertTriangle size={24} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: '0.95rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Application Proposal Generation Failed
+            </div>
+            <div style={{ marginTop: '0.35rem', fontSize: '0.9rem', color: '#742A2A', lineHeight: '1.5' }}>
+              {draftError}
+            </div>
+            <div style={{ marginTop: '0.6rem', fontSize: '0.8rem', color: '#9B2C2C' }}>
+              No fallback or mock data was injected. Please verify AWS Bedrock credentials, model quotas, or network connectivity and try again.
+            </div>
+          </div>
+          <button
+            onClick={() => setDraftError(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#C53030',
+              fontWeight: 800,
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              padding: '0 0.25rem'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Live Drafting Telemetry Stream */}
+      {isDrafting && (
+        <div className="brutalist-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', background: '#0a0a0a', border: '3px solid var(--border-dark)', color: '#10B981', fontFamily: 'var(--font-mono, monospace)', height: '260px', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', borderBottom: '1px solid #333', paddingBottom: '0.5rem' }}>
+            <Loader2 size={16} className="spin" style={{ color: '#F59E0B' }} />
+            <span style={{ fontWeight: 800, color: '#F59E0B', fontSize: '0.82rem', letterSpacing: '0.05em' }}>
+              AUTONOMOUS BEDROCK DRAFTER SWARM (LIVE TELEMETRY)
+            </span>
+          </div>
+          {agentThoughts.map((thought, idx) => {
+            const isLast = idx === agentThoughts.length - 1;
+            const baseText = thought.replace(/\.*$/, '');
+            return (
+              <div key={idx} style={{ marginBottom: '0.45rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start', opacity: isLast ? 1 : 0.7 }}>
+                <span style={{ color: '#6B7280' }}>&gt;</span>
+                <span style={{ color: isLast ? '#34D399' : '#9CA3AF' }}>
+                  {baseText}
+                  {isLast ? <span className="animated-dots"></span> : null}
+                </span>
+              </div>
+            );
+          })}
+          <div ref={thoughtsEndRef} />
+        </div>
+      )}
+
       {/* Main Drafting Section */}
       {loadingDraft ? (
         <div className="brutalist-card" style={{ padding: '4rem', textAlign: 'center' }}>
@@ -471,6 +544,17 @@ export default function ProposalDraftPage() {
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleGenerateDraft}
+                disabled={isDrafting}
+                className="brutalist-btn btn-outline"
+                style={{ fontSize: '0.85rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                title="Synthesize a fresh proposal with Bedrock Claude"
+              >
+                <RefreshCw size={14} className={isDrafting ? "spin" : ""} />
+                {isDrafting ? 'SYNTHESIZING...' : 'RE-DRAFT PROPOSAL'}
+              </button>
+
               <button
                 onClick={() => handleCopySection(editedContent || activeSection.content)}
                 className="brutalist-btn btn-outline"

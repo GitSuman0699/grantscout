@@ -19,7 +19,13 @@ from backend.config import config
 logger = logging.getLogger(__name__)
 
 GRANTS_API_BASE = config.GRANTS_API_BASE_URL
-REQUEST_TIMEOUT = 5
+REQUEST_TIMEOUT = 10
+
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+}
 
 
 def strip_html_tags(text: str) -> str:
@@ -85,7 +91,7 @@ def search_grants(
 
         response = requests.post(
             f"{GRANTS_API_BASE}/search2",
-            headers={"Content-Type": "application/json"},
+            headers=DEFAULT_HEADERS,
             json=request_body,
             timeout=REQUEST_TIMEOUT,
         )
@@ -171,7 +177,7 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
 
         response = requests.post(
             f"{GRANTS_API_BASE}/fetchOpportunity",
-            headers={"Content-Type": "application/json"},
+            headers=DEFAULT_HEADERS,
             json={"opportunityId": opportunity_id},
             timeout=REQUEST_TIMEOUT,
         )

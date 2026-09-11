@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import sys
 import uuid
 from contextlib import asynccontextmanager
@@ -102,63 +103,112 @@ def _invoke_remote_agent(prompt: str) -> bool:
 
 
 def draft_application_for_grant(grant: dict, callback=None):
-    """Draft application proposal. Dispatches remotely if cloud AgentCore configured, or generates structured 6-section draft."""
+    """Draft application proposal using Amazon Bedrock Claude.
+
+    Grounds the proposal in the actual grant requirements, organization profile,
+    and indexed RAG knowledge base documents. If AI drafting fails, raises an explicit
+    error without injecting fallback/mock data.
+    """
     if _invoke_remote_agent(f"Draft application for grant {grant.get('grant_id')}"):
         return {"status": "triggered_remotely"}
 
     from backend.tools.application import update_draft_section, generate_budget_csv
     from backend.tools.org_profile import retrieve_org_profile
+    from backend.tools.rag_search import query_knowledge_base
 
     gid = grant.get("grant_id") or f"grants-gov-{grant.get('id')}"
     title = grant.get("title", "Grant Opportunity")
+    agency = grant.get("agency", "Federal Agency")
+    synopsis = grant.get("synopsis_description") or grant.get("synopsis", "Federal grant opportunity.")
+    ceiling = float(grant.get("award_ceiling") or 100000)
+
     org_res = retrieve_org_profile()
     org_profile = org_res.get("profile", {})
-    org_name = org_profile.get("name", "Youth Education Alliance")
-    mission = org_profile.get("mission", "Empower youth through education, robotics, and coding literacy.")
+    if not org_profile:
+        raise RuntimeError("Cannot draft proposal: No active organization profile found in storage.")
+
+    org_name = org_profile.get("name", "Applicant Organization")
+    mission = org_profile.get("mission", "")
+    programs = org_profile.get("programs", [])
+    service_area = org_profile.get("service_area", "Regional Community")
+    target_population = org_profile.get("target_population", "Community Members")
 
     if callback:
-        callback(f"Retrieving profile for {org_name}...")
+        callback(f"Retrieving profile & RAG knowledge base context for {org_name}...")
 
-    # Section 1: Executive Summary
-    update_draft_section(
-        grant_id=gid,
-        org_id="default",
-        grant_title=title,
-        section_title="1. Executive Summary",
-        content=f"{org_name} respectfully requests funding under {title}. Guided by our mission to {mission.lower()}, this initiative accelerates educational equity by delivering structured technology literacy and mentoring programs across underserved communities.",
-    )
+    # Query RAG knowledge base for grounding
+    rag_res = query_knowledge_base(f"{title} {mission}", top_k=3)
+    rag_passages = [p.get("excerpt", "") for p in rag_res.get("passages", [])]
+    rag_context = "\n---\n".join(rag_passages) if rag_passages else "No additional documents in knowledge base."
 
     if callback:
-        callback("Drafted Executive Summary & Needs Statement...")
+        callback("Prompting Amazon Bedrock Claude for 6-section proposal synthesis...")
 
-    # Section 2: Statement of Need
-    update_draft_section(
-        grant_id=gid,
-        org_id="default",
-        grant_title=title,
-        section_title="2. Statement of Need & Community Impact",
-        content=f"Youth residing within Title I target districts lack equitable access to advanced STEM and computer science learning environments. Grant funding directly mitigates this disparity by establishing subsidized cohort academies with verified learning outcomes.",
-    )
+    # Call Amazon Bedrock Converse API
+    try:
+        from botocore.config import Config
+        boto_config = Config(read_timeout=120, connect_timeout=10, retries={"max_attempts": 2})
+        client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION, config=boto_config)
 
-    # Section 3: Project Design & Work Plan
-    update_draft_section(
-        grant_id=gid,
-        org_id="default",
-        grant_title=title,
-        section_title="3. Project Design & Work Plan",
-        content="The 12-month project design encompasses four sequential phases: curriculum onboarding, hands-on workshop delivery, milestone competency evaluations, and a community capstone showcase highlighting participant projects.",
-    )
+        prompt = f"""You are a master federal grant proposal writer. Draft a complete, highly competitive, 6-section federal grant application proposal tailored precisely to this opportunity.
 
-    if callback:
-        callback("Synthesizing SF-424 budget justification and 2 CFR 200 compliance...")
+TARGET GRANT OPPORTUNITY:
+- ID: {gid}
+- Title: {title}
+- Funder Agency: {agency}
+- Award Ceiling: ${ceiling:,.2f}
+- Description / Synopsis: {synopsis[:2000]}
 
-    # Section 4: Budget Justification & CSV
-    ceiling = float(grant.get("award_ceiling") or 75000)
-    personnel = round(ceiling * 0.60, 2)
-    fringe = round(personnel * 0.20, 2)
+APPLICANT NONPROFIT PROFILE:
+- Name: {org_name}
+- Mission: {mission}
+- Target Population: {target_population}
+- Service Area: {service_area}
+- Existing Programs: {json.dumps(programs)}
+- Verified Past Experience / Document Excerpts:
+{rag_context}
+
+INSTRUCTIONS:
+Write a comprehensive, professional grant proposal. Generate detailed, authentic, highly articulate prose for all 6 required sections:
+1. Executive Summary: Succinct overview of project purpose, community need, alignment with funder goals, and expected impact.
+2. Statement of Need & Community Impact: Data-driven justification of the challenge, demographics, service gaps, and anticipated outcomes.
+3. Project Design & Work Plan: 12-month phased implementation roadmap with specific milestone deliverables, methodology, and participant engagement.
+4. Key Personnel & Organizational Capacity: Leadership governance, staff qualifications, fiscal compliance standards (2 CFR 200), and institutional credibility.
+5. Budget & Financial Justification: Thorough cost breakdown justifying ${ceiling:,.2f} request across personnel, fringe, travel, supplies, and indirect costs.
+6. Evaluation Metrics & Sustainability: Formative/summative performance metrics, data collection rigor, and post-grant community sustainability plans.
+
+Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
+{{
+  "section_1_executive_summary": "<detailed prose for section 1>",
+  "section_2_statement_of_need": "<detailed prose for section 2>",
+  "section_3_project_design": "<detailed prose for section 3>",
+  "section_4_capacity_governance": "<detailed prose for section 4>",
+  "section_5_budget_justification": "<detailed prose for section 5>",
+  "section_6_evaluation_sustainability": "<detailed prose for section 6>"
+}}"""
+
+        res = client.converse(
+            modelId=config.BEDROCK_FAST_MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"temperature": 0.3, "maxTokens": 4096}
+        )
+
+        raw_output = res["output"]["message"]["content"][0]["text"].strip()
+        clean_json = re.sub(r"^```json\s*", "", raw_output, flags=re.MULTILINE)
+        clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
+        sections_data = json.loads(clean_json)
+
+    except Exception as e:
+        logger.error(f"Amazon Bedrock drafting failed for grant {gid}: {e}")
+        raise RuntimeError(f"AI Proposal Drafting Failed: {e!s}")
+
+    # Generate SF-424 Budget CSV itemization
+    personnel = round(ceiling * 0.55, 2)
+    fringe = round(personnel * 0.22, 2)
     travel = round(ceiling * 0.05, 2)
-    supplies = round(ceiling * 0.10, 2)
-    other = round(ceiling * 0.05, 2)
+    supplies = round(ceiling * 0.12, 2)
+    other = round(max(0.0, ceiling - (personnel + fringe + travel + supplies)), 2)
+
     generate_budget_csv(
         grant_id=gid,
         direct_personnel=personnel,
@@ -169,40 +219,110 @@ def draft_application_for_grant(grant: dict, callback=None):
         indirect_rate_pct=10.0,
     )
 
-    update_draft_section(
-        grant_id=gid,
-        org_id="default",
-        grant_title=title,
-        section_title="4. Budget & Financial Justification",
-        content=f"Total requested funding (${ceiling:,.2f}) adheres strictly to 2 CFR 200 Uniform Guidance cost principles. Personnel (${personnel:,.2f}) supports certified instructional staff. Fringe benefits (${fringe:,.2f}) reflect organizational rates. Supplies (${supplies:,.2f}) fund educational kits and curriculum licensing.",
-    )
+    # Persist all 6 AI-synthesized sections
+    sections_map = [
+        ("1. Executive Summary", sections_data.get("section_1_executive_summary")),
+        ("2. Statement of Need & Community Impact", sections_data.get("section_2_statement_of_need")),
+        ("3. Project Design & Work Plan", sections_data.get("section_3_project_design")),
+        ("4. Key Personnel & Organizational Capacity", sections_data.get("section_4_capacity_governance")),
+        ("5. Budget & Financial Justification", sections_data.get("section_5_budget_justification")),
+        ("6. Evaluation Metrics & Sustainability", sections_data.get("section_6_evaluation_sustainability")),
+    ]
 
-    # Section 5: Organizational Capacity
-    update_draft_section(
-        grant_id=gid,
-        org_id="default",
-        grant_title=title,
-        section_title="5. Organizational Capacity & Governance",
-        content=f"{org_name} maintains rigorous financial governance, annual independent audits, and dual-signoff fiscal controls conforming to federal grant management standards.",
-    )
-
-    # Section 6: Evaluation & Sustainability
-    update_draft_section(
-        grant_id=gid,
-        org_id="default",
-        grant_title=title,
-        section_title="6. Evaluation Metrics & Sustainability",
-        content="Project efficacy is tracked via pre- and post-program evaluations, student retention metrics, and technical milestone completions. Long-term sustainability is reinforced through regional community partnerships.",
-    )
+    for title_sec, content in sections_map:
+        if not content:
+            raise RuntimeError(f"AI Drafter generated incomplete proposal: missing '{title_sec}'.")
+        if callback:
+            callback(f"Persisting validated section: {title_sec}...")
+        update_draft_section(
+            grant_id=gid,
+            org_id="default",
+            grant_title=title,
+            section_title=title_sec,
+            content=content,
+        )
 
     if callback:
-        callback("Proposal drafting complete — 6 validated sections persisted.")
+        callback("Proposal drafting complete — 6 authentic sections synthesized by Bedrock Claude.")
 
     return {"status": "completed", "grant_id": gid}
 
 
+def evaluate_grant_with_bedrock(grant_details: dict, org_profile: dict) -> dict:
+    """Evaluate grant opportunity using Amazon Bedrock Claude across 5 dimensions.
+
+    Produces authentic, grant-specific fit analysis and numerical scores.
+    If Bedrock fails, raises an explicit RuntimeError without returning fallback numbers.
+    """
+    client = boto3.client("bedrock-runtime", region_name=config.AWS_REGION)
+    title = grant_details.get("title", "Unknown Grant")
+    agency = grant_details.get("agency", "Federal Agency")
+    synopsis = grant_details.get("synopsis_description") or grant_details.get("synopsis", "")
+    ceiling = grant_details.get("award_ceiling", "0")
+    org_name = org_profile.get("name", "Applicant Organization")
+    org_mission = org_profile.get("mission", "")
+    org_programs = json.dumps(org_profile.get("programs", []))
+    keywords = ", ".join(org_profile.get("keywords", []))
+
+    prompt = f"""You are a senior federal grant evaluator assessing grant fit for GrantScout.
+Evaluate how well this grant opportunity matches the applicant organization profile.
+
+APPLICANT ORGANIZATION:
+- Name: {org_name}
+- Mission: {org_mission}
+- Programs: {org_programs}
+- Keywords: {keywords}
+
+GRANT OPPORTUNITY:
+- Title: {title}
+- Agency: {agency}
+- Award Ceiling: ${ceiling}
+- Full Synopsis: {synopsis[:2000]}
+
+Score across 5 dimensions strictly:
+1. mission_alignment (0-30 points): Fit with stated mission and programs.
+2. eligibility_fit (0-25 points): Nonprofits eligible? Any disqualifiers?
+3. capacity_match (0-20 points): Budget and operational scale compatibility.
+4. geographic_fit (0-15 points): Target region alignment or national scope.
+5. track_record (0-10 points): Past performance in similar technical/program areas.
+
+Routing Rule: If total >= 50, status = "matched". If total < 50, status = "archived".
+
+Return ONLY valid JSON matching this schema with no markdown formatting:
+{{
+  "mission_alignment": <int 0-30>,
+  "eligibility_fit": <int 0-25>,
+  "capacity_match": <int 0-20>,
+  "geographic_fit": <int 0-15>,
+  "track_record": <int 0-10>,
+  "total": <sum of 5 dimensions>,
+  "status": "<matched or archived>",
+  "match_reasoning": "<2-4 sentences explaining exactly why this grant is or is not a match>"
+}}"""
+
+    try:
+        res = client.converse(
+            modelId=config.BEDROCK_FAST_MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"temperature": 0.1, "maxTokens": 800}
+        )
+        raw = res["output"]["message"]["content"][0]["text"].strip()
+        clean = re.sub(r"^```json\s*", "", raw, flags=re.MULTILINE)
+        clean = re.sub(r"```$", "", clean, flags=re.MULTILINE).strip()
+        eval_dict = json.loads(clean)
+
+        for key in ["mission_alignment", "eligibility_fit", "capacity_match", "geographic_fit", "track_record", "total", "status", "match_reasoning"]:
+            if key not in eval_dict:
+                raise ValueError(f"Missing required key '{key}' in Bedrock evaluation output")
+        return eval_dict
+
+    except Exception as e:
+        logger.error(f"Bedrock evaluation failed for '{title}': {e}")
+        raise RuntimeError(f"Bedrock evaluation error for '{title}': {e!s}")
+
+
 async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str, Any]:
-    """Run discovery and scoring orchestration. Triggers cloud AgentCore if configured, or runs local engine."""
+    """Run discovery and scoring orchestration using authentic Grants.gov API and Bedrock Claude."""
     if _invoke_remote_agent("Run grant scan and orchestration"):
         if status_callback:
             status_callback("AWS AgentCore multi-agent swarm completed scan & scoring in cloud.")
@@ -213,86 +333,101 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
                 "grants_scanned": len(grants),
                 "result_preview": f"AgentCore Swarm completed. {len(grants)} grants active.",
             }
-        logger.info("Remote agent returned 0 grants; executing resilient local discovery engine.")
-
-    # Local Engine execution
-    if status_callback:
-        status_callback("Connecting to federal Grants.gov database...")
+        logger.info("Remote agent returned 0 grants; executing local engine.")
 
     # 1. Retrieve active organization profile
-    org_profile = storage.get_org_profile("default") or {}
-    keywords = org_profile.get("keywords", ["STEM education", "robotics", "youth", "workforce"])
+    org_profile = storage.get_org_profile("default")
+    if not org_profile:
+        raise RuntimeError("Cannot run discovery scan: No organization profile found in database.")
+
+    keywords = org_profile.get("keywords", ["STEM education", "robotics", "youth"])
 
     if status_callback:
-        status_callback(f"Targeting organization profile keywords: {', '.join(keywords[:3])}...")
+        status_callback(f"Connecting to live Grants.gov database for '{', '.join(keywords[:2])}'...")
 
-    # 2. Query Grants.gov or Fallback to authentic opportunities
-    from backend.tools.grants_api import search_grants
-    from tests.eval_harness import EVAL_CORPUS
+    # 2. Query Grants.gov API for authentic opportunities
+    from backend.tools.grants_api import search_grants, fetch_grant_details
 
     candidate_grants = []
-    try:
-        for kw in keywords[:2]:
-            if status_callback:
-                status_callback(f"Querying Grants.gov API for '{kw}'...")
-            res = search_grants(keywords=kw, max_results=5)
-            for g in res.get("grants", []):
-                gid = f"grants-gov-{g.get('id')}"
-                if not storage.grant_exists(gid) and gid not in [x.get("grant_id") for x in candidate_grants]:
-                    candidate_grants.append(g)
-    except Exception as e:
-        logger.warning(f"Live Grants.gov search error: {e}")
-
-    # Ensure we always have candidate opportunities to evaluate
-    if len(candidate_grants) < 4:
+    search_errors = []
+    search_keywords = keywords[:3] if keywords else ["STEM education", "youth"]
+    for kw in search_keywords:
         if status_callback:
-            status_callback("Cataloging matching federal opportunities...")
-        for case in EVAL_CORPUS:
-            raw_grant = case.get("grant")
-            if isinstance(raw_grant, dict):
-                g = dict(raw_grant)
-                gid = f"grants-gov-{g.get('id')}"
-                if not storage.grant_exists(gid) and gid not in [x.get("grant_id") for x in candidate_grants]:
-                    candidate_grants.append(g)
+            status_callback(f"Querying Grants.gov API for '{kw}'...")
+        res = search_grants(keywords=kw, max_results=5)
+        if res.get("error"):
+            search_errors.append(f"'{kw}': {res['error']}")
+        for g in res.get("grants", []):
+            gid = f"grants-gov-{g.get('id')}"
+            existing_g = storage.get_grant(gid)
+            needs_eval = True
+            if existing_g:
+                # If existing grant already has an authentic evaluation (has synopsis and not canned 79 reasoning), skip
+                if existing_g.get("synopsis") and existing_g.get("match_reasoning") and "Strong alignment score of 79" not in existing_g.get("match_reasoning", ""):
+                    needs_eval = False
+            if needs_eval and str(g.get("id")) not in [str(x.get("id")) for x in candidate_grants]:
+                candidate_grants.append(g)
+
+    # Limit to top 6 candidate grants per scan cycle for responsiveness
+    candidate_grants = candidate_grants[:6]
+
+    # If Grants.gov failed completely with errors and found 0 grants, report the error!
+    if not candidate_grants and search_errors:
+        err_msg = f"Grants.gov API query failed: {'; '.join(search_errors)}"
+        if status_callback:
+            status_callback(f"Error: {err_msg}")
+        raise RuntimeError(err_msg)
+
+    if not candidate_grants:
+        msg = f"No new un-evaluated opportunities found on Grants.gov for keywords: {', '.join(search_keywords)}."
+        if status_callback:
+            status_callback(msg)
+        return {"status": "completed", "grants_scanned": 0, "message": msg}
 
     if status_callback:
-        status_callback(f"Evaluating {len(candidate_grants)} opportunities against 5-dimension rubric...")
+        status_callback(f"Discovered {len(candidate_grants)} opportunities from Grants.gov. Fetching full details...")
 
-    # 3. Score and persist each grant
+    # 3. Fetch full details and score each authentic grant using Bedrock Claude
     scored_count = 0
-    for grant_info in candidate_grants:
-        gid = f"grants-gov-{grant_info.get('id')}" if not str(grant_info.get("id", "")).startswith("grants-gov-") else str(grant_info.get("id"))
+    for g in candidate_grants:
+        opp_id = g.get("id")
+        gid = f"grants-gov-{opp_id}"
+
+        # Fetch full opportunity details directly from Grants.gov
+        detail_res = fetch_grant_details(opportunity_id=opp_id)
+        grant_info = detail_res.get("grant") or g
+        if not grant_info.get("grant_id"):
+            grant_info["grant_id"] = gid
+
         title = grant_info.get("title", "Federal Grant Opportunity")
         agency = grant_info.get("agency", "Federal Agency")
-        synopsis = grant_info.get("synopsis") or grant_info.get("synopsis_description", "")
+        synopsis = grant_info.get("synopsis_description") or grant_info.get("synopsis", "")
         close_date = grant_info.get("close_date", "2026-12-31")
         ceiling = float(grant_info.get("award_ceiling") or 75000)
         floor = float(grant_info.get("award_floor") or 25000)
 
-        # Keyword alignment scoring
-        full_text = f"{title} {synopsis}".lower()
-        matched_kws = [k for k in keywords if k.lower() in full_text]
-        alignment_score = min(30, 18 + len(matched_kws) * 4)
-        eligibility_score = 25 if any(x in full_text for x in ["nonprofit", "501(c)(3)", "eligible", "public"]) else 22
-        capacity_score = 18
-        geo_score = 13
-        track_score = 8
-        total = alignment_score + eligibility_score + capacity_score + geo_score + track_score
+        if status_callback:
+            status_callback(f"Evaluating '{title[:45]}...' with Bedrock Claude...")
 
+        # Authentic AI evaluation
+        eval_result = evaluate_grant_with_bedrock(grant_info, org_profile)
+        total = eval_result.get("total", 0)
+        status = eval_result.get("status", "archived")
+        reasoning = eval_result.get("match_reasoning", "")
         match_score = {
-            "mission_alignment": alignment_score,
-            "eligibility_fit": eligibility_score,
-            "capacity_match": capacity_score,
-            "geographic_fit": geo_score,
-            "track_record": track_score,
+            "mission_alignment": eval_result.get("mission_alignment", 0),
+            "eligibility_fit": eval_result.get("eligibility_fit", 0),
+            "capacity_match": eval_result.get("capacity_match", 0),
+            "geographic_fit": eval_result.get("geographic_fit", 0),
+            "track_record": eval_result.get("track_record", 0),
             "total": total,
         }
 
-        status = "matched" if total >= 50 else "archived"
-        reasoning = f"Strong alignment score of {total}/100 with organizational programs in {', '.join(matched_kws) if matched_kws else 'community development'}."
+        full_text = f"{title} {synopsis}".lower()
+        category = "STEM" if any(x in full_text for x in ["stem", "robot", "code", "tech", "science"]) else "COMMUNITY"
 
         grant_doc = {
-            "id": grant_info.get("id"),
+            "id": opp_id,
             "grant_id": gid,
             "title": title,
             "agency": agency,
@@ -303,21 +438,21 @@ async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str,
             "status": status,
             "match_score": match_score,
             "match_reasoning": reasoning,
-            "category": "STEM" if any(x in full_text for x in ["stem", "robot", "code", "tech", "science"]) else "WORKFORCE",
+            "category": category,
         }
 
         storage.save_grant(grant_doc)
         scored_count += 1
         if status_callback:
-            status_callback(f"Scored '{title[:40]}...' → Fit Score: {total}/100 ({status.upper()})")
+            status_callback(f"Scored '{title[:35]}...' → Fit Score: {total}/100 ({status.upper()})")
 
     if status_callback:
-        status_callback(f"Discovery Cycle Complete: {scored_count} opportunities discovered & scored.")
+        status_callback(f"Discovery Cycle Complete: {scored_count} authentic opportunities evaluated & scored.")
 
     return {
         "status": "completed",
         "grants_scanned": scored_count,
-        "result_preview": f"ORCHESTRATION COMPLETE ({scored_count} grants processed)",
+        "result_preview": f"Evaluated {scored_count} authentic opportunities with Claude.",
     }
 
 
@@ -333,7 +468,25 @@ def run_deadline_check(*args, **kwargs):
 
 
 def score_grant(grant, profile=None):
-    return 95
+    """Evaluate a single grant opportunity with Amazon Bedrock Claude."""
+    if not profile:
+        profile = storage.get_org_profile("default")
+        if not profile:
+            raise RuntimeError("Cannot score grant: No organization profile found in database.")
+    eval_result = evaluate_grant_with_bedrock(grant, profile)
+    grant["match_score"] = {
+        "mission_alignment": eval_result.get("mission_alignment", 0),
+        "eligibility_fit": eval_result.get("eligibility_fit", 0),
+        "capacity_match": eval_result.get("capacity_match", 0),
+        "geographic_fit": eval_result.get("geographic_fit", 0),
+        "track_record": eval_result.get("track_record", 0),
+        "total": eval_result.get("total", 0),
+    }
+    grant["match_reasoning"] = eval_result.get("match_reasoning", "")
+    grant["status"] = eval_result.get("status", "archived")
+    grant["updated_at"] = datetime.now(timezone.utc).isoformat()
+    storage.save_grant(grant)
+    return eval_result
 
 # ==========================================
 
@@ -771,90 +924,86 @@ async def update_application(
 @app.post("/api/grants/{grant_id}/draft")
 async def trigger_grant_draft(
     grant_id: str,
-    background_tasks: BackgroundTasks,
     auth: TokenPayload = Depends(get_current_auth),
 ):
-    """Trigger the Drafter Agent to pre-fill a grant application (Authenticated)."""
+    """Trigger the Drafter Agent to synthesize a 6-section grant application (Authenticated)."""
     grant = storage.get_grant(grant_id)
     if not grant:
         raise HTTPException(status_code=404, detail="Grant not found")
 
-    try:
-        # Decoupled: uses stub draft_application_for_grant() defined above
+    # Update grant status
+    grant["status"] = "drafting"
+    grant["is_drafting"] = True
+    storage.save_grant(grant)
 
-        # Update status
-        grant["status"] = "drafting"
+    # Broadcast start
+    await broadcast_event({
+        "type": "drafting_started",
+        "message": "INITIALIZING DRAFTER SWARM...",
+        "grant_id": grant_id,
+    })
+
+    loop = asyncio.get_running_loop()
+
+    def on_agent_thought(msg: str):
+        asyncio.run_coroutine_threadsafe(
+            broadcast_event({
+                "type": "agent_thought",
+                "message": msg,
+                "grant_id": grant_id,
+            }),
+            loop,
+        )
+
+    try:
+        # Run authentic Bedrock synthesis in threadpool to allow concurrent SSE event streaming
+        await asyncio.to_thread(draft_application_for_grant, grant, on_agent_thought)
+
+        # Retrieve created application
+        apps = storage.list_applications()
+        matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+        if not matched_app or not matched_app.get("sections"):
+            raise RuntimeError("Drafter completed without producing valid sections in storage.")
+
+        grant["status"] = "ready_for_review"
+        grant["is_drafted"] = True
+        grant["is_drafting"] = False
+        grant["draft_id"] = matched_app.get("draft_id")
         storage.save_grant(grant)
 
-        # Broadcast start
         await broadcast_event({
-            "type": "drafting_started",
-            "message": "INITIALIZING DRAFTER SWARM...",
+            "type": "application_drafted",
+            "message": f"Draft proposal ready for '{grant.get('title')}'",
             "grant_id": grant_id,
+            "draft_id": matched_app.get("draft_id"),
         })
-        
-        loop = asyncio.get_running_loop()
-        def on_agent_thought(msg: str):
-            asyncio.run_coroutine_threadsafe(
-                broadcast_event({
-                    "type": "agent_thought",
-                    "message": msg,
-                    "grant_id": grant_id
-                }),
-                loop
-            )
 
-        # Define synchronous wrapper for BackgroundTasks
-        def draft_task_runner():
-            if grant is None:
-                return
-            try:
-                # Runs synchronously in a background thread, preventing event loop blocking
-                draft_application_for_grant(grant, on_agent_thought)
-                
-                # Check drafted application
-                apps = storage.list_applications()
-                matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
-                
-                asyncio.run_coroutine_threadsafe(
-                    broadcast_event({
-                        "type": "application_drafted",
-                        "message": f"Draft proposal ready for '{grant.get('title')}'",
-                        "grant_id": grant_id,
-                        "draft_id": matched_app.get("draft_id") if matched_app else None,
-                    }),
-                    loop
-                )
-            except Exception as e:
-                logger.error(f"Drafting failed in background: {e}")
-                
-                # Rollback incomplete drafts
-                apps = storage.list_applications()
-                matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
-                if matched_app and matched_app.get("draft_id"):
-                    storage.delete_application(matched_app["draft_id"])
-                    
-                grant["status"] = "matched"
-                storage.save_grant(grant)
-                asyncio.run_coroutine_threadsafe(
-                    broadcast_event({
-                        "type": "drafting_failed",
-                        "grant_id": grant_id,
-                        "message": f"Auto-drafting failed for '{grant.get('title')}': {e!s}",
-                    }),
-                    loop
-                )
-
-        # Dispatch securely to background task queue
-        background_tasks.add_task(draft_task_runner)
-
-        return {"status": "drafting_queued", "requested_by": auth.sub}
+        return {
+            "status": "completed",
+            "application": matched_app,
+            "draft_id": matched_app.get("draft_id"),
+            "requested_by": auth.sub,
+        }
 
     except Exception as e:
         logger.error(f"Drafting failed: {e}")
+        # Rollback partial draft
+        apps = storage.list_applications()
+        matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+        if matched_app and matched_app.get("draft_id"):
+            storage.delete_application(matched_app["draft_id"])
+
         grant["status"] = "matched"
+        grant["is_drafting"] = False
+        grant["is_drafted"] = False
         storage.save_grant(grant)
-        raise HTTPException(status_code=500, detail=f"Drafting failed: {e!s}")
+
+        await broadcast_event({
+            "type": "drafting_failed",
+            "grant_id": grant_id,
+            "message": f"Auto-drafting failed for '{grant.get('title')}': {e!s}",
+        })
+        raise HTTPException(status_code=500, detail=f"AI Proposal Drafting Failed: {e!s}")
 
 
 # ──────────────────────────────────────────────
@@ -925,8 +1074,14 @@ def execute_background_drafting(grant_id: str, loop: asyncio.AbstractEventLoop):
 
     except Exception as e:
         logger.error(f"❌ Background drafting failed for {grant_id}: {e}")
+        apps = storage.list_applications()
+        matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
+        if matched_app and matched_app.get("draft_id"):
+            storage.delete_application(matched_app["draft_id"])
+
         grant["status"] = "matched"
         grant["is_drafting"] = False
+        grant["is_drafted"] = False
         storage.save_grant(grant)
         asyncio.run_coroutine_threadsafe(
             broadcast_event({
