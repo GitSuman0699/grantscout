@@ -190,7 +190,7 @@ Return ONLY a valid JSON object matching this schema with NO markdown wrapping:
         res = client.converse(
             modelId=config.BEDROCK_FAST_MODEL_ID,
             messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"temperature": 0.3, "maxTokens": 4096}
+            inferenceConfig={"temperature": 0.3, "maxTokens": 16000}
         )
 
         raw_output = res["output"]["message"]["content"][0]["text"].strip()

@@ -856,42 +856,21 @@ export default function ProposalDraftPage() {
                   Orchestrate a complete, 6-section federal grant proposal tailored for <strong>{grant.title}</strong>, grounded in Youth Education Alliance's verified RAG corpus and past awards.
                 </p>
 
-                {draftError && (
-                  <div style={{ padding: '0.85rem 1rem', background: '#ffebee', border: '2px solid #c62828', color: '#c62828', marginBottom: '1.5rem', fontSize: '0.88rem', fontWeight: 600 }}>
-                    {draftError}
-                  </div>
-                )}
+                <button
+                  onClick={handleGenerateDraft}
+                  className="brutalist-btn btn-primary"
+                  style={{ padding: '0.95rem 2.25rem', fontSize: '1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}
+                >
+                  <Sparkles size={20} />
+                  GENERATE APPLICATION DRAFT NOW
+                </button>
               </>
             )}
 
-            {isDrafting ? (
-              <div style={{ textAlign: 'left', background: 'var(--card-alt-bg)', border: '2px solid var(--border-dark)', padding: '1.5rem', fontFamily: 'var(--font-mono, monospace)', fontSize: '0.9rem', color: 'var(--ink)', height: '350px', overflowY: 'auto' }}>
-                {agentThoughts.map((thought, idx) => {
-                  const isLast = idx === agentThoughts.length - 1;
-                  const baseText = thought.replace(/\.*$/, '');
-                  return (
-                    <div key={idx} style={{ marginBottom: '0.6rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start', opacity: isLast ? 1 : 0.6 }}>
-                      <span style={{ color: 'var(--mission-green)', fontWeight: 800, marginTop: '2px' }}>
-                        {isLast ? <Loader2 size={14} className="spin" /> : <Check size={16} strokeWidth={3} />}
-                      </span>
-                      <span style={{ color: isLast ? 'inherit' : 'var(--ink-muted)' }}>
-                        {baseText}
-                        {isLast ? <span className="animated-dots"></span> : null}
-                      </span>
-                    </div>
-                  );
-                })}
-                <div ref={thoughtsEndRef} />
-              </div>
-            ) : (
-              <button
-                onClick={handleGenerateDraft}
-                className="brutalist-btn btn-primary"
-                style={{ padding: '0.95rem 2.25rem', fontSize: '1.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}
-              >
-                <Sparkles size={20} />
-                GENERATE APPLICATION DRAFT NOW
-              </button>
+            {isDrafting && (
+              <p style={{ color: 'var(--ink-muted)', fontSize: '1rem' }}>
+                Bedrock Claude is synthesizing your proposal. Follow progress in the telemetry stream above.
+              </p>
             )}
           </div>
         </div>
