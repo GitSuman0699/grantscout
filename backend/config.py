@@ -1,10 +1,11 @@
-"""GrantScout configuration module."""
-
+import logging
 import os
+import secrets
 
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -51,10 +52,36 @@ class Config:
 
     # Security & Authentication
     AUTH_ENABLED: bool = os.getenv("AUTH_ENABLED", "true").lower() == "true"
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "grantscout-sec-key-6f8b9e4a3d2c1b0a9f8e7d6c5b4a3210")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
-    MASTER_API_KEY: str = os.getenv("MASTER_API_KEY", "gs_live_8f7e6d5c4b3a210987654321")
+
+    # Environment detection
+    IS_PRODUCTION: bool = bool(
+        os.getenv("RENDER") or os.getenv("ENV") == "production" or os.getenv("ENVIRONMENT") == "production"
+    )
+
+    # Secrets strictly sourced from environment; in dev, securely generated if missing
+    _env_secret: str = os.getenv("SECRET_KEY", "").strip()
+    _env_master_key: str = os.getenv("MASTER_API_KEY", "").strip()
+
+    if IS_PRODUCTION and AUTH_ENABLED:
+        if not _env_secret:
+            raise RuntimeError("CRITICAL: SECRET_KEY must be configured in production environment.")
+        if not _env_master_key:
+            raise RuntimeError("CRITICAL: MASTER_API_KEY must be configured in production environment.")
+
+    SECRET_KEY: str = _env_secret or secrets.token_hex(32)
+    MASTER_API_KEY: str = _env_master_key or f"gs_dev_{secrets.token_urlsafe(24)}"
+
+    # CORS Whitelist
+    CORS_ALLOWED_ORIGINS: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ALLOWED_ORIGINS",
+            "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000,https://grantscout-api.onrender.com"
+        ).split(",")
+        if origin.strip()
+    ]
 
     # Amazon Bedrock Guardrails (Optional)
     BEDROCK_GUARDRAIL_ID: str = os.getenv("BEDROCK_GUARDRAIL_ID", "")

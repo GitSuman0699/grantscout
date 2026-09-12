@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Compass, Zap, Activity, Menu, X, ChevronRight, ActivitySquare, PlusCircle, Trash2 } from 'lucide-react';
+import { Compass, Zap, Activity, Menu, X, ChevronRight, Trash2 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import PersonaSelector from './PersonaSelector';
 import LiveScanModal from './LiveScanModal';

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import MissionLoopBanner from '../components/MissionLoopBanner';
 import MetricsBar from '../components/MetricsBar';
 import { calculateFitScore } from '../components/GrantCard';
-import { Compass, ArrowRight, ShieldCheck, Cpu, Database, Sparkles, Target, Zap, Clock, Activity } from 'lucide-react';
+import { ArrowRight, Database, Target, Zap, Clock, Activity } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { formatAsOfDate } from '../utils/dateUtils';
 import { fetchAutoScanStatus } from '../services/api';

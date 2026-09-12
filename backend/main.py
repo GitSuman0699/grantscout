@@ -353,20 +353,68 @@ class SecurityHeadersMiddleware:
 app.add_middleware(SecurityHeadersMiddleware)
 
 
-# CORS for frontend
+# CORS Configuration (Restricted Whitelist with Localhost & Cloud Preview Regex)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=config.CORS_ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.onrender\.com$|^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ──────────────────────────────────────────────
-#  Model Context Protocol (MCP) Server
+#  Model Context Protocol (MCP) Server (Protected)
 # ──────────────────────────────────────────────
 from backend.mcp_endpoints.server import mcp_server
-app.mount("/mcp", mcp_server.sse_app())
+
+
+class MCPAuthWrapper:
+    """Validate master API key or JWT token before allowing access to the MCP server."""
+
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and config.AUTH_ENABLED:
+            headers = dict(scope.get("headers", []))
+            api_key = headers.get(b"x-api-key", b"").decode("utf-8").strip()
+            auth_hdr = headers.get(b"authorization", b"").decode("utf-8").strip()
+            bearer_token = auth_hdr.replace("Bearer ", "").strip() if auth_hdr.startswith("Bearer ") else ""
+
+            authorized = False
+            if api_key and api_key == config.MASTER_API_KEY:
+                authorized = True
+            elif bearer_token and bearer_token == config.MASTER_API_KEY:
+                authorized = True
+            elif bearer_token:
+                try:
+                    from backend.security.auth import verify_access_token
+                    verify_access_token(bearer_token)
+                    authorized = True
+                except Exception:
+                    authorized = False
+
+            if not authorized:
+                body = b'{"error": "Unauthorized", "detail": "Valid X-API-Key header or Bearer JWT token required for MCP access."}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"www-authenticate", b"Bearer, ApiKey"),
+                    ],
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": body,
+                })
+                return
+
+        await self.asgi_app(scope, receive, send)
+
+
+app.mount("/mcp", MCPAuthWrapper(mcp_server.sse_app()))
 
 # ──────────────────────────────────────────────
 #  Authentication Endpoints
@@ -765,130 +813,9 @@ async def trigger_grant_draft(
 
 
 # ──────────────────────────────────────────────
-#  Agent Control Endpoints & Background Workers
+#  Agent Control Endpoints
 # ──────────────────────────────────────────────
 
-
-def execute_background_drafting(grant_id: str, loop: asyncio.AbstractEventLoop):
-    """Synchronous background worker that executes the Drafter Agent swarm securely."""
-    grant = storage.get_grant(grant_id)
-    if not grant:
-        logger.warning(f"Background drafting: grant {grant_id} not found in storage.")
-        return
-
-    title = grant.get("title", "Grant Opportunity")
-    logger.info(f"🚀 Starting autonomous background drafting swarm for grant {grant_id}: '{title}'")
-
-    try:
-        # Decoupled: uses stub draft_application_for_grant() defined above
-
-        grant["status"] = "drafting"
-        grant["is_drafting"] = True
-        storage.save_grant(grant)
-
-        asyncio.run_coroutine_threadsafe(
-            broadcast_event({
-                "type": "drafting_started",
-                "grant_id": grant_id,
-                "title": title,
-                "message": f"Autonomous AI Drafter swarm started for '{title}'...",
-            }),
-            loop
-        )
-
-        def on_agent_thought(msg: str):
-            asyncio.run_coroutine_threadsafe(
-                broadcast_event({
-                    "type": "agent_thought",
-                    "message": msg,
-                    "grant_id": grant_id,
-                }),
-                loop,
-            )
-
-        # Run multi-agent drafting swarm synchronously in the background thread
-        result = draft_application_for_grant(grant, on_agent_thought)
-
-        apps = storage.list_applications()
-        matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
-
-        grant["status"] = "ready_for_review"
-        grant["is_drafted"] = True
-        grant["is_drafting"] = False
-        grant["draft_id"] = matched_app.get("draft_id") if matched_app else None
-        storage.save_grant(grant)
-
-        logger.info(f"✅ Background drafting completed successfully for {grant_id}")
-
-        asyncio.run_coroutine_threadsafe(
-            broadcast_event({
-                "type": "application_drafted",
-                "message": f"Draft proposal ready for '{title}'",
-                "grant_id": grant_id,
-                "draft_id": matched_app.get("draft_id") if matched_app else None,
-            }),
-            loop
-        )
-
-    except Exception as e:
-        logger.error(f"❌ Background drafting failed for {grant_id}: {e}")
-        apps = storage.list_applications()
-        matched_app = next((a for a in apps if a.get("grant_id") == grant_id), None)
-        if matched_app and matched_app.get("draft_id"):
-            storage.delete_application(matched_app["draft_id"])
-
-        grant["status"] = "matched"
-        grant["is_drafting"] = False
-        grant["is_drafted"] = False
-        storage.save_grant(grant)
-        asyncio.run_coroutine_threadsafe(
-            broadcast_event({
-                "type": "drafting_failed",
-                "grant_id": grant_id,
-                "message": f"Auto-drafting failed for '{title}': {e!s}",
-            }),
-            loop
-        )
-
-
-def dispatch_queued_drafts(background_tasks: BackgroundTasks | None = None, loop: asyncio.AbstractEventLoop | None = None) -> list[str]:
-    """Find any grants in 'drafting', 'queued', or high-fit 'matched' (>=80) status without a completed draft and launch background workers."""
-    grants = storage.list_grants()
-    apps = storage.list_applications()
-    drafted_grant_ids = {a.get("grant_id") for a in apps if a.get("grant_id") and a.get("completion_percentage", 0) >= 100}
-
-    if loop is None:
-        loop = asyncio.get_running_loop()
-
-    dispatched = []
-    for g in grants:
-        gid = g.get("grant_id") or g.get("id")
-        if not gid:
-            continue
-
-        score_val = 0
-        ms = g.get("match_score")
-        if isinstance(ms, dict):
-            score_val = ms.get("total", 0)
-        elif isinstance(ms, (int, float)):
-            score_val = float(ms)
-
-        should_draft = (
-            g.get("status") in ("drafting", "queued")
-            or g.get("is_drafting")
-            or (g.get("status") == "matched" and score_val >= 80)
-        )
-
-        if should_draft and gid not in drafted_grant_ids:
-            dispatched.append(gid)
-            if background_tasks:
-                background_tasks.add_task(execute_background_drafting, gid, loop)
-            else:
-                loop.run_in_executor(None, execute_background_drafting, gid, loop)
-
-    if dispatched:
-        logger.info(f"⚡ Dispatched {len(dispatched)} autonomous background drafting task(s): {dispatched}")
-    return dispatched
 
 
 @app.post("/api/agent/scan")
@@ -1026,6 +953,42 @@ async def trigger_scoring(
     except Exception as e:
         logger.error(f"Scoring failed: {e}")
         raise HTTPException(status_code=500, detail=f"Scoring failed: {e!s}")
+
+
+@app.post("/api/agent/warmup")
+async def warmup_agent_runtime(background_tasks: BackgroundTasks):
+    """Wake up the AWS Bedrock AgentCore container from scale-to-zero sleep during boot/splash.
+
+    This non-blocking endpoint pings the Bedrock AgentCore runtime in the background
+    so cold-start provisioning completes before the user triggers AI matching or drafting.
+    """
+    runtime_arn = os.environ.get("AGENTCORE_RUNTIME_ARN") or os.environ.get("AGENTCORE_AGENT_ID")
+    is_remote = os.environ.get("USE_REMOTE_AGENTCORE", "false").lower() in ("true", "1")
+
+    def _do_warmup_ping():
+        if is_remote and runtime_arn and runtime_arn != "default_agent_id":
+            try:
+                from botocore.config import Config
+                config_boto = Config(read_timeout=15, connect_timeout=5, retries={"max_attempts": 1})
+                client = boto3.client("bedrock-agentcore", region_name=os.environ.get("AWS_REGION", "us-east-1"), config=config_boto)
+                payload_data = {"inputText": "warmup_ping", "mcpUrl": os.environ.get("RENDER_EXTERNAL_URL", "https://grantscout-api.onrender.com/mcp")}
+                client.invoke_agent_runtime(
+                    agentRuntimeArn=runtime_arn,
+                    payload=json.dumps(payload_data).encode("utf-8")
+                )
+                logger.info(f"AgentCore warmup ping dispatched to {runtime_arn}")
+            except Exception as e:
+                logger.warning(f"AgentCore warmup ping notice: {e}")
+        else:
+            logger.info("AgentCore running locally or remote not enabled; warmup acknowledged.")
+
+    background_tasks.add_task(_do_warmup_ping)
+    return {
+        "status": "warming_up",
+        "runtime_arn": runtime_arn or "local",
+        "remote_enabled": is_remote,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/api/agent/status")

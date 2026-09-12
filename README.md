@@ -1,289 +1,443 @@
-# 🛰️ GrantScout
+# GrantScout
 
-**Autonomous Multi-Agent Federal Grant Intelligence & Drafting Platform for Nonprofits**
+Autonomous Multi-Agent Federal Grant Intelligence and Proposal Generation System
 
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://reactjs.org)
-[![Vite](https://img.shields.io/badge/Vite-5.0+-646CFF?logo=vite&logoColor=white)](https://vitejs.dev)
-[![Amazon Bedrock](https://img.shields.io/badge/Amazon_Bedrock-Claude_3.5_&_Titan_V2-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/bedrock/)
-[![Model Context Protocol](https://img.shields.io/badge/MCP-Standard_SSE-blueviolet)](https://modelcontextprotocol.io)
-[![Render Live](https://img.shields.io/badge/Render-Live_Deployed-46E3B7?logo=render&logoColor=white)](https://grantscout-api.onrender.com/healthz)
+GrantScout is a decoupled, multi-agent platform designed to automate the federal grant lifecycle for nonprofit organizations. It handles live opportunity discovery from federal databases, multi-dimensional rubric qualification, organizational retrieval-augmented generation (RAG), automated multi-section proposal authoring, Uniform Guidance compliance auditing (2 CFR 200), and deadline tracking.
 
-Built for the **Agents for Humans Hackathon**, GrantScout automates the end-to-end federal grant lifecycle for resource-constrained small nonprofits. It continuously monitors federal databases, scores opportunities against an organization's mission and past performance using a strict 5-dimension rubric, and autonomously drafts complete, audit-ready 6-section grant proposals with downloadable SF-424 federal budget spreadsheets.
+The system is built on a 3-tier decoupled architecture separating deterministic application logic from cognitive reasoning engines deployed on AWS Bedrock AgentCore.
 
 ---
 
-## ⚡ Brutally Honest Implementation Truths
+## 1. System Architecture
 
-We believe in transparency. Here is the honest breakdown of how GrantScout works under the hood—what is 100% authentic, what was re-engineered for resilience, and architectural decisions made:
-
-| Component | The Honest Reality |
-|---|---|
-| **Zero Mock / Fallback Data** | **100% Real**. GrantScout enforces a strict zero-mock policy across the entire platform. Opportunities come directly from the federal **Grants.gov REST API**. Proposal narratives, budgets, and compliance checks are synthesized in real-time by **Amazon Bedrock (Claude 3.5 Sonnet & Haiku)**. If Bedrock or Grants.gov encounters an error, it fails loudly and transparently with an actionable error message rather than silently injecting fake data. |
-| **Proposal Output Protocol** | **Permanently Delimiter-Based (`<<<SECTION_...>>>`)**. Earlier monolithic versions attempted to force LLMs to output 6 long-form Markdown sections (with markdown tables, quotes, and numbered subsections) wrapped inside a single JSON string. In production, this repeatedly crashed with `JSONDecodeError: Unterminated string` due to literal raw newlines, unescaped quotes (`"2 CFR 200"`), and token truncation. We solved this by implementing **Tag-Delimited Markdown Extraction** (`<<<SECTION_1_EXECUTIVE_SUMMARY>>>`, etc.) with multi-pattern regex parsers and single-section full-text fallbacks. The LLM generates pure native Markdown without any JSON serialization bottlenecks. |
-| **Multi-Agent Collaborative Swarm** | **Authentic Collaborative Swarm**. Proposals are not generated via a single prompt. A 4-agent collaborative swarm divides the workload: `NarrativeWriterAgent` handles Sections 1, 2, and 4; `BudgetSpecialistAgent` handles Section 5 and triggers the SF-424 CSV generator; `ComplianceDrafterAgent` handles Section 3 (12-month milestone table) and Section 6 (KPI matrix); and `LeadCoordinatorAgent` validates NOFO compliance and commits the draft. |
-| **SF-424 Budget & CSV Generation** | **Fully Functional 2 CFR 200 Tooling**. The Budget Specialist runs `generate_budget_csv()` to itemize direct personnel (55%), fringe benefits (22%), materials/supplies (12%), travel (5%), other direct costs, and a 10% MTDC De Minimis indirect rate. The output is persisted to disk and instantly downloadable via the UI or REST endpoint (`/api/applications/draft/{grant_id}/budget.csv`). |
-| **24/7 Background Scanner** | **On-Demand Execution by Default**. The code for the continuous 24-hour autonomous background scheduler loop exists in `backend/main.py`. However, it is set to manual/on-demand trigger by default in production to protect AWS Bedrock API credits and stay within hackathon quotas. |
-| **Database & Persistence** | **Atomic Local JSON & Cloud-Ready**. Storage defaults to atomic, thread-locked local JSON records (`backend/storage/local_storage.py`), which provides rock-solid durability without external database configuration overhead, while maintaining full compatibility with CockroachDB / relational persistence. |
-| **Cloud Deployment** | **Live on Render**. The backend API is hosted at `https://grantscout-api.onrender.com` with cloud health monitoring (`/healthz`, `/health`, `/api/health`), ASGI security headers, and SSE streaming telemetry. |
-
----
-
-## 🏗️ 3-Tier System Architecture
+The architecture enforces strict separation of concerns across three tiers:
 
 ```mermaid
 graph TD
-    %% Styling
-    classDef client fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
-    classDef gateway fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
-    classDef swarm fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
-    classDef external fill:#6366f1,stroke:#4338ca,stroke-width:2px,color:#fff
-    classDef storage fill:#64748b,stroke:#334155,stroke-width:2px,color:#fff
-
-    subgraph Client Layer [Tier 1: Presentation & Interaction]
-        UI[React 18 + Vite Cyberpunk / Brutalist UI]:::client
-        SSE_Client[SSE Stream Listener / Telemetry Terminal]:::client
-        Editor[Split-Pane Markdown Editor & CSV Downloader]:::client
-        PersonaUI[1-Click Nonprofit Persona Switcher]:::client
+    subgraph Tier 1: Client Application
+        UI[React 18 / Vite Single Page Application]
+        SSE[Server-Sent Events Telemetry Stream]
+        Splash[Boot Screen with AgentCore Pre-Warmup]
     end
 
-    subgraph Gateway Layer [Tier 2: Backend API & Orchestration - Render]
-        API[FastAPI Gateway - https://grantscout-api.onrender.com]:::gateway
-        Auth[JWT & API Key Auth Security]:::gateway
-        HealthCheck[Health Probes /healthz & /health]:::gateway
-        MCP[FastMCP Server /mcp SSE Endpoint]:::gateway
-        CSV_Tool[SF-424 Budget CSV Generator]:::gateway
+    subgraph Tier 2: Application Backend and Deterministic Engine
+        FastAPI[FastAPI REST API Server]
+        Auth[JWT and API Key Authentication]
+        Discovery[Deterministic Discovery and Query Expansion]
+        Storage[Thread-Safe Atomic Storage with Path Protection]
+        RAG[Vector Knowledge Base and Document Index]
+        Compliance[2 CFR 200 Uniform Guidance Engine]
+        MCP[FastMCP Server with Security Wrapper]
     end
 
-    subgraph Agent Layer [Tier 3: Multi-Agent Collaborative Swarm]
-        ScanAgent[Scanner Agent - Grants.gov Querying]:::swarm
-        MatchAgent[Matcher Agent - 5-Dimension Rubric Scoring]:::swarm
-        
-        subgraph Drafter Swarm [Collaborative Drafter Swarm]
-            NarrativeAgent[Narrative Writer Agent<br>Sec 1, 2, 4 + Staffing Table]:::swarm
-            BudgetAgent[Budget Specialist Agent<br>Sec 5 + SF-424 Cost Table]:::swarm
-            ComplianceAgent[Compliance & Timeline Drafter<br>Sec 3 Milestones & Sec 6 KPIs]:::swarm
-            LeadAgent[Lead Coordinator Agent<br>NOFO Validation & Assembly]:::swarm
-        end
-        
-        AuditAgent[Compliance Audit Agent - 2 CFR 200 Analysis]:::swarm
+    subgraph Tier 3: Decoupled Reasoning Engine
+        AgentCore[AWS Bedrock AgentCore Runtime]
+        Matcher[Matcher Agent: Claude 3.5 Haiku]
+        Drafter[Drafter Swarm: Claude 3.5 Sonnet]
+        BedrockModels[Amazon Bedrock Models and Embeddings]
     end
 
-    subgraph Foundation & Data Layer [External Services & Persistence]
-        GrantsGov[Grants.gov REST API search2 & fetchOpportunity]:::external
-        BedrockClaude[Amazon Bedrock: Claude 3.5 Sonnet / Haiku]:::external
-        BedrockTitan[Amazon Titan Text Embeddings V2]:::external
-        RAG_KB[(Organizational RAG Knowledge Base)]:::storage
-        LocalStorage[(Atomic Local JSON / CockroachDB)]:::storage
+    subgraph External Systems
+        GrantsGov[Grants.gov Live REST API]
+        AWSBedrock[AWS Bedrock Foundation Models]
     end
 
-    %% Flow connections
-    UI <-->|REST & JWT| API
-    API -->|SSE Event Stream| SSE_Client
-    UI -->|Switch Sector| PersonaUI
-    PersonaUI -->|PUT /api/personas/id/switch| API
-    
-    API --> ScanAgent
-    API --> MatchAgent
-    API --> LeadAgent
-    API --> CSV_Tool
-    API --> AuditAgent
+    UI -->|HTTP REST / JWT| FastAPI
+    FastAPI -->|SSE Event Stream| SSE
+    Splash -->|POST /api/agent/warmup| FastAPI
+    FastAPI --> Discovery
+    Discovery -->|Query and Filter| GrantsGov
+    FastAPI --> Storage
+    FastAPI --> RAG
+    FastAPI --> Compliance
+    FastAPI --> MCP
+    FastAPI -->|boto3 invoke_agent_runtime| AgentCore
+    AgentCore --> Matcher
+    AgentCore --> Drafter
+    Matcher -->|Inference| AWSBedrock
+    Drafter -->|Inference| AWSBedrock
+    RAG -->|Titan Text Embeddings V2| AWSBedrock
+    MCP -->|SSE Tool Invocation| AgentCore
+```
 
-    ScanAgent <-->|REST| GrantsGov
-    ScanAgent -->|Discovered Grants| MatchAgent
-    MatchAgent <-->|5-Dim Rubric| BedrockClaude
-    MatchAgent -->|Score >= 80| LeadAgent
+### Tier 1: Presentation Layer
+* **Technology:** React 18, Vite, Vanilla CSS design tokens.
+* **Capabilities:**
+  * Mission Radar dashboard with grant metrics and recent activities.
+  * Real-time Server-Sent Events (SSE) execution feed displaying agent reasoning.
+  * Kanban qualification pipeline categorized by discovery and review states.
+  * 5-dimension rubric fit analysis visualizer with radar charts and criteria breakdown.
+  * Full 6-section proposal draft editor with live Markdown preview and export tools.
+  * Interactive RAG document manager for Form 990 filings, impact reports, and staff biographies.
+  * Cost and token optimization dashboard tracking cache hit rates and model tier distribution.
+  * Unified brutalist boot screen that triggers background container warmup.
 
-    LeadAgent --> NarrativeAgent
-    NarrativeAgent -->|Handoff| BudgetAgent
-    BudgetAgent -->|Handoff| ComplianceAgent
-    ComplianceAgent -->|Handoff| LeadAgent
+### Tier 2: Application Backend and Deterministic Engine
+* **Technology:** Python 3.11+, FastAPI, Uvicorn, Pydantic v2, FastMCP.
+* **Capabilities:**
+  * Public Grants.gov API ingestion, boolean query expansion, date validation, and deduplication.
+  * Local filesystem atomic persistence with directory traversal protection.
+  * In-memory semantic vector store with Amazon Titan Text Embeddings V2 fallback.
+  * Federal Uniform Guidance compliance evaluation (2 CFR 200 and MTDC indirect rates).
+  * FastMCP Model Context Protocol server exposing 15 production tools and resources.
+  * JWT access token management, scoped API key validation, and CORS whitelisting.
 
-    NarrativeAgent & BudgetAgent & ComplianceAgent <-->|Delimiter Prompts| BedrockClaude
-    NarrativeAgent <-->|Vector Retrieval| RAG_KB
-    RAG_KB <-->|Titan Embeddings| BedrockTitan
-    BudgetAgent --> CSV_Tool
-    
-    API <-->|Persist / Retrieve| LocalStorage
-    MCP <-->|Tools Exposure| ExternalIDE[Claude Desktop / Cursor IDE]:::external
+### Tier 3: Decoupled Cognitive Reasoning Engine
+* **Technology:** AWS Bedrock AgentCore (Containerized Runtime), Strands SDK, Anthropic Claude 3.5 Sonnet, Anthropic Claude 3.5 Haiku.
+* **Capabilities:**
+  * Scale-to-zero serverless container deployment with a 15-minute idle timeout.
+  * Matcher Agent evaluating grant solicitations against 5 strategic dimensions.
+  * Multi-agent proposal authoring swarm executing a 3-stage blueprint generation workflow.
+  * Automated generation of SF-424 compliant itemized budget tables in CSV format.
+
+---
+
+## 2. Core Features and Implementations
+
+### Deterministic Discovery Engine
+Located in `backend/discovery.py`, the discovery engine avoids using large language models for deterministic tasks, saving compute costs and eliminating graph latency.
+* **Query Expansion:** Expands organization mission terms into synonyms and Assistance Listings (CFDA numbers) to query the Grants.gov `/v1/api/search2` endpoint.
+* **Pre-Filtering:** Automatically filters out non-grant notices, Requests for Information (RFIs), closed opportunities, and grants closing in under 7 days.
+* **Multi-Key Deduplication:** Merges incoming solicitations using numeric Grants.gov IDs, federal opportunity numbers, and normalized title slugs.
+
+### Cognitive Rubric Matcher
+Located in `agentcore/src/agents/matcher.py`, the Matcher Agent evaluates candidate grants against the organization profile using Claude 3.5 Haiku:
+* **Evaluation Dimensions:**
+  1. Mission Alignment (Target population and programmatic fit)
+  2. Eligibility Fit (Applicant type, 501(c)(3) status, cost-sharing requirements)
+  3. Organizational Capacity (Staffing scale, operational timeline, budget scale)
+  4. Geographic Target (Service delivery jurisdiction)
+  5. Past Performance (Track record in comparable federal awards)
+* **Output Format:** Structured Pydantic schema with numeric scores (0 to 100), overall weighted score, eligibility flags, strengths, risks, and a recommendation status (`QUALIFIED_APPLY`, `FLAGGED_REVIEW`, or `NOT_RECOMMENDED`).
+
+### Collaborative Proposal Drafter Swarm
+Located in `agentcore/src/agents/drafter.py`, the proposal drafting engine utilizes a 3-stage blueprint workflow to generate complete proposals without JSON decoding bottlenecks:
+* **Stage 1 (Blueprint Planning):** Synthesizes solicitation criteria, RAG knowledge base facts, and project metrics into a unified design plan.
+* **Stage 2 (Collaborative Writing):** Specialized prompts generate each section with concrete project data:
+  * Section 1: Executive Summary
+  * Section 2: Organizational Background and Capacity
+  * Section 3: Statement of Need and Target Population
+  * Section 4: Project Design and Work Plan (with 12-month quarterly milestones)
+  * Section 5: Budget Narrative and Financial Justification (itemized SF-424 cost table)
+  * Section 6: Evaluation Plan, Measurement Framework, and Long-Term Sustainability
+* **Stage 3 (Synthesis and Budget Export):** Combines the narrative sections into a cohesive document and invokes `generate_budget_csv` to produce a downloadable CSV adhering to federal cost principles.
+
+### RAG Knowledge Base
+Located in `backend/rag/knowledge_base.py`, the retrieval engine provides verifiable context from internal organization files:
+* **Supported Documents:** IRS Form 990 filings, audited financials, past winning proposals, program evaluation reports, and staff biographies.
+* **Hybrid Retrieval:** Calculates semantic similarity using Amazon Titan Text Embeddings V2 vectors alongside lexical keyword matching to score and rank relevant text passages.
+
+### Uniform Guidance Compliance Engine
+Located in `backend/tools/compliance.py`, the compliance module audits proposals against federal standards:
+* **Standard Checked:** 2 CFR 200 (Uniform Guidance).
+* **Indirect Cost Calculation:** Verifies compliance with the 15% Modified Total Direct Cost (MTDC) de minimis indirect rate.
+* **Disallowed Cost Detection:** Scans narrative and line-item budgets for unallowable expenses including alcoholic beverages, entertainment, lobbying, and generalized fundraising costs.
+
+### Model Context Protocol (MCP) Server
+Located in `backend/mcp_endpoints/server.py`, the application exposes tools and data over the open MCP standard using Server-Sent Events (SSE):
+* **Registered Tools:** 15 tools covering grants search, details retrieval, profile inspection, RAG querying, draft creation, section editing, budget generation, compliance auditing, and deadline alerts.
+* **Resources:**
+  * `grantscout://profile`: Active organization profile and mission data.
+  * `grantscout://pipeline`: Full inventory of tracked opportunities and statuses.
+  * `grantscout://knowledge-base/documents`: Indexed document metadata and word counts.
+* **Security:** Mounted at `/mcp` behind `MCPAuthWrapper`, enforcing authentication before allowing tool execution.
+
+### Security and Secret Isolation
+The security subsystem implements enterprise-grade access control and defense-in-depth:
+* **Secret Storage:** All secrets (`SECRET_KEY`, `MASTER_API_KEY`) are sourced strictly from environment variables. In production, missing credentials trigger an immediate startup failure. In local development, dynamic cryptographically secure ephemeral keys are generated.
+* **API Authentication:** Supports signed JWT Bearer tokens (HS256) and master API key authentication (`X-API-Key`).
+* **Path Traversal Defense:** Storage identifiers (`grant_id`, `org_id`, `draft_id`) are sanitized with `_safe_identifier()`, stripping directory traversal characters (`..`, `/`, `\`).
+* **Prompt Injection Defense:** Input strings pass through `sanitize_input()`, neutralizing override signatures and control characters.
+* **CORS Whitelist:** Replaces wildcards with explicit domain matching and origin regular expressions for local development and authorized cloud deployments.
+
+### AgentCore Scale-to-Zero Container Warmup
+Located in `backend/main.py` (`POST /api/agent/warmup`):
+* The AWS Bedrock AgentCore container scales to zero when idle for 15 minutes.
+* On initial frontend boot, `SplashScreen.jsx` dispatches a background warmup ping to `/api/agent/warmup`.
+* The backend invokes `invoke_agent_runtime()` asynchronously, ensuring the container provisions during the boot sequence and eliminates cold-start latency for user actions.
+
+---
+
+## 3. Directory Structure
+
+```
+grantscout/
+|-- agentcore/
+|   |-- .cli/
+|   |   `-- deployed-state.json       # AWS CDK deployment targets and state
+|   |-- cdk/                          # Infrastructure as Code CDK deployment package
+|   `-- src/
+|       |-- agents/
+|       |   |-- drafter.py            # 3-Stage collaborative proposal drafting swarm
+|       |   |-- matcher.py            # 5-Dimension rubric evaluation engine
+|       |   `-- orchestrator.py       # Decoupled agent orchestration
+|       |-- shared/
+|       |   |-- api/models/schemas.py # Shared Pydantic data contracts
+|       |   |-- config.py             # AgentCore configuration loader
+|       |   `-- optimization.py       # Token tracker, LRU cache, and model tier routing
+|       |-- Dockerfile                # Container build manifest for AgentCore runtime
+|       |-- main.py                   # AgentCore entrypoint and HTTP protocol handler
+|       |-- mcp_tools.py              # Client bridge to Render FastMCP endpoints
+|       `-- requirements.txt          # AgentCore runtime Python dependencies
+|-- backend/
+|   |-- api/models/schemas.py         # REST schemas and validation models
+|   |-- mcp_endpoints/server.py       # FastMCP server implementation
+|   |-- optimization/                 # Cost and token usage tracking
+|   |-- rag/knowledge_base.py         # Hybrid semantic RAG vector store
+|   |-- security/auth.py              # JWT token issuance, verification, and sanitizer
+|   |-- storage/local_storage.py      # Thread-safe atomic JSON file store
+|   |-- tools/
+|   |   |-- application.py            # Draft saving, updating, and budget CSV generation
+|   |   |-- compliance.py             # 2 CFR 200 Uniform Guidance audit engine
+|   |   |-- grants_api.py             # Grants.gov REST API integration
+|   |   |-- notifications.py          # Proactive deadline scanning and alerts
+|   |   |-- org_profile.py            # Profile retrieval and grant candidate storage
+|   |   `-- rag_search.py             # Knowledge base search tool
+|   |-- config.py                     # Backend application configuration
+|   |-- discovery.py                  # Deterministic grants discovery and pre-filtering
+|   `-- main.py                       # FastAPI application and route definitions
+|-- data/                             # Default local storage directory
+|   |-- activity/                     # Event stream logs
+|   |-- applications/                 # Generated proposal drafts
+|   |-- grants/                       # Discovered and scored grant records
+|   |-- knowledge_base/               # Vector index and chunk storage
+|   `-- org_profiles/                 # Organization profiles
+|-- frontend/
+|   |-- src/
+|   |   |-- components/
+|   |   |   |-- AgentTerminal.jsx     # Telemetry terminal log viewer
+|   |   |   |-- Header.jsx            # Navigation and system health indicator
+|   |   |   |-- KnowledgeBaseView.jsx # Document index and chunk explorer
+|   |   |   |-- MissionLoopBanner.jsx # Autonomous scan status banner
+|   |   |   |-- OptimizationView.jsx  # Token consumption and cost analytics
+|   |   |   |-- ScrollToTop.jsx       # Route transition scroll manager
+|   |   |   `-- SplashScreen.jsx      # Boot screen with AgentCore pre-warmup
+|   |   |-- context/GrantContext.jsx  # Global application state and SSE client
+|   |   |-- pages/
+|   |   |   |-- DraftsPage.jsx        # Draft inventory and status tracker
+|   |   |   |-- HomePage.jsx          # Mission Radar and quick statistics
+|   |   |   |-- KnowledgeBasePage.jsx # Organizational document management
+|   |   |   |-- OptimizationPage.jsx  # Cost analytics and model tiers
+|   |   |   |-- PipelinePage.jsx      # Kanban opportunity workflow board
+|   |   |   |-- ProposalDraftPage.jsx # Split-pane proposal editor and review
+|   |   |   `-- RubricPage.jsx        # 5-Dimension rubric evaluation visualizer
+|   |   |-- services/api.js           # REST API client layer
+|   |   |-- App.jsx                   # Application layout and routing table
+|   |   |-- index.css                 # Design tokens and styling
+|   |   `-- main.jsx                  # React application entrypoint
+|   |-- index.html                    # Root HTML document
+|   |-- package.json                  # Frontend dependencies and build scripts
+|   `-- vite.config.js                # Vite build configuration
+|-- scripts/
+|   |-- seed_knowledge_base.py        # Seeds initial Form 990 and organizational data
+|   |-- test_bedrock_live.py          # Validates live Amazon Bedrock connectivity
+|   `-- test_grants_api.py            # Validates Grants.gov API connectivity
+|-- tests/
+|   |-- eval_harness.py               # Evaluation harness and benchmarking
+|   |-- test_compliance.py            # Uniform Guidance compliance unit tests
+|   |-- test_mcp_server.py            # FastMCP tool and resource registration tests
+|   |-- test_optimization.py          # LRU caching and token tracking unit tests
+|   |-- test_personas.py              # Nonprofit persona data model tests
+|   |-- test_pipeline.py              # End-to-end orchestration pipeline tests
+|   |-- test_rag.py                   # Vector index and chunk search tests
+|   |-- test_security.py              # JWT, API key, CORS, and sanitization tests
+|   `-- test_structured_output.py     # Pydantic schema validation tests
+|-- .env.example                      # Template environment variable configuration
+|-- render.yaml                       # Cloud deployment blueprint for Render
+`-- requirements.txt                  # Backend Python dependencies
 ```
 
 ---
 
-## 🤖 Agent Roles & Swarm Patterns
+## 4. Configuration and Environment Variables
 
-| Agent | Architecture Pattern | Responsibility & Implementation |
-|---|---|---|
-| **Scanner Agent** | **Workflow / Tool-Use** | Queries live Grants.gov REST API (`search2` & `fetchOpportunity`) using mission keywords, extracting funding ceilings, deadlines, eligibility codes, and agency synopsis. |
-| **Matcher Agent** | **Rubric Evaluator** | Scores grants against applicant profile across 5 distinct dimensions (Mission Alignment 30%, Eligibility Fit 25%, Capacity Match 20%, Geographic Fit 15%, Track Record 10%). Generates detailed fit rationales. |
-| **Narrative Writer** | **Collaborative Swarm** | Retrieves RAG grounding passages from organizational archives via Titan Embeddings and drafts **Section 1 (Executive Summary)**, **Section 2 (Statement of Need)**, and **Section 4 (Key Personnel & Staffing Table)**. |
-| **Budget Specialist** | **Deterministic & Tool-Use** | Calculates 2 CFR 200 Uniform Guidance allocations (Personnel 55%, Fringe 22%, Supplies 12%, Travel 5%, 10% MTDC Indirect), runs `generate_budget_csv()`, and authors **Section 5 (Budget Justification)** with SF-424 cost table. |
-| **Compliance Drafter** | **Collaborative Swarm** | Drafts **Section 3 (Project Design & 12-Month Phased Milestone Table)** and **Section 6 (Evaluation Metrics & SMART KPI Table)**. |
-| **Lead Coordinator** | **Orchestrator** | Validates 6-section proposal completeness against federal NOFO guidelines, compiles the final proposal, and persists the draft. |
-| **Compliance Auditor** | **Inspector** | Audits generated proposals against 2 CFR 200 regulations, checking for mandatory federal clauses, MTDC indirect cost compliance, and past-performance qualifications. |
+Configure application settings by copying `.env.example` to `.env`.
 
----
+### Environment Variables Reference
 
-## 📊 SF-424 Federal Budget CSV Tooling
-
-Every federal grant drafted by GrantScout includes an automated, mathematically sound SF-424 budget aligned with **2 CFR 200 Uniform Guidance**:
-
-1. **Direct Personnel (55%)**: Base salaries allocated to Project Director, Lead Coordinator, and field staff.
-2. **Fringe Benefits (22% of Personnel)**: FICA, health insurance, worker's compensation, and retirement contributions.
-3. **Supplies & Materials (12%)**: Educational equipment, digital hardware, and participant supplies.
-4. **Programmatic Travel (5%)**: Community site visits, participant transport, and mandatory grantee workshops.
-5. **Other Direct Costs**: Contractual services, software licenses, evaluation stipends.
-6. **Indirect Costs (10% MTDC De Minimis Rate)**: Calculated in strict compliance with 2 CFR 200.414(f).
-
-The generated budget is exportable directly from the proposal dashboard as a standardized federal CSV:
-```http
-GET /api/applications/draft/{grant_id}/budget.csv
-```
-
----
-
-## 🏢 Multi-Tenant Nonprofit Personas
-
-GrantScout supports instant multi-tenant persona switching. Nonprofits can switch their sectoral focus with 1 click, instantly re-indexing RAG knowledge bases and recalibrating grant match rubrics:
-
-| Persona ID | Organization Name | Focus Area & Keywords | Annual Budget |
-|---|---|---|---|
-| `youth-stem` | **Youth Education Alliance** | STEM education, robotics, workforce development, underserved youth | $450,000 |
-| `food-security` | **Second Harvest Community Network** | Food security, food banking, nutrition assistance, supply logistics | $850,000 |
-| `clean-water` | **Clearwater Watershed Coalition** | Clean drinking water, environmental conservation, watershed protection | $320,000 |
-| `veterans-health` | **Veterans First Support Services** | Veteran healthcare, mental health, transition assistance, PTSD support | $600,000 |
-
-Switch personas instantly via API:
-```bash
-curl -X POST https://grantscout-api.onrender.com/api/personas/youth-stem/switch \
-     -H "Authorization: Bearer <TOKEN>"
-```
+| Variable Name | Required | Default | Description |
+|---|:---:|---|---|
+| `AWS_REGION` | Yes | `us-east-1` | AWS Region for Amazon Bedrock and AgentCore |
+| `AWS_ACCESS_KEY_ID` | Optional | None | IAM User access key (if not using IAM roles or SSO) |
+| `AWS_SECRET_ACCESS_KEY` | Optional | None | IAM User secret key (if not using IAM roles or SSO) |
+| `BEDROCK_MODEL_ID` | No | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | Primary model for complex synthesis and drafting |
+| `BEDROCK_FAST_MODEL_ID` | No | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Fast model for rubric evaluation and keyword tasks |
+| `BEDROCK_EMBEDDING_MODEL_ID`| No | `amazon.titan-embed-text-v2:0` | Titan embedding model for knowledge base retrieval |
+| `GRANTS_API_BASE_URL` | No | `https://api.grants.gov/v1/api` | Base URL for Grants.gov public REST API |
+| `USE_LOCAL_STORAGE` | No | `true` | Set to `true` to persist to local filesystem |
+| `LOCAL_STORAGE_PATH` | No | `./data` | File directory path for local JSON store |
+| `AUTH_ENABLED` | No | `true` | Enforces JWT and API key security checks |
+| `SECRET_KEY` | Production | Dynamic in Dev | 32-byte secret key for signing JWT tokens |
+| `MASTER_API_KEY` | Production | Dynamic in Dev | Master administrative API key for authenticated endpoints |
+| `CORS_ALLOWED_ORIGINS` | No | `http://localhost:5173,...` | Comma-separated list of allowed origins |
+| `API_HOST` | No | `0.0.0.0` | Host IP binding for FastAPI backend |
+| `API_PORT` | No | `8000` | Port binding for FastAPI backend |
+| `USE_REMOTE_AGENTCORE` | No | `false` | Set to `true` to route AI calls to AWS AgentCore |
+| `AGENTCORE_RUNTIME_ARN` | Remote | None | AWS Bedrock AgentCore Runtime ARN |
+| `RENDER_EXTERNAL_URL` | Remote | `https://grantscout-api.onrender.com` | Public backend URL accessible by AgentCore container |
+| `VITE_API_BASE_URL` | Frontend | `https://grantscout-api.onrender.com` | Backend REST endpoint for the React client |
+| `VITE_API_KEY` | Frontend | None | Optional API key for frontend mutations |
 
 ---
 
-## 🔌 Model Context Protocol (MCP) Integration
-
-GrantScout implements an MCP server mounted directly at `/mcp` on the FastAPI service, allowing external AI clients (like Claude Desktop, Cursor, and Antigravity) to call GrantScout tools directly over SSE:
-
-- `search_grants`: Search federal opportunities with keyword and funding filters.
-- `score_grant`: Score an opportunity against the active organization profile.
-- `draft_proposal`: Synthesize 6-section proposals using the Bedrock Swarm.
-- `audit_compliance`: Run 2 CFR 200 compliance audits on existing applications.
-- `list_personas`: Retrieve available nonprofit sector profiles.
-
-Run the standalone MCP server locally:
-```bash
-python run_mcp_server.py
-```
-
----
-
-## 📡 Live API Endpoints
-
-The API is deployed and monitored live on Render:
-- **Base URL**: `https://grantscout-api.onrender.com`
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/healthz`, `/health`, `/api/health` | Active health check probes returning service status and timestamp. |
-| `GET` | `/api/dashboard/stats` | Dashboard statistics (active opportunities, drafted proposals, pipeline value). |
-| `GET` | `/api/dashboard/stream` | Server-Sent Events (SSE) telemetry feed for real-time agent thoughts. |
-| `POST` | `/api/orchestrator/scan` | Trigger the Scanner and Matcher agents against live Grants.gov. |
-| `GET` | `/api/grants` | List all discovered, scored, and routed grant opportunities. |
-| `GET` | `/api/grants/{id}` | Retrieve specific grant metadata and 5-dimension rubric breakdown. |
-| `POST` | `/api/grants/{id}/draft` | Trigger the 4-Agent Collaborative Swarm to draft a 6-section proposal. |
-| `GET` | `/api/applications/draft/{grant_id}` | Retrieve the synthesized proposal sections and completion status. |
-| `GET` | `/api/applications/draft/{grant_id}/budget.csv` | Download the SF-424 federal budget spreadsheet CSV. |
-| `GET` | `/api/applications/draft/{grant_id}/compliance` | Run autonomous 2 CFR 200 compliance audit on the proposal. |
-| `GET` | `/api/personas` | List all available nonprofit sector profiles. |
-| `POST` | `/api/personas/{id}/switch` | Switch active organization persona and recalculate grounding. |
-| `POST` | `/api/auth/token` | Exchange master API key for signed JWT access token. |
-| `ALL` | `/mcp` | FastMCP Server SSE endpoint for AI tool calling. |
-
----
-
-## 🧪 Testing & Empirical Evaluation
-
-GrantScout includes a rigorous test suite of **54 unit and integration tests**:
-
-```bash
-# Run the entire test suite
-pytest tests/ -v
-```
-
-### Test Coverage Breakdown:
-- `tests/test_compliance.py`: Verifies 2 CFR 200 Uniform Guidance compliance scoring and flag generation.
-- `tests/test_mcp_server.py`: Validates FastMCP tool registration, schemas, and SSE handlers.
-- `tests/test_optimization.py`: Tests tiered model routing, token estimation, response caching, and prompt compression.
-- `tests/test_personas.py`: Tests multi-tenant persona catalog, profile conversion, and sectoral switching.
-- `tests/test_pipeline.py`: Tests live Grants.gov API connectivity, storage persistence, and deadline scanning.
-- `tests/test_rag.py`: Tests Titan Text Embeddings V2 vector indexing, cosine similarity retrieval, and category filtering.
-- `tests/test_security.py`: Tests JWT authentication, API key enforcement, and ASGI security headers.
-- `tests/test_structured_output.py`: Validates Pydantic schema enforcement and structured JSON/delimiter output parsing.
-- `tests/eval_harness.py`: Evaluates Matcher scoring precision and Drafter completeness against 5 ground-truth federal grant test cases.
-
----
-
-## 🚀 Quickstart Guide
+## 5. Installation and Setup
 
 ### Prerequisites
-- **Python 3.11+**
-- **Node.js 18+ & npm**
-- **AWS Account** with Bedrock model access (`anthropic.claude-3-5-sonnet-20241022-v2:0` / `amazon.titan-embed-text-v2:0`)
+* Python 3.11 or higher
+* Node.js 18 or higher with npm
+* AWS account with Amazon Bedrock model access granted for:
+  * Anthropic Claude 3.5 Sonnet / Haiku
+  * Amazon Titan Text Embeddings V2
 
-### 1. Clone & Configure Environment
-```bash
-git clone -b 3-tier-architecture https://github.com/GitSuman0699/grantscout.git
-cd grantscout
+### Backend Setup
 
-# Copy environment template
-cp .env.example .env
-```
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-org/grantscout.git
+   cd grantscout
+   ```
 
-Ensure your `.env` contains:
-```env
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
-BEDROCK_FAST_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
-BEDROCK_STANDARD_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
-TITAN_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0
-MASTER_API_KEY=gs_live_8f7e6d5c4b3a210987654321
-SECRET_KEY=grantscout-sec-key-6f8b9e4a3d2c1b0a9f8e7d6c5b4a3210
-USE_LOCAL_STORAGE=true
-```
+2. Create and activate a Python virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
 
-### 2. Backend Setup & Startup
-```bash
-# Create and activate virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Install dependencies
-pip install -e .
+4. Configure environment variables:
+   ```bash
+   cp .env.example .env
+   ```
+   Generate a secure secret key and master API key:
+   ```bash
+   python -c "import secrets; print('SECRET_KEY=' + secrets.token_hex(32))"
+   python -c "import secrets; print('MASTER_API_KEY=gs_live_' + secrets.token_urlsafe(24))"
+   ```
+   Add the generated keys and AWS credentials to `.env`.
 
-# Seed initial organization profile
-python scripts/seed_org_profile.py
+5. Seed initial knowledge base data:
+   ```bash
+   python scripts/seed_knowledge_base.py
+   ```
 
-# Start FastAPI server
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
-API runs locally at `http://localhost:8000` with interactive docs at `http://localhost:8000/docs`.
+6. Start the backend API server:
+   ```bash
+   python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+   The backend API will be available at `http://localhost:8000`. API documentation is accessible at `http://localhost:8000/docs`.
 
-### 3. Frontend Setup & Startup
-```bash
-cd frontend
-npm install
+### Frontend Setup
 
-# Start Vite development server
-npm run dev
-```
-Open `http://localhost:5173` in your browser.
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Configure local frontend environment:
+   ```bash
+   cp .env.example .env
+   ```
+   Ensure `VITE_API_BASE_URL=http://localhost:8000` is set for local backend development.
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+   The user interface will be accessible at `http://localhost:5173`.
 
 ---
 
-## 👥 Authors & Acknowledgments
+## 6. Primary API Endpoints
 
-Developed by **GitSuman0699** for the **Agents for Humans Hackathon**.
-Special thanks to the teams behind **Amazon Bedrock**, **Strands Agents SDK**, and the **Model Context Protocol** for making agentic intelligence accessible to mission-driven nonprofits.
+### System and Health
+* `GET /health` - System health probe and security header check.
+* `GET /healthz` - Lightweight cloud readiness probe.
+* `POST /api/agent/warmup` - Non-blocking trigger to pre-warm the AWS AgentCore container.
+
+### Authentication
+* `POST /api/auth/token` - Exchanges an API key for a signed JWT access token.
+* `GET /api/auth/verify` - Validates an active JWT Bearer token or `X-API-Key`.
+
+### Organization and Persona
+* `GET /api/org/profile` - Retrieves the active organization profile and mission context.
+* `POST /api/org/profile` - Updates organization profile parameters (Requires Auth).
+* `GET /api/personas` - Lists available nonprofit sector personas.
+* `POST /api/personas/switch` - Activates a selected organization persona.
+
+### Grants and Pipeline
+* `GET /api/grants` - Lists all tracked grants with deduplication and match scores.
+* `GET /api/grants/{grant_id}` - Retrieves details and rubric scores for a grant opportunity.
+* `POST /api/agent/scan` - Triggers a live Grants.gov discovery cycle (Requires Auth).
+* `POST /api/agent/score/{grant_id}` - Triggers cognitive rubric scoring for a grant (Requires Auth).
+
+### Proposal Drafts
+* `GET /api/applications` - Lists all generated proposal applications.
+* `GET /api/applications/{draft_id}` - Retrieves complete multi-section proposal content.
+* `PUT /api/applications/{draft_id}` - Updates proposal narrative sections (Requires Auth).
+* `POST /api/grants/{grant_id}/draft` - Initiates the 3-stage proposal drafting swarm (Requires Auth).
+* `POST /api/grants/{grant_id}/compliance-audit` - Runs a 2 CFR 200 Uniform Guidance audit.
+
+### Knowledge Base (RAG)
+* `GET /api/documents` - Lists all indexed organizational documents.
+* `POST /api/documents/search` - Performs semantic vector and keyword search across documents.
+* `POST /api/documents/index` - Indexes and chunks new organizational text (Requires Auth).
+* `DELETE /api/documents/{doc_name}` - Removes a document and chunks from index (Requires Auth).
+
+### Real-Time Streaming and Model Context Protocol
+* `GET /api/dashboard/stream` - Server-Sent Events (SSE) stream for live agent telemetry.
+* `/mcp` - FastMCP Server endpoint for external agent integration (Protected via `MCPAuthWrapper`).
+
+---
+
+## 7. Testing and Verification
+
+The test suite covers unit logic, security protocols, API contracts, and multi-agent coordination.
+
+### Run Security Suite
+Verifies JWT lifecycles, API key verification, prompt injection defense, path traversal mitigation, and MCP protection:
+```bash
+python -m unittest tests/test_security.py
+```
+
+### Run Full Test Suite
+Executes all 58 unit and integration test cases across the system:
+```bash
+python -m unittest discover tests
+```
+
+### Production Build Validation
+Compiles the frontend production bundle and verifies asset generation:
+```bash
+cd frontend
+npm run build
+```
+
+---
+
+## 8. Deployment
+
+### Render Deployment (Tier 2 Application Backend)
+The repository includes a blueprint specification in `render.yaml`.
+1. Connect the repository to Render.
+2. In the Render Dashboard, configure the following secrets with `sync: false`:
+   * `SECRET_KEY`: Set to a 32-byte cryptographically secure random string.
+   * `MASTER_API_KEY`: Set to an enterprise API key string (e.g., `gs_live_...`).
+   * `AWS_ACCESS_KEY_ID`: AWS IAM access key with Amazon Bedrock permissions.
+   * `AWS_SECRET_ACCESS_KEY`: AWS IAM secret key.
+   * `AGENTCORE_RUNTIME_ARN`: ARN of the deployed AgentCore runtime.
+
+### AWS Bedrock AgentCore (Tier 3 Reasoning Engine)
+The AgentCore container package is located in `agentcore/`:
+* The runtime is built using `agentcore/src/Dockerfile`.
+* The container implements the AWS Bedrock AgentCore HTTP protocol on port 8080.
+* Scale-to-zero is configured with a 15-minute idle timeout in AWS CDK (`agentcore/cdk/`).
+* Invocations route through `bedrock-agentcore` via AWS SDK with automatic fallback to local orchestration when running offline.

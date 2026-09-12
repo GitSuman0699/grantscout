@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Target, Sparkles, ArrowRight, ShieldCheck, Cpu, Database } from 'lucide-react';
+import { Target } from 'lucide-react';
 
 export default function MissionLoopBanner() {
   const steps = [

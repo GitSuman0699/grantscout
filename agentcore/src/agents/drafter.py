@@ -30,7 +30,6 @@ from strands.models.bedrock import BedrockModel
 from shared.api.models.schemas import (
     ApplicationDraftResult,
     ApplicationSection,
-    CANONICAL_SECTION_TITLES,
     ProjectBlueprint,
     QuarterlyMilestone,
     StaffRole,
@@ -43,8 +42,6 @@ from mcp_tools import (
     retrieve_org_profile,
     audit_application_compliance,
     save_application_draft,
-    get_existing_application_draft,
-    update_draft_section,
 )
 
 logger = logging.getLogger(__name__)

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Compass, Cpu, Database, ShieldCheck, Zap, Activity } from 'lucide-react';
+import { Compass, Cpu, Database, Zap, Activity } from 'lucide-react';
+import { warmupAgentCore } from '../services/api';
 
 const BOOT_STEPS = [
   { label: 'Booting Strands Agents SDK Kernel...', icon: Cpu, delay: 0 },
-  { label: 'Connecting to Amazon Bedrock (Claude Sonnet 4.5 & Haiku 4.5)...', icon: Zap, delay: 350 },
+  { label: 'Waking AWS AgentCore Runtime & Bedrock (Claude 4.5)...', icon: Zap, delay: 350 },
   { label: 'Hydrating Form 990 & 2 CFR 200 RAG Vector Knowledge Base...', icon: Database, delay: 700 },
   { label: 'Synchronizing Grants.gov Federal Opportunity Pipeline...', icon: Activity, delay: 1050 },
 ];
@@ -15,9 +16,17 @@ export default function SplashScreen({ isLoading, onFinished }) {
   const [activeStep, setActiveStep] = useState(alreadyBooted ? BOOT_STEPS.length : 0);
   const [fadeOut, setFadeOut] = useState(false);
   const [visible, setVisible] = useState(!alreadyBooted);
+  const [warmupStatus, setWarmupStatus] = useState('warming'); // 'warming' | 'awake' | 'ready'
 
   useEffect(() => {
     if (alreadyBooted) return;
+
+    // Wake up AWS Bedrock AgentCore container from scale-to-zero sleep in background
+    warmupAgentCore()
+      .then((res) => {
+        setWarmupStatus(res?.status === 'warming_up' ? 'awake' : 'ready');
+      })
+      .catch(() => setWarmupStatus('ready'));
 
     // Progress through boot steps
     const timers = BOOT_STEPS.map((_, idx) => {
@@ -245,7 +254,10 @@ export default function SplashScreen({ isLoading, onFinished }) {
             <span>PORT 8000 (LIVE API)</span>
           </div>
 
-          <span>AMAZON BEDROCK ROUTER ACTIVE</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: warmupStatus === 'awake' ? '#F59E0B' : '#22C55E' }} />
+            <span>{warmupStatus === 'awake' ? 'AGENTCORE WAKING UP...' : 'AGENTCORE SCALE-TO-ZERO READY'}</span>
+          </div>
         </div>
       </div>
     </div>

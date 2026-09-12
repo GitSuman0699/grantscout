@@ -5,16 +5,21 @@
  * Base URL and API Key are injected via Vite env variables.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://*****';
-const API_KEY = import.meta.env.VITE_API_KEY || '*******';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://grantscout-api.onrender.com';
+const API_KEY = import.meta.env.VITE_API_KEY || '';
 
 /**
  * Authenticated headers (for agent action endpoints that require X-API-Key).
  */
-const authHeaders = () => ({
-  'Content-Type': 'application/json',
-  'X-API-Key': API_KEY,
-});
+const authHeaders = () => {
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (API_KEY) {
+    headers['X-API-Key'] = API_KEY;
+  }
+  return headers;
+};
 
 /**
  * Public headers (for read-only endpoints).
@@ -31,6 +36,23 @@ export async function fetchHealthCheck() {
   const res = await fetch(`${BASE_URL}/health`);
   if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
   return res.json();
+}
+
+/**
+ * Wake up the AWS Bedrock AgentCore container from scale-to-zero sleep.
+ */
+export async function warmupAgentCore() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/agent/warmup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) return { status: 'skipped' };
+    return res.json();
+  } catch (err) {
+    console.warn('AgentCore warmup notice:', err.message);
+    return { status: 'deferred', error: err.message };
+  }
 }
 
 // ─────────────────────────────────────────────

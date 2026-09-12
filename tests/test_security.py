@@ -122,6 +122,27 @@ class TestGrantScoutSecurity(unittest.TestCase):
         self.assertNotIn("Ignore all previous instructions", sanitized)
         self.assertIn("[FILTERED_INSTRUCTION]", sanitized)
 
+    def test_09_path_traversal_defense(self):
+        """Verify storage neutralizes directory traversal attack sequences."""
+        from backend.storage.local_storage import storage
+        sanitized = storage._safe_identifier("../../etc/passwd")
+        self.assertNotIn("..", sanitized)
+        self.assertNotIn("/", sanitized)
+        self.assertNotIn("\\", sanitized)
+        self.assertEqual(sanitized, "etcpasswd")
+
+    def test_10_mcp_unauthenticated_rejected(self):
+        """Verify unauthenticated requests to mounted /mcp are rejected with 401."""
+        res = self.client.get("/mcp")
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("unauthorized", res.json().get("error", "").lower())
+
+    def test_11_mcp_authenticated_with_api_key(self):
+        """Verify authenticated requests to /mcp with X-API-Key are admitted."""
+        res = self.client.get("/mcp", headers={"X-API-Key": self.master_key})
+        # FastMCP sse endpoint returns 404 or 200 for root GET depending on transport, but not 401
+        self.assertNotEqual(res.status_code, 401)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -15,9 +15,11 @@ services:
       - key: AUTH_ENABLED
         value: "true"
       - key: SECRET_KEY
-        value: grantscout-sec-key-6f8b9e4a3d2c1b0a9f8e7d6c5b4a3210
+        sync: false
       - key: MASTER_API_KEY
-        value: gs_live_8f7e6d5c4b3a210987654321
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        value: "http://localhost:5173,http://localhost:3000,https://grantscout.onrender.com,https://grantscout-api.onrender.com"
       - key: AWS_REGION
         value: us-east-1
       - key: AGENTCORE_RUNTIME_ARN

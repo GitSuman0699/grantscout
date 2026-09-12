@@ -2,11 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Database,
   Search,
-  FileText,
   CheckCircle,
   Sparkles,
-  Layers,
-  ArrowRight,
   AlertTriangle,
   Upload,
   Edit3,
@@ -17,7 +14,6 @@ import {
   RefreshCw,
   FileUp,
   Save,
-  Check,
   Filter
 } from 'lucide-react';
 import {

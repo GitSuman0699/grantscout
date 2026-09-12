@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import GrantCard, { calculateFitScore } from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
-import { FileText, CheckCircle2, Search, Sparkles, ArrowRight, ArrowDownWideNarrow, Clock } from 'lucide-react';
+import { FileText, CheckCircle2, Sparkles, ArrowRight, Clock } from 'lucide-react';
 import { formatAsOfDate } from '../utils/dateUtils';
 
 export default function DraftsPage() {

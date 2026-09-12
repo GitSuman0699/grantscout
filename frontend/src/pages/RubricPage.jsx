@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Sparkles, BookOpen, AlertTriangle, Building2, Calendar, DollarSign, ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Target, Sparkles, ArrowRight, ExternalLink } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
 import { getOfficialGrantUrl } from './ProposalDraftPage';

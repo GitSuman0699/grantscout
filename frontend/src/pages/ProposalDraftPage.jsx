@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, Copy, Check, Sparkles, Target, Building2, Calendar,
-  DollarSign, Loader2, ArrowRight, ExternalLink, FileText, CheckCircle2,
-  Edit3, Eye, Save, RefreshCw, ShieldCheck, BookOpen, Layers, AlertTriangle
+  DollarSign, Loader2, ExternalLink, FileText, CheckCircle2,
+  Edit3, Save, RefreshCw, ShieldCheck, BookOpen, Layers, AlertTriangle
 } from 'lucide-react';
 import { useGrants } from '../context/GrantContext';
 import { fetchApplications, triggerDraft, createSSEStream, updateApplication } from '../services/api';

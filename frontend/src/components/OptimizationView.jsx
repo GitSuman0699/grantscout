@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, DollarSign, Zap, Archive, Shield, CheckCircle2, Layers, AlertTriangle } from 'lucide-react';
+import { DollarSign, Zap, Archive, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { fetchModelTiers, fetchCacheStats, fetchTokenUsage } from '../services/api';
 
 export default function OptimizationView() {

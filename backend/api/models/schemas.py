@@ -23,19 +23,6 @@ class GrantStatus(str, Enum):
     SUBMITTED = "submitted"
     ARCHIVED = "archived"
 
-
-class ActivityType(str, Enum):
-    """Types of agent activity events."""
-
-    GRANTS_FOUND = "grants_found"
-    GRANT_MATCHED = "grant_matched"
-    APPLICATION_DRAFTED = "application_drafted"
-    DEADLINE_REMINDER = "deadline_reminder"
-    GRANTS_ARCHIVED = "grants_archived"
-    SCAN_COMPLETED = "scan_completed"
-    ERROR = "error"
-
-
 # ──────────────────────────────────────────────
 #  Organization Profile
 # ──────────────────────────────────────────────
@@ -110,46 +97,8 @@ class MatchScore(BaseModel):
         )
 
 
-class GrantOpportunity(BaseModel):
-    """A grant opportunity discovered from grants.gov."""
-
-    grant_id: str
-    source: str = "grants.gov"
-    title: str
-    agency: str = ""
-    opportunity_number: str = ""
-    synopsis: str = ""
-    award_ceiling: float = 0
-    award_floor: float = 0
-    close_date: str | None = None
-    post_date: str | None = None
-    applicant_types: list[str] = []
-    funding_category: str = ""
-
-    # GrantScout processing fields
-    status: GrantStatus = GrantStatus.DISCOVERED
-    match_score: MatchScore | None = None
-    match_reasoning: str = ""
-    draft_location: str = ""
-
-    discovered_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-    @property
-    def total_score(self) -> int:
-        return self.match_score.total if self.match_score else 0
-
-    @property
-    def award_range(self) -> str:
-        if self.award_ceiling and self.award_floor:
-            return f"${self.award_floor:,.0f} - ${self.award_ceiling:,.0f}"
-        elif self.award_ceiling:
-            return f"Up to ${self.award_ceiling:,.0f}"
-        return "Not specified"
-
-
 # ──────────────────────────────────────────────
-#  Application Draft
+#  Application Sections
 # ──────────────────────────────────────────────
 
 
@@ -162,18 +111,6 @@ class ApplicationSection(BaseModel):
     needs_review: bool = True
     word_count: int = 0
 
-
-class ApplicationDraft(BaseModel):
-    """A pre-filled grant application draft."""
-
-    draft_id: str = ""
-    grant_id: str
-    org_id: str
-    grant_title: str = ""
-    sections: list[ApplicationSection] = []
-    completion_percentage: float = 0
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ──────────────────────────────────────────────
@@ -280,20 +217,6 @@ class ProjectBlueprint(BaseModel):
     major_equipment_or_supplies: list[str] = Field(default_factory=list, description="Key materials, technology kits, or supplies needed")
     primary_kpis: list[str] = Field(default_factory=list, description="SMART performance metrics measuring project success")
 
-
-# ──────────────────────────────────────────────
-#  Activity Feed
-# ──────────────────────────────────────────────
-
-
-class ActivityEvent(BaseModel):
-    """An agent activity event for the dashboard feed."""
-
-    event_id: str = ""
-    event_type: ActivityType
-    message: str
-    details: dict = {}
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ──────────────────────────────────────────────

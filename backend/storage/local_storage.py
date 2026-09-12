@@ -78,11 +78,21 @@ class LocalStorage:
                         pass
                 raise
 
+    def _safe_identifier(self, identifier: str) -> str:
+        """Validate and sanitize an identifier to prevent directory traversal attacks."""
+        if not identifier or not isinstance(identifier, str):
+            return "unknown"
+        if ".." in identifier or "/" in identifier or "\\" in identifier:
+            logger.warning(f"Directory traversal sequence detected in identifier: {identifier}")
+            identifier = identifier.replace("..", "").replace("/", "").replace("\\", "")
+        cleaned = re.sub(r"[^a-zA-Z0-9_\-\.:]", "_", identifier.strip())
+        return cleaned or "unknown"
+
     # ── Org Profile Operations ──
 
     def save_org_profile(self, profile: dict) -> str:
         """Save an organization profile."""
-        org_id = profile.get("org_id", "default")
+        org_id = self._safe_identifier(profile.get("org_id", "default"))
         filepath = self.base_path / "org_profiles" / f"{org_id}.json"
         self._atomic_write(filepath, self._serialize(profile))
         logger.info(f"Saved org profile: {org_id}")
@@ -90,7 +100,8 @@ class LocalStorage:
 
     def get_org_profile(self, org_id: str = "default") -> dict | None:
         """Retrieve an organization profile."""
-        filepath = self.base_path / "org_profiles" / f"{org_id}.json"
+        safe_org_id = self._safe_identifier(org_id)
+        filepath = self.base_path / "org_profiles" / f"{safe_org_id}.json"
         if filepath.exists():
             return json.loads(filepath.read_text(encoding="utf-8"))
         return None
@@ -199,7 +210,7 @@ class LocalStorage:
         self._normalize_grant(grant)
         keys = set(self._get_grant_dedup_keys(grant))
 
-        canonical_gid = grant.get("grant_id", "unknown")
+        canonical_gid = self._safe_identifier(grant.get("grant_id", "unknown"))
         filepath = self.base_path / "grants" / f"{canonical_gid}.json"
 
         # Check existing files for duplicate matches and merge/clean up
@@ -229,7 +240,8 @@ class LocalStorage:
 
     def get_grant(self, grant_id: str) -> dict | None:
         """Retrieve a grant opportunity."""
-        filepath = self.base_path / "grants" / f"{grant_id}.json"
+        safe_gid = self._safe_identifier(grant_id)
+        filepath = self.base_path / "grants" / f"{safe_gid}.json"
         if filepath.exists():
             grant = json.loads(filepath.read_text(encoding="utf-8"))
             return self._normalize_grant(grant)
@@ -301,11 +313,12 @@ class LocalStorage:
 
     def grant_exists(self, grant_id: str) -> bool:
         """Check if a grant already exists in storage, checking all IDs and titles."""
-        filepath = self.base_path / "grants" / f"{grant_id}.json"
+        safe_gid = self._safe_identifier(grant_id)
+        filepath = self.base_path / "grants" / f"{safe_gid}.json"
         if filepath.exists():
             return True
 
-        search_keys = set(self._get_grant_dedup_keys({"grant_id": grant_id, "id": grant_id, "opportunity_number": grant_id}))
+        search_keys = set(self._get_grant_dedup_keys({"grant_id": safe_gid, "id": safe_gid, "opportunity_number": safe_gid}))
         grants_dir = self.base_path / "grants"
         for f in grants_dir.glob("*.json"):
             try:
@@ -319,10 +332,11 @@ class LocalStorage:
 
     def delete_grant(self, grant_id: str) -> bool:
         """Delete a grant opportunity."""
-        filepath = self.base_path / "grants" / f"{grant_id}.json"
+        safe_gid = self._safe_identifier(grant_id)
+        filepath = self.base_path / "grants" / f"{safe_gid}.json"
         if filepath.exists():
             filepath.unlink()
-            logger.info(f"Deleted grant: {grant_id}")
+            logger.info(f"Deleted grant: {safe_gid}")
             return True
         return False
 
@@ -348,7 +362,7 @@ class LocalStorage:
         Uses temp-file-then-rename under a threading lock to prevent
         corruption when multiple swarm agents write concurrently.
         """
-        draft_id = application.get("draft_id", "unknown")
+        draft_id = self._safe_identifier(application.get("draft_id", "unknown"))
         filepath = self.base_path / "applications" / f"{draft_id}.json"
         self._atomic_write(filepath, self._serialize(application))
         logger.info(f"Saved application draft: {draft_id}")
@@ -360,11 +374,12 @@ class LocalStorage:
         This avoids scanning all files when we know the grant_id but
         not the draft_id.
         """
+        safe_gid = self._safe_identifier(grant_id)
         apps_dir = self.base_path / "applications"
         for filepath in apps_dir.glob("*.json"):
             try:
                 data = json.loads(filepath.read_text(encoding="utf-8"))
-                if data.get("grant_id") == grant_id:
+                if data.get("grant_id") in (grant_id, safe_gid):
                     return data
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Skipping corrupted application file {filepath.name}: {e}")
@@ -372,7 +387,8 @@ class LocalStorage:
 
     def get_application(self, draft_id: str) -> dict | None:
         """Retrieve an application draft."""
-        filepath = self.base_path / "applications" / f"{draft_id}.json"
+        safe_id = self._safe_identifier(draft_id)
+        filepath = self.base_path / "applications" / f"{safe_id}.json"
         if filepath.exists():
             return json.loads(filepath.read_text(encoding="utf-8"))
         return None
@@ -391,10 +407,11 @@ class LocalStorage:
 
     def delete_application(self, draft_id: str) -> bool:
         """Delete an application draft."""
-        filepath = self.base_path / "applications" / f"{draft_id}.json"
+        safe_id = self._safe_identifier(draft_id)
+        filepath = self.base_path / "applications" / f"{safe_id}.json"
         if filepath.exists():
             filepath.unlink()
-            logger.info(f"Deleted application draft: {draft_id}")
+            logger.info(f"Deleted application draft: {safe_id}")
             return True
         return False
 

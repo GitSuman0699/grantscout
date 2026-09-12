@@ -13,8 +13,6 @@ Autonomous execution is orchestrated with real-time SSE status streaming for the
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import logging
 from typing import Any
 
@@ -36,8 +34,6 @@ from agents.matcher import (
     evaluate_all_discovered_grants,
     evaluate_all_discovered_grants_async,
     evaluate_grant_structured,
-    evaluate_grant_structured_async,
-    score_grant,
 )
 try:
     from backend.tools.notifications import scan_upcoming_deadlines as run_deadline_check

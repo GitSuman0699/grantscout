@@ -53,7 +53,7 @@ EVAL_CORPUS = [
         },
         "expected": {
             "min_total_score": 78,
-            "expected_action": "auto_draft",
+            "expected_action": "qualified_match",
             "expected_status": "matched",
             "key_strength_keywords": ["STEM", "youth", "mission"],
         },
@@ -117,7 +117,7 @@ EVAL_CORPUS = [
         },
         "expected": {
             "min_total_score": 80,
-            "expected_action": "auto_draft",
+            "expected_action": "qualified_match",
             "expected_status": "matched",
             "key_strength_keywords": ["coding", "after-school", "K-12"],
         },

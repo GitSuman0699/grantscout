@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import MetricsBar from '../components/MetricsBar';
 import GrantCard, { calculateFitScore } from '../components/GrantCard';
 import { useGrants } from '../context/GrantContext';
-import { Layers, Sparkles, AlertTriangle, ArrowUpDown, ArrowDownWideNarrow, Clock, Calendar } from 'lucide-react';
+import { AlertTriangle, ArrowDownWideNarrow, Clock, Calendar } from 'lucide-react';
 import { formatAsOfDate } from '../utils/dateUtils';
 
 export default function PipelinePage() {

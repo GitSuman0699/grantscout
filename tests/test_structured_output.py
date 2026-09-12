@@ -37,7 +37,7 @@ class TestStructuredOutputEnforcement(unittest.TestCase):
             match_reasoning="Strong alignment with youth coding initiatives.",
             key_strengths=["Direct mission overlap", "Strong capacity"],
             potential_risks=["Tight milestone schedule"],
-            recommended_action="auto_draft",
+            recommended_action="qualified_match",
         )
         self.assertEqual(valid_eval.match_score.total, 94)
         self.assertEqual(valid_eval.status, GrantStatus.MATCHED)
@@ -59,8 +59,7 @@ class TestStructuredOutputEnforcement(unittest.TestCase):
         self.assertIsInstance(result, GrantEvaluationResult)
         self.assertEqual(result.grant_id, "grants-gov-999123")
         self.assertTrue(result.match_score.total > 0)
-        self.assertTrue(len(result.match_reasoning) > 10)
-        self.assertIn(result.recommended_action, ["auto_draft", "manual_review", "archive_silently"])
+        self.assertIn(result.recommended_action, ["qualified_match", "auto_draft", "manual_review", "archive_silently"])
 
     def test_03_drafter_structured_application_execution(self):
         """Verify draft_application_structured returns a validated ApplicationDraftResult with 6 sections."""

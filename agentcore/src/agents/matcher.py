@@ -56,7 +56,7 @@ SCORING DIMENSIONS (total = 100):
    - Has the org done similar work before with measurable outcomes?
 
 ROUTING CRITERIA:
-- Score ≥ 80: Status = 'matched', Recommended Action = 'auto_draft'
+- Score ≥ 80: Status = 'matched', Recommended Action = 'qualified_match'
 - Score 50-79: Status = 'matched', Recommended Action = 'manual_review'
 - Score < 50: Status = 'archived', Recommended Action = 'archive_silently'
 """
@@ -199,7 +199,7 @@ Score across the 5 dimensions (Mission 30, Eligibility 25, Capacity 20, Geograph
             match_reasoning=f"Candidate evaluated with strong mission alignment to {org_name} programmatic priorities.",
             key_strengths=[f"Alignment with {title[:40]} objectives", "Compatible nonprofit applicant status"],
             potential_risks=["Standard federal grant performance milestones and reporting"],
-            recommended_action="manual_review" if score_val < 80 else "auto_draft",
+            recommended_action="manual_review" if score_val < 80 else "qualified_match",
         )
 
     # Persist the evaluated result if persist is True
