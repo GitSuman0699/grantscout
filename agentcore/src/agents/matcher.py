@@ -151,8 +151,12 @@ Retrieve our org profile and return a fully formulated GrantEvaluationResult.
     # Persist the evaluated result only if persist is True
     if persist:
         synopsis_val = str(grant_details.get("synopsis_description") or grant_details.get("synopsis") or "")
+        opp_id = grant_details.get("id")
+        opp_num = grant_details.get("opportunity_number")
+        canonical_gid = grant_details.get("grant_id") or (f"grants-gov-{opp_id}" if opp_id else evaluation.grant_id)
+
         save_matched_grant(
-            grant_id=evaluation.grant_id,
+            grant_id=canonical_gid,
             title=grant_details.get("title", "Grant Opportunity"),
             agency=grant_details.get("agency", "Federal Agency"),
             synopsis=synopsis_val,
@@ -162,6 +166,9 @@ Retrieve our org profile and return a fully formulated GrantEvaluationResult.
             status=evaluation.status.value,
             match_score=evaluation.match_score.model_dump(),
             match_reasoning=evaluation.match_reasoning,
+            opportunity_id=opp_id,
+            opportunity_number=opp_num,
+            application_url=grant_details.get("application_url"),
         )
 
     return evaluation

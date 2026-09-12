@@ -136,9 +136,16 @@ def execute_discovery_scan() -> dict[str, Any]:
 
         # Fetch full opportunity details
         try:
-            detail_res = fetch_grant_details(opportunity_id=str(g.get("id")))
+            opp_id_str = str(g.get("id") or "").strip()
+            detail_res = fetch_grant_details(opportunity_id=opp_id_str)
             grant_info = detail_res.get("grant") or g
             grant_info["grant_id"] = gid
+            if opp_id_str:
+                grant_info["id"] = opp_id_str
+                grant_info["application_url"] = f"https://www.grants.gov/search-results-detail/{opp_id_str}"
+                grant_info["url"] = grant_info["application_url"]
+            if g.get("opportunity_number"):
+                grant_info["opportunity_number"] = g.get("opportunity_number")
         except Exception as e:
             logger.warning(f"Failed to fetch details for grant {gid}: {e}")
             continue

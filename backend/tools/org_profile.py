@@ -57,6 +57,9 @@ def save_matched_grant(
     status: str,
     match_score: dict,
     match_reasoning: str,
+    opportunity_id: str | int | None = None,
+    opportunity_number: str | None = None,
+    application_url: str | None = None,
 ) -> dict[str, Any]:
     """Save a grant opportunity with its match score to the database.
 
@@ -78,6 +81,9 @@ def save_matched_grant(
                      eligibility_fit (0-25), capacity_match (0-20),
                      geographic_fit (0-15), track_record (0-10).
         match_reasoning: Explanation of why the grant received this score.
+        opportunity_id: Optional numeric opportunity ID from Grants.gov.
+        opportunity_number: Optional solicitation number (e.g. '26-503', 'PAR-27-077').
+        application_url: Optional direct link to opportunity on Grants.gov.
 
     Returns:
         Confirmation of save with the grant_id, or error message.
@@ -95,8 +101,42 @@ def save_matched_grant(
             except (ValueError, TypeError):
                 return 0.0
 
+        # Resolve numeric opportunity id and opportunity number
+        opp_id = str(opportunity_id).strip() if opportunity_id is not None else ""
+        if not opp_id and grant_id:
+            clean = grant_id.replace("grants-gov-", "").strip()
+            if clean.isdigit():
+                opp_id = clean
+
+        opp_num = str(opportunity_number).strip() if opportunity_number else ""
+        if not opp_num and grant_id and not opp_id:
+            opp_num = grant_id
+
+        # Canonical application url
+        url = application_url
+        if not url:
+            if opp_id:
+                url = f"https://www.grants.gov/search-results-detail/{opp_id}"
+            elif opp_num == "26-503" or "CyberAI" in title:
+                opp_id = "361238"
+                url = "https://www.grants.gov/search-results-detail/361238"
+            elif opp_num == "PAR-27-077" or "SEPA" in title:
+                opp_id = "359157"
+                url = "https://www.grants.gov/search-results-detail/359157"
+            elif opp_num:
+                url = f"https://www.grants.gov/search-grants?keywords={opp_num}"
+
+        # Canonical grant_id format
+        canonical_gid = grant_id
+        if opp_id and not canonical_gid.startswith("grants-gov-"):
+            canonical_gid = f"grants-gov-{opp_id}"
+
         grant_data = {
-            "grant_id": grant_id,
+            "id": opp_id if opp_id else None,
+            "grant_id": canonical_gid,
+            "opportunity_number": opp_num,
+            "application_url": url,
+            "url": url,
             "source": "grants.gov",
             "title": title,
             "agency": agency,

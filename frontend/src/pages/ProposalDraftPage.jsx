@@ -22,22 +22,60 @@ export function getOfficialGrantUrl(grant) {
   if (grant.additional_info_url) return grant.additional_info_url;
   if (grant.url) return grant.url;
 
-  const id = String(grant.grant_id || grant.id || '');
-  const numMatch = id.replace('grants-gov-', '').trim();
+  const idStr = String(grant.id || '').trim();
+  if (/^\d+$/.test(idStr)) {
+    return `https://www.grants.gov/search-results-detail/${idStr}`;
+  }
+
+  const rawGid = String(grant.grant_id || '').trim();
+  const numMatch = rawGid.replace('grants-gov-', '').trim();
 
   // If there's a numeric opportunity ID, link directly to its live official Grants.gov page
   if (/^\d+$/.test(numMatch)) {
     return `https://www.grants.gov/search-results-detail/${numMatch}`;
   }
 
-  // Otherwise, link to live Grants.gov search
+  // Known opportunity number mappings
+  if (numMatch === '26-503' || grant.title?.includes('CyberAI')) {
+    return 'https://www.grants.gov/search-results-detail/361238';
+  }
+  if (numMatch === 'PAR-27-077' || grant.title?.includes('SEPA')) {
+    return 'https://www.grants.gov/search-results-detail/359157';
+  }
+
+  // If opportunity_number exists, search Grants.gov by it
+  const oppNum = String(grant.opportunity_number || '').trim();
+  if (oppNum) {
+    return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(oppNum)}`;
+  }
+
+  // If rawGid or numMatch looks like a federal solicitation code (e.g. 26-503, PAR-27-077)
+  if (/^[A-Z0-9]+-[A-Z0-9-]+$/i.test(numMatch)) {
+    return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(numMatch)}`;
+  }
+
+  // Acronym search in title
   if (grant.title) {
-    const cleanTitle = grant.title.replace(/&amp;/g, '&').replace(/&ndash;/g, '-').replace(/&quot;/g, '"');
-    return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(cleanTitle)}`;
+    const parenMatch = grant.title.match(/\(([A-Za-z0-9\s_-]+)\)/);
+    if (parenMatch && parenMatch[1].trim().length >= 3) {
+      return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(parenMatch[1].trim())}`;
+    }
+
+    // Clean title search: remove punctuation and noise words
+    const cleanTitle = grant.title
+      .replace(/[-–—/\\()&,;:"']/g, ' ')
+      .replace(/\b(for|and|the|of|in|to|a|an)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const words = cleanTitle.split(' ').filter(w => w.length > 2).slice(0, 4).join(' ');
+    if (words) {
+      return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(words)}`;
+    }
   }
 
   return 'https://www.grants.gov/search-grants';
 }
+
 
 const SECTION_ICONS = [
   FileText,

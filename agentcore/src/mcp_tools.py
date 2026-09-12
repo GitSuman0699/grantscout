@@ -163,7 +163,10 @@ def check_grant_exists(grant_id: str) -> dict[str, Any]:
 def save_matched_grant(
     grant_id: str, title: str, agency: str, synopsis: str,
     award_ceiling: float, award_floor: float, close_date: str,
-    status: str, match_score: dict, match_reasoning: str
+    status: str, match_score: dict, match_reasoning: str,
+    opportunity_id: str | int | None = None,
+    opportunity_number: str | None = None,
+    application_url: str | None = None,
 ) -> dict[str, Any]:
     """Save a scored/matched grant to storage.
 
@@ -178,17 +181,28 @@ def save_matched_grant(
         status: Grant status (matched/archived).
         match_score: Scoring breakdown dict.
         match_reasoning: Text reasoning for the score.
+        opportunity_id: Numeric Grants.gov opportunity ID.
+        opportunity_number: Federal solicitation number.
+        application_url: Direct URL to the opportunity.
 
     Returns:
         Dictionary with save confirmation.
     """
-    return _call_remote_tool_sync("save_matched_grant", {
+    args = {
         "grant_id": grant_id, "title": title, "agency": agency,
         "synopsis": synopsis, "award_ceiling": award_ceiling,
         "award_floor": award_floor, "close_date": close_date,
         "status": status, "match_score": match_score,
         "match_reasoning": match_reasoning,
-    })
+    }
+    if opportunity_id is not None:
+        args["opportunity_id"] = opportunity_id
+    if opportunity_number is not None:
+        args["opportunity_number"] = opportunity_number
+    if application_url is not None:
+        args["application_url"] = application_url
+
+    return _call_remote_tool_sync("save_matched_grant", args)
 
 
 # ==========================================
