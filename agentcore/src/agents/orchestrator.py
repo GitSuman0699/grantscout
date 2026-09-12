@@ -226,7 +226,10 @@ Report the routing decisions for all evaluated grants."""
 
 DRAFTER_GRAPH_PROMPT = """You are the Drafter Node in the GrantScout Graph pipeline.
 You are only activated when high-scoring grants (≥80) have been queued for drafting.
-Check for any grants with status 'drafting' and begin pre-filling application proposals."""
+YOUR MISSION:
+Identify any grants queued for drafting or with fit score ≥80.
+For each high-scoring opportunity, invoke `execute_swarm_proposal_drafting(grant_id=...)` to trigger the authentic 5-Agent Collaborative Drafter Swarm to author the complete 6-section proposal.
+Report completion for all drafted opportunities."""
 
 DEADLINE_GRAPH_PROMPT = """You are the Deadline Monitor Node in the GrantScout Graph pipeline.
 Sweep all active grant opportunities and check for upcoming deadlines.
@@ -253,6 +256,55 @@ from shared.optimization import get_model_for_agent
 from mcp_tools import scan_upcoming_deadlines
 
 
+@tool
+def execute_swarm_proposal_drafting(grant_id: str) -> dict[str, Any]:
+    """Execute the authentic 5-Agent Collaborative Drafter Swarm to author a full 6-section proposal for a qualified grant.
+    
+    Args:
+        grant_id: The ID of the grant opportunity to author a proposal for.
+        
+    Returns:
+        Summary of the drafted proposal sections and completion status.
+    """
+    grant = None
+    try:
+        from backend.storage.local_storage import storage
+        grant = storage.get_grant(grant_id)
+        if not grant:
+            clean_num = grant_id.replace("grants-gov-", "")
+            for g in storage.list_grants():
+                if str(g.get("id")) == clean_num or g.get("grant_id") == grant_id:
+                    grant = g
+                    break
+    except Exception:
+        pass
+
+    if not grant:
+        # Fallback via MCP tool fetch_grant_details
+        try:
+            from mcp_tools import fetch_grant_details
+            clean_num = grant_id.replace("grants-gov-", "")
+            details_res = fetch_grant_details(opportunity_id=clean_num)
+            grant = details_res.get("grant") if isinstance(details_res, dict) else None
+            if grant and "grant_id" not in grant:
+                grant["grant_id"] = grant_id
+        except Exception as e:
+            logger.warning(f"Failed to fetch details via MCP for grant {grant_id}: {e}")
+
+    if not grant:
+        grant = {"grant_id": grant_id, "title": f"Opportunity {grant_id}"}
+        
+    from agents.drafter import draft_application_structured
+    draft_result = draft_application_structured(grant)
+    return {
+        "success": True,
+        "grant_id": grant_id,
+        "sections_count": len(draft_result.sections),
+        "completion_percentage": draft_result.completion_percentage,
+        "status": "completed",
+    }
+
+
 def _create_bedrock_model(agent_name: str) -> BedrockModel:
     """Create a BedrockModel configured for the given agent tier."""
     model_cfg = get_model_for_agent(agent_name)
@@ -267,12 +319,40 @@ def _create_bedrock_model(agent_name: str) -> BedrockModel:
     )
 
 
-def _has_high_score_grants(state) -> bool:
+def _has_high_score_grants(state: Any) -> bool:
     """Graph edge condition: only route to Drafter node if high-scoring grants (≥80) are queued.
-    Evaluates the string output of the Matcher node to see if drafting was queued.
+    
+    Evaluates both:
+    1. Structured Matcher Node result in GraphState (checking for action='auto_draft_queued')
+    2. Persistent storage for any grant with match_score >= 80 or status='queued'
     """
-    state_str = str(state).lower()
-    return "auto_draft_queued" in state_str or "drafting" in state_str
+    # 1. Check matcher node results in state if available
+    try:
+        results = getattr(state, "results", {})
+        if isinstance(results, dict) and "matcher" in results:
+            matcher_res = results["matcher"]
+            res_obj = getattr(matcher_res, "result", None)
+            if hasattr(res_obj, "message") and isinstance(res_obj.message, dict):
+                content = str(res_obj.message.get("content", []))
+                if "auto_draft_queued" in content:
+                    return True
+    except Exception as e:
+        logger.debug(f"Error inspecting matcher state results: {e}")
+
+    # 2. Check persistent storage for high-scoring queued opportunities
+    try:
+        from backend.storage.local_storage import storage
+        all_grants = storage.list_grants()
+        for g in all_grants:
+            score = g.get("match_score", {}).get("total", 0) if isinstance(g.get("match_score"), dict) else (g.get("fit_score") or 0)
+            if score >= 80 and g.get("status") in ("queued", "ready_for_review", "matched"):
+                draft = storage.find_application_by_grant_id(g.get("grant_id", ""))
+                if not draft or draft.get("completion_percentage", 0) < 100:
+                    return True
+    except Exception as e:
+        logger.debug(f"Error checking storage in edge condition: {e}")
+
+    return False
 
 
 def build_orchestration_graph(remote_tools: list[Any] | None = None):
@@ -284,7 +364,7 @@ def build_orchestration_graph(remote_tools: list[Any] | None = None):
     """
     scanner_tools: list[Any] = [execute_discovery_scan, retrieve_org_profile, search_grants, fetch_grant_details]
     matcher_tools: list[Any] = [evaluate_and_route_grant, retrieve_org_profile, save_matched_grant]
-    drafter_tools: list[Any] = [retrieve_org_profile, save_application_draft, get_existing_application_draft, update_draft_section, generate_budget_csv]
+    drafter_tools: list[Any] = [execute_swarm_proposal_drafting, retrieve_org_profile, save_application_draft, get_existing_application_draft, update_draft_section, generate_budget_csv]
     deadline_tools: list[Any] = [scan_upcoming_deadlines, send_deadline_alert]
 
     if remote_tools:

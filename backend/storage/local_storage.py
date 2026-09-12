@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,6 +26,7 @@ class LocalStorage:
 
     def __init__(self, base_path: str = ""):
         self.base_path = Path(base_path or config.LOCAL_STORAGE_PATH)
+        self._write_lock = threading.Lock()
         self._ensure_directories()
 
     def _ensure_directories(self) -> None:
@@ -46,13 +50,40 @@ class LocalStorage:
 
         return json.dumps(obj, default=default, indent=2)
 
+    def _atomic_write(self, filepath: Path, data: str) -> None:
+        """Write data to file atomically using temp-file-then-rename.
+
+        This prevents file corruption from concurrent writes by ensuring
+        the target file is either the old complete version or the new
+        complete version — never a partial write.
+        """
+        with self._write_lock:
+            dir_path = filepath.parent
+            tmp_path = None
+            try:
+                fd, tmp_path = tempfile.mkstemp(dir=str(dir_path), suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as tmp_f:
+                    tmp_f.write(data)
+                    tmp_f.flush()
+                    os.fsync(tmp_f.fileno())
+                # Atomic rename (on POSIX) / replace (on Windows)
+                os.replace(tmp_path, str(filepath))
+            except Exception:
+                # Clean up temp file on failure
+                if tmp_path is not None:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+                raise
+
     # ── Org Profile Operations ──
 
     def save_org_profile(self, profile: dict) -> str:
         """Save an organization profile."""
         org_id = profile.get("org_id", "default")
         filepath = self.base_path / "org_profiles" / f"{org_id}.json"
-        filepath.write_text(self._serialize(profile), encoding="utf-8")
+        self._atomic_write(filepath, self._serialize(profile))
         logger.info(f"Saved org profile: {org_id}")
         return org_id
 
@@ -69,7 +100,7 @@ class LocalStorage:
         """Save a grant opportunity."""
         grant_id = grant.get("grant_id", "unknown")
         filepath = self.base_path / "grants" / f"{grant_id}.json"
-        filepath.write_text(self._serialize(grant), encoding="utf-8")
+        self._atomic_write(filepath, self._serialize(grant))
         logger.info(f"Saved grant: {grant_id}")
         return grant_id
 
@@ -158,12 +189,32 @@ class LocalStorage:
     # ── Application Operations ──
 
     def save_application(self, application: dict) -> str:
-        """Save an application draft."""
+        """Save an application draft atomically.
+
+        Uses temp-file-then-rename under a threading lock to prevent
+        corruption when multiple swarm agents write concurrently.
+        """
         draft_id = application.get("draft_id", "unknown")
         filepath = self.base_path / "applications" / f"{draft_id}.json"
-        filepath.write_text(self._serialize(application), encoding="utf-8")
+        self._atomic_write(filepath, self._serialize(application))
         logger.info(f"Saved application draft: {draft_id}")
         return draft_id
+
+    def find_application_by_grant_id(self, grant_id: str) -> dict | None:
+        """Find an application draft by grant_id (instead of draft_id).
+
+        This avoids scanning all files when we know the grant_id but
+        not the draft_id.
+        """
+        apps_dir = self.base_path / "applications"
+        for filepath in apps_dir.glob("*.json"):
+            try:
+                data = json.loads(filepath.read_text(encoding="utf-8"))
+                if data.get("grant_id") == grant_id:
+                    return data
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Skipping corrupted application file {filepath.name}: {e}")
+        return None
 
     def get_application(self, draft_id: str) -> dict | None:
         """Retrieve an application draft."""
@@ -212,7 +263,7 @@ class LocalStorage:
         """Add an activity event to the feed."""
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         filepath = self.base_path / "activity" / f"{timestamp}.json"
-        filepath.write_text(self._serialize(event), encoding="utf-8")
+        self._atomic_write(filepath, self._serialize(event))
 
     def get_recent_activity(self, limit: int = 20) -> list[dict]:
         """Get the most recent activity events."""

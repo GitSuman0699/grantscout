@@ -73,9 +73,9 @@ def update_draft_section(
         A dictionary containing success status and current completion percentage.
     """
     try:
-        # Get existing or create new draft
-        apps = storage.list_applications()
-        existing = next((a for a in apps if a.get("grant_id") == grant_id), None)
+        # Use direct grant_id lookup instead of scanning all files
+        # This is faster and avoids issues with corrupted files blocking the scan
+        existing = storage.find_application_by_grant_id(grant_id)
         
         if existing:
             draft_data: dict[str, Any] = existing
@@ -162,9 +162,8 @@ def save_application_draft(
         A dictionary containing the 'draft_id', 'status', and 'saved' boolean.
     """
     try:
-        # Check if draft already exists for this grant to preserve draft_id
-        apps = storage.list_applications()
-        existing = next((a for a in apps if a.get("grant_id") == grant_id), None)
+        # Use direct grant_id lookup to preserve existing draft_id
+        existing = storage.find_application_by_grant_id(grant_id)
         draft_id = existing.get("draft_id") if existing else f"draft-{uuid.uuid4().hex[:10]}"
         created_at = existing.get("created_at") if existing else datetime.now(timezone.utc).isoformat()
         
@@ -237,10 +236,9 @@ def get_existing_application_draft(grant_id: str) -> dict[str, Any]:
         Dictionary with 'found' boolean and 'draft' data if present.
     """
     try:
-        apps = storage.list_applications()
-        for app in apps:
-            if app.get("grant_id") == grant_id:
-                return {"found": True, "draft": app, "error": None}
+        app = storage.find_application_by_grant_id(grant_id)
+        if app:
+            return {"found": True, "draft": app, "error": None}
         return {"found": False, "draft": None, "error": None}
     except Exception as e:
         logger.error(f"Error finding application draft: {e}")

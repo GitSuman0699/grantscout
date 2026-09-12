@@ -132,15 +132,21 @@ def audit_application_compliance(
     logger.info(f"Auditing 2 CFR 200 compliance for grant={grant_id}, draft={draft_id}")
 
     # Load draft if not passed explicitly
-    if not budget_narrative and draft_id:
-        draft = storage.get_application(draft_id)
+    if not budget_narrative:
+        draft = None
+        if draft_id:
+            draft = storage.get_application(draft_id)
+        if not draft and grant_id:
+            draft = storage.find_application_by_grant_id(grant_id)
+            if draft and not draft_id:
+                draft_id = draft.get("draft_id", "")
         if draft:
             sections = draft.get("sections", [])
             for sec in sections:
                 title_lower = sec.get("title", "").lower()
                 if "budget" in title_lower or "financial" in title_lower:
                     budget_narrative += "\n" + sec.get("content", "")
-                if "project" in title_lower or "design" in title_lower:
+                if "project" in title_lower or "design" in title_lower or "work plan" in title_lower:
                     project_design += "\n" + sec.get("content", "")
 
     full_text = f"{budget_narrative}\n{project_design}"
