@@ -61,7 +61,7 @@ export default function OptimizationView() {
         hasError = true;
       }
 
-      if (hasError) setError('Some data could not be loaded. Ensure the backend is running on port 8000.');
+      if (hasError) setError('Some data could not be loaded. Ensure the backend API server is reachable.');
       setIsLoading(false);
     };
     loadData();

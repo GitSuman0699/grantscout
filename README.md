@@ -22,27 +22,26 @@ graph TD
 
     subgraph Tier 2: Application Backend and Deterministic Engine
         FastAPI[FastAPI REST API Server]
-        Auth[JWT and API Key Authentication]
-        Discovery[Deterministic Discovery and Query Expansion]
-        Storage[Thread-Safe Atomic Storage with Path Protection]
+        Auth[API Key and Header Authentication]
+        Discovery[Deterministic Discovery and Grants.gov Search]
+        Storage[Thread-Safe Storage with Path Protection]
         RAG[Vector Knowledge Base and Document Index]
         Compliance[2 CFR 200 Uniform Guidance Engine]
         MCP[FastMCP Server with Security Wrapper]
     end
 
-    subgraph Tier 3: Decoupled Reasoning Engine
-        AgentCore[AWS Bedrock AgentCore Runtime]
-        Matcher[Matcher Agent: Claude 3.5 Haiku]
-        Drafter[Drafter Swarm: Claude 3.5 Sonnet]
-        BedrockModels[Amazon Bedrock Models and Embeddings]
+    subgraph Tier 3: AWS Bedrock AgentCore Runtime Container
+        Router[Container Entrypoint & Intent Router]
+        Matcher[Matcher Agent: Claude 4.5 Haiku]
+        Drafter[Drafter Swarm: Claude 4.5 Sonnet]
     end
 
     subgraph External Systems
         GrantsGov[Grants.gov Live REST API]
-        AWSBedrock[AWS Bedrock Foundation Models]
+        AWSBedrock[Amazon Bedrock Foundation Models]
     end
 
-    UI -->|HTTP REST / JWT| FastAPI
+    UI -->|HTTP REST / X-API-Key| FastAPI
     FastAPI -->|SSE Event Stream| SSE
     Splash -->|POST /api/agent/warmup| FastAPI
     FastAPI --> Discovery
@@ -51,13 +50,13 @@ graph TD
     FastAPI --> RAG
     FastAPI --> Compliance
     FastAPI --> MCP
-    FastAPI -->|boto3 invoke_agent_runtime| AgentCore
-    AgentCore --> Matcher
-    AgentCore --> Drafter
-    Matcher -->|Inference| AWSBedrock
-    Drafter -->|Inference| AWSBedrock
+    FastAPI -->|boto3 invoke_agent_runtime| Router
+    Router -->|Match / Evaluate Intent| Matcher
+    Router -->|Draft Proposal Intent| Drafter
+    Matcher -->|Fast Inference| AWSBedrock
+    Drafter -->|Deep Reasoning Inference| AWSBedrock
     RAG -->|Titan Text Embeddings V2| AWSBedrock
-    MCP -->|SSE Tool Invocation| AgentCore
+    MCP -->|SSE Tool Invocation| Router
 ```
 
 ### Tier 1: Presentation Layer
@@ -73,17 +72,37 @@ graph TD
   * Unified brutalist boot screen that triggers background container warmup.
 
 ### Tier 2: Application Backend and Deterministic Engine
-* **Technology:** Python 3.11+, FastAPI, Uvicorn, Pydantic v2, FastMCP.
+* **Technology:** FastAPI, Pydantic V2, Python 3.12, SQLite / JSON thread-safe local storage.
 * **Capabilities:**
-  * Public Grants.gov API ingestion, boolean query expansion, date validation, and deduplication.
-  * Local filesystem atomic persistence with directory traversal protection.
-  * In-memory semantic vector store with Amazon Titan Text Embeddings V2 fallback.
-  * Federal Uniform Guidance compliance evaluation (2 CFR 200 and MTDC indirect rates).
+  * Deterministic ingestion loop fetching active Grants.gov opportunities without LLM token waste.
+  * FastMCP tool server running over Server-Sent Events (SSE) at `/mcp`, protected by explicit API key authentication.
+  * Atomic, lock-guarded file-based persistence hardened against path traversal attacks (`_safe_identifier`).
+  * In-memory cosine similarity RAG pipeline with Amazon Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`).
+  * 2 CFR 200 Uniform Guidance audit engine validating indirect cost caps, de minimis rates, and allowability rules.
+  * Asynchronous container pre-warmup endpoint (`POST /api/agent/warmup`) ensuring zero cold-start friction.
+
+### Tier 3: Decoupled Reasoning Engine (AWS Bedrock AgentCore)
+* **Technology:** AWS Bedrock AgentCore (Containerized Runtime), Strands SDK, Anthropic Claude 4.5 Sonnet, Anthropic Claude 4.5 Haiku.
+* **Architecture:**
+  * Runs as a decoupled Docker container on Amazon Bedrock AgentCore infrastructure with an automated 15-minute (`900s`) scale-to-zero timeout policy.
+  * Connects over the network to the Tier 2 FastMCP server to discover and execute domain tools securely across environment boundaries.
+  * **Intent Router (`agentcore/src/main.py`)**: Directs incoming requests to specialized agents based on task context:
+    * **Matcher Agent (`agentcore/src/agents/matcher.py`)**: Uses **Claude 4.5 Haiku** (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) for low-latency rubric qualification across 5 dimensions:
+      1. Mission Alignment (30 pts)
+      2. Eligibility Check (25 pts)
+      3. Organizational Capacity (20 pts)
+      4. Geographic Scope (15 pts)
+      5. Past Performance (10 pts)
+    * **Drafter Swarm (`agentcore/src/agents/drafter.py`)**: Uses **Claude 4.5 Sonnet** (`us.anthropic.claude-sonnet-4-5-20250929-v1:0`) to synthesize complete, audit-grade proposals across all standard federal sections:
+      1. Executive Summary
+      2. Statement of Need
+      3. Project Design and Methodology
+      4. Work Plan, Key Milestones, and Staffing (FTE allocations)
+      5. Evaluation and Performance Measurement Framework
+      6. Budget Justification and Cost Breakdown
   * FastMCP Model Context Protocol server exposing 15 production tools and resources.
   * JWT access token management, scoped API key validation, and CORS whitelisting.
 
-### Tier 3: Decoupled Cognitive Reasoning Engine
-* **Technology:** AWS Bedrock AgentCore (Containerized Runtime), Strands SDK, Anthropic Claude 3.5 Sonnet, Anthropic Claude 3.5 Haiku.
 * **Capabilities:**
   * Scale-to-zero serverless container deployment with a 15-minute idle timeout.
   * Matcher Agent evaluating grant solicitations against 5 strategic dimensions.
@@ -101,7 +120,7 @@ Located in `backend/discovery.py`, the discovery engine avoids using large langu
 * **Multi-Key Deduplication:** Merges incoming solicitations using numeric Grants.gov IDs, federal opportunity numbers, and normalized title slugs.
 
 ### Cognitive Rubric Matcher
-Located in `agentcore/src/agents/matcher.py`, the Matcher Agent evaluates candidate grants against the organization profile using Claude 3.5 Haiku:
+Located in `agentcore/src/agents/matcher.py`, the Matcher Agent evaluates candidate grants against the organization profile using Claude 4.5 Haiku:
 * **Evaluation Dimensions:**
   1. Mission Alignment (Target population and programmatic fit)
   2. Eligibility Fit (Applicant type, 501(c)(3) status, cost-sharing requirements)

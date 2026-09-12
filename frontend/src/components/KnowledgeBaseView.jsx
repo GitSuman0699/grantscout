@@ -150,7 +150,7 @@ export default function KnowledgeBaseView() {
         {
           source: 'Search Error',
           relevance: 0,
-          excerpt: `API error: ${err.message}. Make sure the backend is running on port 8000.`,
+          excerpt: `API error: ${err.message}. Ensure the backend API server is reachable.`,
         },
       ]);
     } finally {

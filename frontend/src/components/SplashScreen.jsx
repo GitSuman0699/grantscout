@@ -251,7 +251,7 @@ export default function SplashScreen({ isLoading, onFinished }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22C55E' }} />
-            <span>PORT 8000 (LIVE API)</span>
+            <span>FASTAPI GATEWAY (OPERATIONAL)</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
