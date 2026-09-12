@@ -50,6 +50,24 @@ def generate_budget_csv(grant_id: str, direct_personnel: float, fringe_benefits:
     return {"csv_data": csv_str, "total_requested": total_costs}
 
 
+def normalize_section_title(title: str) -> str:
+    """Normalize any variant section title to its canonical standard form."""
+    clean = (title or "").strip().lower()
+    if "executive summary" in clean:
+        return "1. Executive Summary"
+    if "background" in clean or "capacity" in clean or "organizational" in clean:
+        return "2. Organizational Background & Capacity"
+    if "need" in clean or "community impact" in clean or "statement of need" in clean:
+        return "3. Statement of Need & Community Impact"
+    if "timeline" in clean or "project design" in clean or "work plan" in clean or "implementation" in clean:
+        return "4. Project Design & Implementation Timeline"
+    if "budget" in clean or "financial" in clean:
+        return "5. Budget & Financial Justification"
+    if "evaluation" in clean or "sustainability" in clean or "metrics" in clean:
+        return "6. Evaluation & Long-Term Sustainability"
+    return title.strip()
+
+
 def update_draft_section(
     grant_id: str,
     org_id: str,
@@ -73,6 +91,7 @@ def update_draft_section(
         A dictionary containing success status and current completion percentage.
     """
     try:
+        norm_title = normalize_section_title(section_title)
         # Use direct grant_id lookup instead of scanning all files
         # This is faster and avoids issues with corrupted files blocking the scan
         existing = storage.find_application_by_grant_id(grant_id)
@@ -91,12 +110,12 @@ def update_draft_section(
             }
             sections = []
 
-        # Update or add section
-        section_idx = next((i for i, s in enumerate(sections) if s.get("title") == section_title), -1)
+        # Update or add section by normalized title
+        section_idx = next((i for i, s in enumerate(sections) if normalize_section_title(s.get("title", "")) == norm_title), -1)
         
         word_count = len(content.split())
         new_section = {
-            "title": section_title,
+            "title": norm_title,
             "content": content,
             "is_auto_filled": True,
             "needs_review": True,
@@ -107,6 +126,15 @@ def update_draft_section(
             sections[section_idx] = new_section
         else:
             sections.append(new_section)
+
+        # Deduplicate sections by normalized title
+        dedup_map = {}
+        for s in sections:
+            t = normalize_section_title(s.get("title", ""))
+            s["title"] = t
+            dedup_map[t] = s
+        sections = list(dedup_map.values())
+        sections.sort(key=lambda s: s.get("title", ""))
             
         draft_data["sections"] = sections
         draft_data["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -200,7 +228,7 @@ def save_application_draft(
             for sec in sections:
                 if not isinstance(sec, dict):
                     continue
-                title = sec.get("title", "").strip()
+                title = normalize_section_title(sec.get("title", ""))
                 content = str(sec.get("content", ""))
 
                 # If incoming content is a placeholder and we have an existing section with real content, preserve the existing one!
@@ -222,12 +250,20 @@ def save_application_draft(
             final_sections = existing_sections
 
         # If any existing section was omitted in the incoming array, preserve it
-        incoming_titles = {s.get("title", "").strip() for s in final_sections}
+        incoming_titles = {normalize_section_title(s.get("title", "")) for s in final_sections}
         for title, ex_sec in existing_map.items():
-            if title not in incoming_titles:
+            norm_ex_title = normalize_section_title(title)
+            if norm_ex_title not in incoming_titles:
+                ex_sec["title"] = norm_ex_title
                 final_sections.append(ex_sec)
 
-        # Sort sections by standard title numbering (1., 2., 3., etc.)
+        # Deduplicate and sort sections by canonical title numbering (1., 2., 3., etc.)
+        dedup_final = {}
+        for s in final_sections:
+            canonical_t = normalize_section_title(s.get("title", ""))
+            s["title"] = canonical_t
+            dedup_final[canonical_t] = s
+        final_sections = list(dedup_final.values())
         final_sections.sort(key=lambda s: s.get("title", ""))
 
         # Calculate true completion percentage based on substantive non-placeholder content
@@ -240,9 +276,9 @@ def save_application_draft(
             if isinstance(item, str):
                 clean_checklist.append(item)
             elif isinstance(item, dict):
-                label = item.get("item") or item.get("name") or item.get("task") or item.get("title") or item.get("requirement") or str(item)
+                label = str(item.get("item") or item.get("name") or item.get("task") or item.get("title") or item.get("requirement") or item)
                 deadline = item.get("deadline") or item.get("timing") or item.get("due") or item.get("status")
-                clean_checklist.append(f"{label} ({deadline})" if deadline else str(label))
+                clean_checklist.append(f"{label} ({deadline})" if deadline else label)
             else:
                 clean_checklist.append(str(item))
 

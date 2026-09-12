@@ -244,6 +244,43 @@ class ApplicationDraftResult(BaseModel):
         return []
 
 
+CANONICAL_SECTION_TITLES = [
+    "1. Executive Summary",
+    "2. Organizational Background & Capacity",
+    "3. Statement of Need & Community Impact",
+    "4. Project Design & Implementation Timeline",
+    "5. Budget & Financial Justification",
+    "6. Evaluation & Long-Term Sustainability",
+]
+
+
+class StaffRole(BaseModel):
+    """Staffing allocation for the proposed project."""
+    title: str = Field(..., description="Role title, e.g. 'Project Director', 'Lead STEM Instructor'")
+    fte: float = Field(default=1.0, description="Full-Time Equivalent allocation (e.g. 0.5 or 1.0)")
+    annual_salary: float = Field(default=0.0, description="Allocated annual grant salary for this position")
+    responsibilities: str = Field(default="", description="Key responsibilities under this grant project")
+
+
+class QuarterlyMilestone(BaseModel):
+    """Quarterly deliverable milestone."""
+    quarter: str = Field(..., description="Quarter designation, e.g. 'Q1 (Months 1-3)'")
+    milestone: str = Field(..., description="Key deliverable or event completed in this quarter")
+    lead_role: str = Field(default="", description="Staff role primarily responsible")
+
+
+class ProjectBlueprint(BaseModel):
+    """Structured architectural blueprint establishing the single source of truth for a grant proposal."""
+    project_title: str = Field(..., description="Compelling, descriptive title for the proposed grant project")
+    target_population: str = Field(..., description="Target demographic, community, and number of participants served")
+    total_requested_amount: float = Field(..., description="Total grant funding requested, strictly aligned with award ceiling/floor")
+    primary_objective: str = Field(..., description="Core purpose and primary measurable goal of the project")
+    key_staff: list[StaffRole] = Field(default_factory=list, description="Key staff roles needed to execute the work plan")
+    quarterly_milestones: list[QuarterlyMilestone] = Field(default_factory=list, description="Q1 to Q4 sequential work plan milestones")
+    major_equipment_or_supplies: list[str] = Field(default_factory=list, description="Key materials, technology kits, or supplies needed")
+    primary_kpis: list[str] = Field(default_factory=list, description="SMART performance metrics measuring project success")
+
+
 # ──────────────────────────────────────────────
 #  Activity Feed
 # ──────────────────────────────────────────────

@@ -528,16 +528,14 @@ def build_orchestration_graph(remote_tools: list[Any] | None = None):
     builder = GraphBuilder()
     builder.set_graph_id("grantscout_pipeline")
 
-    # Add nodes
+    # Add nodes (no drafter — drafting is manual-only)
     builder.add_node(scanner_agent, "scanner")
     builder.add_node(matcher_agent, "matcher")
-    builder.add_node(drafter_agent, "drafter")
     builder.add_node(deadline_agent, "deadline")
 
-    # Define edges — the core of the Graph Routing Pattern
-    builder.add_edge("scanner", "matcher")                                    # Always: scan results flow to scoring
-    builder.add_edge("matcher", "drafter", condition=_has_high_score_grants)   # Conditional: only if ≥80 scoring grants queued
-    builder.add_edge("matcher", "deadline")                                   # Always: deadline sweep after scoring
+    # Define edges — Scanner → Matcher → Deadline (no auto-drafting)
+    builder.add_edge("scanner", "matcher")
+    builder.add_edge("matcher", "deadline")
 
     # Set entry point and timeouts
     builder.set_entry_point("scanner")

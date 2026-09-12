@@ -201,8 +201,7 @@ async def _background_scan_loop():
             grants_found = result.get("grants_scanned", 0)
             logger.info(f"✅ Background auto-scan complete. {grants_found} grants processed.")
 
-            # Dispatch background drafting tasks for high-scoring opportunities
-            dispatch_queued_drafts()
+            # Auto-drafting disabled — drafting is manual-only via /api/grants/{id}/draft
 
             await broadcast_event({
                 "event": "auto_scan_completed",
@@ -240,6 +239,15 @@ async def lifespan(app: FastAPI):
             logger.info("🌱 Seeded default RAG Knowledge Base documents")
         except Exception as e:
             logger.warning(f"Failed to auto-seed RAG Knowledge Base: {e}")
+
+    # ── Clear stale drafting flags from previous crashes ──
+    for g in storage.list_grants():
+        if g.get("is_drafting"):
+            g["is_drafting"] = False
+            if g.get("status") == "drafting":
+                g["status"] = "matched"
+            storage.save_grant(g)
+            logger.info(f"🧹 Cleared stale is_drafting on grant {g.get('grant_id')}")
 
     # Start background autonomous scan task
     scan_task: asyncio.Task[Any] | None = None
@@ -600,6 +608,24 @@ async def update_application(
     return {"status": "updated", "draft": app_draft, "updated_by": auth.sub}
 
 
+@app.post("/api/grants/{grant_id}/cancel-draft")
+async def cancel_grant_draft(
+    grant_id: str,
+    auth: TokenPayload = Depends(get_current_auth),
+):
+    """Cancel/reset a stuck drafting process for a grant."""
+    grant = storage.get_grant(grant_id)
+    if not grant:
+        raise HTTPException(status_code=404, detail="Grant not found")
+
+    grant["is_drafting"] = False
+    if grant.get("status") == "drafting":
+        grant["status"] = "matched"
+    storage.save_grant(grant)
+    logger.info(f"Cancelled drafting for grant {grant_id}")
+    return {"status": "cancelled", "grant_id": grant_id}
+
+
 @app.post("/api/grants/{grant_id}/draft")
 async def trigger_grant_draft(
     grant_id: str,
@@ -844,14 +870,13 @@ async def trigger_scan(
 
         result = await run_orchestrator(status_callback=on_agent_thought)
 
-        # Dispatch background drafting for any high-scoring grants discovered securely
-        loop = asyncio.get_running_loop()
-        queued_drafts = dispatch_queued_drafts(background_tasks, loop)
+        # Auto-drafting disabled — drafting is manual-only via /api/grants/{id}/draft
+        queued_drafts = []
 
         storage.add_activity({
             "event_type": "scan_completed",
-            "message": f"Grant scan completed successfully. {len(queued_drafts)} proposals queued for background drafting.",
-            "details": {"result_preview": str(result)[:200] if result else "", "queued_drafts": queued_drafts},
+            "message": f"Grant scan completed successfully.",
+            "details": {"result_preview": str(result)[:200] if result else ""},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
@@ -897,8 +922,8 @@ async def trigger_full_orchestration(auth: TokenPayload = Depends(get_current_au
 
         summary = await run_full_orchestration_cycle()
 
-        # Dispatch background drafting for high-scoring grants
-        queued_drafts = dispatch_queued_drafts()
+        # Auto-drafting disabled — drafting is manual-only via /api/grants/{id}/draft
+        queued_drafts = []
 
         await broadcast_event({
             "type": "orchestration_completed",
