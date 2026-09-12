@@ -179,6 +179,17 @@ def save_application_draft(
             if "word_count" not in sec or not sec["word_count"]:
                 sec["word_count"] = len(sec.get("content", "").split())
 
+        clean_checklist = []
+        for item in (submission_checklist or []):
+            if isinstance(item, str):
+                clean_checklist.append(item)
+            elif isinstance(item, dict):
+                label = item.get("item") or item.get("name") or item.get("task") or item.get("title") or item.get("requirement") or str(item)
+                deadline = item.get("deadline") or item.get("timing") or item.get("due") or item.get("status")
+                clean_checklist.append(f"{label} ({deadline})" if deadline else str(label))
+            else:
+                clean_checklist.append(str(item))
+
         draft_data = {
             "draft_id": draft_id,
             "grant_id": grant_id,
@@ -186,7 +197,7 @@ def save_application_draft(
             "grant_title": grant_title,
             "sections": sections,
             "completion_percentage": completion_pct,
-            "submission_checklist": submission_checklist or [],
+            "submission_checklist": clean_checklist,
             "budget_csv_data": budget_csv_data,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),

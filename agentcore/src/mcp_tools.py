@@ -49,9 +49,9 @@ async def _call_remote_tool(name: str, arguments: dict[str, Any]) -> Any:
                     raw_fn = getattr(fn, "_tool_func", getattr(fn, "__wrapped__", fn))
                     if callable(raw_fn):
                         return raw_fn(**arguments)
-        except Exception:
-            pass
-        raise RuntimeError(f"MCP session not initialized. Call set_mcp_session() first.")
+        except Exception as e:
+            logger.warning(f"Local fallback execution for '{name}' failed: {e}")
+        raise RuntimeError(f"MCP session not initialized and local fallback failed for '{name}'. Call set_mcp_session() first.")
     result = await _mcp_session.call_tool(name, arguments=arguments)
     # MCP returns content as a list of content blocks
     if hasattr(result, "content") and result.content:
@@ -77,9 +77,9 @@ def _call_remote_tool_sync(name: str, arguments: dict[str, Any]) -> Any:
                     raw_fn = getattr(fn, "_tool_func", getattr(fn, "__wrapped__", fn))
                     if callable(raw_fn):
                         return raw_fn(**arguments)
-        except Exception:
-            pass
-        raise RuntimeError(f"MCP session not initialized. Call set_mcp_session() first.")
+        except Exception as e:
+            logger.warning(f"Local fallback execution for '{name}' failed: {e}")
+        raise RuntimeError(f"MCP session not initialized and local fallback failed for '{name}'. Call set_mcp_session() first.")
 
     if _mcp_loop is not None and _mcp_loop.is_running():
         active_loop = _mcp_loop
@@ -360,20 +360,35 @@ def audit_application_compliance(grant_id: str) -> dict[str, Any]:
 # ==========================================
 
 @tool
-def send_deadline_alert(grant_id: str, days_remaining: int, priority: str = "normal") -> dict[str, Any]:
+def send_deadline_alert(
+    grant_id: str,
+    days_remaining: int = 0,
+    priority: str = "normal",
+    grant_title: str = "",
+    deadline: str = "",
+) -> dict[str, Any]:
     """Send a deadline alert for a grant opportunity.
 
     Args:
         grant_id: The grant to alert about.
         days_remaining: Days until the deadline.
         priority: Alert priority (critical/high/normal/low).
+        grant_title: Optional title of the grant.
+        deadline: Optional deadline date.
 
     Returns:
         Dictionary with alert confirmation.
     """
-    return _call_remote_tool_sync("send_deadline_alert", {
-        "grant_id": grant_id, "days_remaining": days_remaining, "priority": priority,
-    })
+    args: dict[str, Any] = {
+        "grant_id": grant_id,
+        "days_remaining": days_remaining,
+        "priority": priority,
+    }
+    if grant_title:
+        args["grant_title"] = grant_title
+    if deadline:
+        args["deadline"] = deadline
+    return _call_remote_tool_sync("send_deadline_alert", args)
 
 
 @tool

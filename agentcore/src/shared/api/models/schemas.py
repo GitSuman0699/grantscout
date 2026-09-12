@@ -1,11 +1,12 @@
 """Pydantic data models for GrantScout."""
 
-from __future__ import annotations
+from typing import Any
+# from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ──────────────────────────────────────────────
 #  Enums
@@ -204,10 +205,10 @@ class ApplicationDraftResult(BaseModel):
     """Structured, type-safe application output produced by Drafter Agent."""
 
     grant_id: str
-    org_id: str
-    grant_title: str
-    sections: list[ApplicationSection]
-    completion_percentage: float
+    org_id: str = "default"
+    grant_title: str = ""
+    sections: list[ApplicationSection] = Field(default_factory=list)
+    completion_percentage: float = 100.0
     recommended_human_actions: list[str] = Field(
         default_factory=list,
         description="Specific tasks recommended for human staff review before submission.",
@@ -220,6 +221,27 @@ class ApplicationDraftResult(BaseModel):
         default=None,
         description="Comma-separated values for the SF-424 budget template.",
     )
+
+    @field_validator("submission_checklist", "recommended_human_actions", mode="before")
+    @classmethod
+    def _coerce_checklist_items(cls, v: Any) -> list[str]:
+        if not v:
+            return []
+        if isinstance(v, str):
+            return [v]
+        if isinstance(v, list):
+            result = []
+            for item in v:
+                if isinstance(item, str):
+                    result.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("item") or item.get("name") or item.get("task") or item.get("title") or item.get("requirement") or str(item)
+                    deadline = item.get("deadline") or item.get("timing") or item.get("due") or item.get("status")
+                    result.append(f"{text} ({deadline})" if deadline else str(text))
+                else:
+                    result.append(str(item))
+            return result
+        return []
 
 
 # ──────────────────────────────────────────────

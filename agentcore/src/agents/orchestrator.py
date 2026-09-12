@@ -223,35 +223,53 @@ def evaluate_and_route_grant(grant_info: dict[str, Any]) -> dict[str, Any]:
 
 SCANNER_GRAPH_PROMPT = """You are the Scanner Node in the GrantScout Graph pipeline.
 Execute a discovery scan using `execute_discovery_scan` to find new federal grant opportunities
-matching the organization's profile and keywords. Report the number of new grants discovered."""
+matching the organization's profile and keywords.
+
+STRICT NO-SUMMARY RULE (CRITICAL):
+- Do NOT output conversational text, pleasantries, markdown tables, grant lists, or status summaries.
+- Save execution time and Bedrock tokens.
+- Once `execute_discovery_scan` finishes, output ONLY: "Scan complete." and terminate immediately."""
 
 MATCHER_GRAPH_PROMPT = """You are the Matcher Node in the GrantScout Graph pipeline.
-For each new grant opportunity found by the Scanner, use `evaluate_and_route_grant` to:
+For each new grant opportunity found by the Scanner, use `evaluate_and_route_grant(grant_info=...)` to:
 1. Score it against the organization profile (5-dimension rubric)
 2. Route it based on score: ≥80 auto-draft, 50-79 review, <50 archive
-Report the routing decisions for all evaluated grants."""
+
+STRICT NO-SUMMARY RULE (CRITICAL):
+- Do NOT output conversational text, scoring tables, markdown reports, status recaps, or routing summaries.
+- Never output verification sections, status tables, or next-step plans.
+- Once evaluation tools have executed for all opportunities, output ONLY: "Scoring and routing complete." and terminate immediately."""
 
 DRAFTER_GRAPH_PROMPT = """You are the Drafter Node in the GrantScout Graph pipeline.
 You are only activated when high-scoring grants (≥80) have been queued for drafting.
 YOUR MISSION:
 Identify any grants queued for drafting or with fit score ≥80.
 For each high-scoring opportunity, invoke `execute_swarm_proposal_drafting(grant_id=...)` to trigger the authentic 5-Agent Collaborative Drafter Swarm to author the complete 6-section proposal.
-Report completion for all drafted opportunities."""
+
+STRICT NO-SUMMARY RULE (CRITICAL):
+- Do NOT output conversational text, narrative commentary, proposal excerpts, or checklists.
+- Once drafting completes, output ONLY: "Proposal drafting triggered." and terminate immediately."""
 
 DEADLINE_GRAPH_PROMPT = """You are the Deadline Monitor Node in the GrantScout Graph pipeline.
-Sweep all active grant opportunities and check for upcoming deadlines.
-Generate proactive alerts for any grants closing within the next 14 days."""
+Call `scan_upcoming_deadlines(days_ahead=30)`. If any grant closes within 14 days, call `send_deadline_alert`.
+
+STRICT NO-SUMMARY RULE (CRITICAL):
+- Do NOT output conversational reports, deadline tables, monitoring strategies, completion essays, or next steps.
+- Once tools have executed, output ONLY: "Deadline monitoring complete." and terminate immediately."""
 
 ORCHESTRATOR_SYSTEM_PROMPT = """You are the Lead Autonomous Orchestrator for GrantScout.
 
 YOUR MISSION:
-Autonomously run the end-to-end grant discovery, scoring, and routing lifecycle in the background. Only surface high-value opportunities that require real human decisions, fulfilling the hackathon promise of silent background execution.
+Autonomously run the end-to-end grant discovery, scoring, and routing lifecycle in the background.
 
 WORKFLOW:
 1. Execute discovery using `execute_discovery_scan`.
 2. For each discovered opportunity, evaluate fit and execute Graph routing using `evaluate_and_route_grant`.
 3. Perform a deadline check across the pipeline using `scan_upcoming_deadlines`.
-"""
+
+STRICT NO-SUMMARY RULE (CRITICAL):
+- Do NOT output conversational text, markdown summaries, or status tables.
+- Output ONLY: "Orchestration complete." upon completion."""
 
 
 # ──────────────────────────────────────────────
@@ -534,10 +552,11 @@ async def run_graph_orchestration_cycle(
 
     task = prompt or (
         "Run the complete GrantScout discovery cycle. "
-        "Scanner: scan for new federal grants matching the org profile. "
-        "Matcher: score each discovered grant and route based on fit score. "
-        "Drafter: if any high-scoring grants are queued, begin pre-filling proposals. "
-        "Deadline: check all active grants for upcoming deadlines."
+        "Scanner: execute discovery scan. "
+        "Matcher: score and route each discovered grant. "
+        "Drafter: if any grant scores >= 80, trigger proposal drafting. "
+        "Deadline: scan upcoming deadlines and send alerts if closing soon. "
+        "CRITICAL RULE: All agents must output ZERO conversational text, tables, or summaries. Minimal tool calls and one-line completion only."
     )
 
     completed_nodes: list[str] = []

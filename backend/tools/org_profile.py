@@ -108,23 +108,19 @@ def save_matched_grant(
             if clean.isdigit():
                 opp_id = clean
 
-        opp_num = str(opportunity_number).strip() if opportunity_number else ""
+        opp_num = opportunity_number.strip() if opportunity_number else ""
         if not opp_num and grant_id and not opp_id:
             opp_num = grant_id
 
         # Canonical application url
-        url = application_url
-        if not url:
-            if opp_id:
-                url = f"https://www.grants.gov/search-results-detail/{opp_id}"
-            elif opp_num == "26-503" or "CyberAI" in title:
-                opp_id = "361238"
-                url = "https://www.grants.gov/search-results-detail/361238"
-            elif opp_num == "PAR-27-077" or "SEPA" in title:
-                opp_id = "359157"
-                url = "https://www.grants.gov/search-results-detail/359157"
-            elif opp_num:
-                url = f"https://www.grants.gov/search-grants?keywords={opp_num}"
+        if opp_id:
+            url = f"https://www.grants.gov/search-results-detail/{opp_id}"
+        elif application_url and "grants.gov" in application_url:
+            url = application_url
+        elif opp_num:
+            url = f"https://www.grants.gov/search-grants?keywords={opp_num}"
+        else:
+            url = "https://www.grants.gov/search-grants"
 
         # Canonical grant_id format
         canonical_gid = grant_id

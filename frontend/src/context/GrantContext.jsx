@@ -8,6 +8,106 @@ import {
   createSSEStream,
 } from '../services/api';
 
+/**
+ * Universal dynamic deduplication keys for grants.
+ * Extracts all valid identity signals: Grants.gov numeric ID, federal solicitation code,
+ * and normalized title slug without requiring any hardcoded dictionaries.
+ */
+export function getGrantDedupKeys(grant) {
+  if (!grant) return [];
+  const keys = new Set();
+
+  // 1. Direct numeric Grants.gov Opportunity ID (5 to 8 digits)
+  const idStr = String(grant.id || '').trim();
+  if (/^\d{5,8}$/.test(idStr)) keys.add(`id:${idStr}`);
+
+  const gidStr = String(grant.grant_id || '').trim();
+  const cleanGid = gidStr.replace(/^grants-gov-/, '').trim();
+  if (/^\d{5,8}$/.test(cleanGid)) keys.add(`id:${cleanGid}`);
+
+  // 2. Extract numeric ID from Grants.gov URLs (e.g. oppId=350821 or detail/359157)
+  for (const f of [grant.application_url, grant.url, grant.additional_info_url]) {
+    if (typeof f === 'string') {
+      const m = f.match(/(?:oppId=|opp_id=|detail\/)(\d{5,8})/i);
+      if (m && m[1]) keys.add(`id:${m[1]}`);
+    }
+  }
+
+  // 3. Match by official federal opportunity / solicitation number (e.g., PAR-27-077, 26-503, DOD-26-072)
+  const oppNum = String(grant.opportunity_number || '').trim().toUpperCase();
+  const rawCodes = `${oppNum} ${gidStr}`;
+  const codeMatches = rawCodes.match(/([A-Z]{2,5}-\d{2,3}-\d{2,4}|\d{2,3}-\d{3,5})/g);
+  if (codeMatches) {
+    codeMatches.forEach(c => keys.add(`opp:${c.toUpperCase()}`));
+  } else if (oppNum && oppNum.length >= 4) {
+    keys.add(`opp:${oppNum}`);
+  }
+
+  // 4. Normalized title slug (collapses punctuation and whitespace)
+  const title = String(grant.title || '').toLowerCase();
+  const slug = title.replace(/[^a-z0-9]/g, '').slice(0, 28);
+  if (slug && slug.length >= 10) keys.add(`title:${slug}`);
+
+  return Array.from(keys);
+}
+
+/**
+ * Deduplicates an array of grants dynamically, merging duplicates sharing any identity signal.
+ */
+export function deduplicateGrants(grantList) {
+  if (!Array.isArray(grantList)) return [];
+
+  const canonicalGroups = [];
+
+  for (const raw of grantList) {
+    if (!raw) continue;
+    const itemKeys = getGrantDedupKeys(raw);
+
+    const matchedGroup = canonicalGroups.find(g => itemKeys.some(k => g.keys.has(k)));
+
+    if (!matchedGroup) {
+      canonicalGroups.push({ keys: new Set(itemKeys), grant: { ...raw } });
+    } else {
+      itemKeys.forEach(k => matchedGroup.keys.add(k));
+      const existing = matchedGroup.grant;
+
+      const isPreferred =
+        (String(raw.grant_id || '').startsWith('grants-gov-') && !String(existing.grant_id || '').startsWith('grants-gov-')) ||
+        (raw.is_drafted && !existing.is_drafted) ||
+        ((raw.match_score?.total || 0) > (existing.match_score?.total || 0));
+
+      const merged = isPreferred
+        ? { ...existing, ...raw }
+        : { ...raw, ...existing };
+
+      merged.is_drafted = Boolean(existing.is_drafted || raw.is_drafted);
+      if (existing.draft_location || raw.draft_location) {
+        merged.draft_location = existing.draft_location || raw.draft_location;
+      }
+      if (existing.status === 'ready_for_review' || raw.status === 'ready_for_review') {
+        merged.status = 'ready_for_review';
+      }
+      matchedGroup.grant = merged;
+    }
+  }
+
+  return canonicalGroups.map(group => {
+    const g = group.grant;
+    const idKey = Array.from(group.keys).find(k => k.startsWith('id:'));
+    if (idKey) {
+      const oppId = idKey.replace('id:', '');
+      return {
+        ...g,
+        id: oppId,
+        grant_id: `grants-gov-${oppId}`,
+        application_url: `https://www.grants.gov/search-results-detail/${oppId}`,
+        url: `https://www.grants.gov/search-results-detail/${oppId}`,
+      };
+    }
+    return g;
+  });
+}
+
 const GrantContext = createContext();
 
 export function GrantProvider({ children }) {
@@ -26,7 +126,9 @@ export function GrantProvider({ children }) {
   const loadGrants = useCallback(async () => {
     try {
       const data = await apiFetchGrants();
-      setGrants(data.grants || []);
+      const raw = data.grants || [];
+      const deduped = deduplicateGrants(raw);
+      setGrants(deduped);
       setError(null);
     } catch (err) {
       console.warn('Failed to fetch grants from API, keeping current state:', err.message);
@@ -74,7 +176,14 @@ export function GrantProvider({ children }) {
 
   // ── Find grant by ID ──
   const getGrantById = useCallback((id) => {
-    return grants.find(g => String(g.id) === String(id) || String(g.grant_id) === String(id));
+    if (!id) return undefined;
+    const searchKeys = getGrantDedupKeys({ id, grant_id: id, opportunity_number: id });
+    return grants.find(g => {
+      if (String(g.id) === String(id) || String(g.grant_id) === String(id)) return true;
+      const gKeys = getGrantDedupKeys(g);
+      if (searchKeys.some(sk => gKeys.includes(sk))) return true;
+      return false;
+    });
   }, [grants]);
 
   // ── Initial data fetch on mount ──

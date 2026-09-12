@@ -86,6 +86,36 @@ class TestStructuredOutputEnforcement(unittest.TestCase):
         self.assertTrue(any("Executive Summary" in t for t in titles))
         self.assertTrue(any("Budget" in t for t in titles))
 
+    def test_04_checklist_dict_coercion(self):
+        """Verify ApplicationDraftResult cleanly coerces dict-based submission_checklist items to strings."""
+        dict_checklist = [
+            {"item": "SAM.gov Registration", "deadline": "Before submission"},
+            {"item": "SF-424 Application", "deadline": "With submission"},
+            "Simple string item",
+        ]
+        result = ApplicationDraftResult(
+            grant_id="test-grant-dict",
+            org_id="default",
+            grant_title="Test Dict Checklist",
+            sections=[],
+            submission_checklist=dict_checklist,
+        )
+        self.assertEqual(len(result.submission_checklist), 3)
+        self.assertEqual(result.submission_checklist[0], "SAM.gov Registration (Before submission)")
+        self.assertEqual(result.submission_checklist[1], "SF-424 Application (With submission)")
+        self.assertEqual(result.submission_checklist[2], "Simple string item")
+
+        # Also verify backend schema directly
+        from backend.api.models.schemas import ApplicationDraftResult as BackendDraftResult
+        backend_result = BackendDraftResult(
+            grant_id="test-grant-dict",
+            org_id="default",
+            grant_title="Test Dict Checklist",
+            sections=[],
+            submission_checklist=dict_checklist,
+        )
+        self.assertEqual(backend_result.submission_checklist[0], "SAM.gov Registration (Before submission)")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

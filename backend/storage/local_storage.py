@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
 import threading
 from datetime import datetime, timezone
@@ -96,13 +97,46 @@ class LocalStorage:
 
     # ── Grant Operations ──
 
-    def save_grant(self, grant: dict) -> str:
-        """Save a grant opportunity."""
-        grant_id = grant.get("grant_id", "unknown")
-        filepath = self.base_path / "grants" / f"{grant_id}.json"
-        self._atomic_write(filepath, self._serialize(grant))
-        logger.info(f"Saved grant: {grant_id}")
-        return grant_id
+    def _get_grant_dedup_keys(self, grant: dict) -> list[str]:
+        """Extract all valid identity signals: numeric ID, solicitation codes, and title slug."""
+        keys = set()
+        opp_id = str(grant.get("id") or "").strip()
+        if opp_id.isdigit() and len(opp_id) >= 5:
+            keys.add(f"id:{opp_id}")
+
+        raw_gid = str(grant.get("grant_id") or "").strip()
+        clean_num = raw_gid.replace("grants-gov-", "").strip()
+        if clean_num.isdigit() and len(clean_num) >= 5:
+            keys.add(f"id:{clean_num}")
+
+        for url_field in (grant.get("application_url"), grant.get("url"), grant.get("additional_info_url")):
+            if url_field and isinstance(url_field, str):
+                m = re.search(r"(?:oppId=|opp_id=|detail/)(\d{5,8})", url_field, re.IGNORECASE)
+                if m:
+                    keys.add(f"id:{m.group(1)}")
+
+        opp_num = str(grant.get("opportunity_number") or "").strip().upper()
+        raw_codes = f"{opp_num} {raw_gid}"
+        for m in re.finditer(r"([A-Z]{2,5}-\d{2,3}-\d{2,4}|\d{2,3}-\d{3,5})", raw_codes):
+            keys.add(f"opp:{m.group(1).upper()}")
+        if opp_num and len(opp_num) >= 4:
+            keys.add(f"opp:{opp_num}")
+
+        title = str(grant.get("title") or "").strip().lower()
+        slug = re.sub(r"[^a-z0-9]", "", title)[:28]
+        if slug and len(slug) >= 10:
+            keys.add(f"title:{slug}")
+
+        return list(keys)
+
+    def _get_grant_dedup_key(self, grant: dict) -> str:
+        """Derive a primary canonical deduplication key dynamically."""
+        keys = self._get_grant_dedup_keys(grant)
+        for prefix in ("id:", "opp:", "title:"):
+            for k in keys:
+                if k.startswith(prefix):
+                    return k
+        return f"raw:{grant.get('grant_id') or grant.get('id') or 'unknown'}"
 
     def _get_drafted_grant_ids(self) -> set[str]:
         """Get set of all grant_ids that have an existing draft."""
@@ -119,7 +153,7 @@ class LocalStorage:
         return drafted
 
     def _normalize_grant(self, grant: dict, drafted_set: set[str] | None = None) -> dict:
-        """Ensure match_score has total computed and attach is_drafted boolean."""
+        """Ensure canonical IDs, Grants.gov details URL, and compute match totals."""
         ms = grant.get("match_score")
         if isinstance(ms, dict):
             if "total" not in ms:
@@ -130,34 +164,68 @@ class LocalStorage:
                     + ms.get("geographic_fit", 0)
                     + ms.get("track_record", 0)
                 )
-        gid = str(grant.get("grant_id") or grant.get("id") or "")
+
+        # Resolve canonical Grants.gov ID
+        keys = self._get_grant_dedup_keys(grant)
+        opp_id = ""
+        for k in keys:
+            if k.startswith("id:"):
+                opp_id = k.replace("id:", "")
+                break
+
+        if opp_id:
+            grant["id"] = opp_id
+            grant["grant_id"] = f"grants-gov-{opp_id}"
+            grant["application_url"] = f"https://www.grants.gov/search-results-detail/{opp_id}"
+            grant["url"] = grant["application_url"]
+        else:
+            raw_gid = str(grant.get("grant_id") or grant.get("id") or "").strip()
+            opp_num = str(grant.get("opportunity_number") or raw_gid).strip()
+            current_url = str(grant.get("application_url") or grant.get("url") or "")
+            if not current_url.startswith("https://www.grants.gov"):
+                grant["application_url"] = f"https://www.grants.gov/search-grants?keywords={opp_num}"
+                grant["url"] = grant["application_url"]
+
+        gid = str(grant.get("grant_id") or "")
         if drafted_set is not None:
             grant["is_drafted"] = gid in drafted_set
         else:
             grant["is_drafted"] = gid in self._get_drafted_grant_ids()
 
-        # Ensure application_url and url are populated with official Grants.gov links
-        if not grant.get("application_url") and not grant.get("url"):
-            opp_id = str(grant.get("id") or "").strip()
-            clean_gid = gid.replace("grants-gov-", "").strip()
-            if opp_id.isdigit():
-                grant["application_url"] = f"https://www.grants.gov/search-results-detail/{opp_id}"
-            elif clean_gid.isdigit():
-                grant["id"] = clean_gid
-                grant["application_url"] = f"https://www.grants.gov/search-results-detail/{clean_gid}"
-            elif clean_gid == "26-503" or "CyberAI" in str(grant.get("title", "")):
-                grant["id"] = "361238"
-                grant["opportunity_number"] = "26-503"
-                grant["application_url"] = "https://www.grants.gov/search-results-detail/361238"
-            elif clean_gid == "PAR-27-077" or "SEPA" in str(grant.get("title", "")):
-                grant["id"] = "359157"
-                grant["opportunity_number"] = "PAR-27-077"
-                grant["application_url"] = "https://www.grants.gov/search-results-detail/359157"
-            elif clean_gid:
-                grant["application_url"] = f"https://www.grants.gov/search-grants?keywords={clean_gid}"
-            grant["url"] = grant.get("application_url")
-
         return grant
+
+    def save_grant(self, grant: dict) -> str:
+        """Save a grant opportunity with automatic multi-key deduplication and Grants.gov URL enforcement."""
+        self._normalize_grant(grant)
+        keys = set(self._get_grant_dedup_keys(grant))
+
+        canonical_gid = grant.get("grant_id", "unknown")
+        filepath = self.base_path / "grants" / f"{canonical_gid}.json"
+
+        # Check existing files for duplicate matches and merge/clean up
+        grants_dir = self.base_path / "grants"
+        for existing_file in grants_dir.glob("*.json"):
+            if existing_file == filepath:
+                continue
+            try:
+                existing_data = json.loads(existing_file.read_text(encoding="utf-8"))
+                existing_keys = set(self._get_grant_dedup_keys(existing_data))
+                if keys.intersection(existing_keys):
+                    logger.info(f"Deduplicating: Merging {existing_file.name} into {filepath.name}")
+                    if existing_data.get("is_drafted"):
+                        grant["is_drafted"] = True
+                    if existing_data.get("status") in ("ready_for_review", "drafting") and grant.get("status") == "matched":
+                        grant["status"] = existing_data.get("status")
+                    try:
+                        existing_file.unlink()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        self._atomic_write(filepath, self._serialize(grant))
+        logger.info(f"Saved grant: {canonical_gid}")
+        return canonical_gid
 
     def get_grant(self, grant_id: str) -> dict | None:
         """Retrieve a grant opportunity."""
@@ -165,26 +233,89 @@ class LocalStorage:
         if filepath.exists():
             grant = json.loads(filepath.read_text(encoding="utf-8"))
             return self._normalize_grant(grant)
+
+        # Try searching by multi-key match
+        search_keys = set(self._get_grant_dedup_keys({"grant_id": grant_id, "id": grant_id, "opportunity_number": grant_id}))
+        grants_dir = self.base_path / "grants"
+        for f in grants_dir.glob("*.json"):
+            try:
+                g = json.loads(f.read_text(encoding="utf-8"))
+                g_keys = set(self._get_grant_dedup_keys(g))
+                if search_keys.intersection(g_keys):
+                    return self._normalize_grant(g)
+            except Exception:
+                pass
         return None
 
     def list_grants(self, status: str = "") -> list[dict]:
-        """List all grants, optionally filtered by status."""
-        grants = []
+        """List all grants, deduplicated dynamically so each federal opportunity appears exactly once."""
+        canonical_groups: list[dict] = []  # List of {"keys": set, "grant": dict, "filepath": Path}
         grants_dir = self.base_path / "grants"
         drafted_set = self._get_drafted_grant_ids()
-        for filepath in grants_dir.glob("*.json"):
+        files_to_clean: list[Path] = []
+
+        for filepath in sorted(grants_dir.glob("*.json")):
             try:
                 grant = json.loads(filepath.read_text(encoding="utf-8"))
-                if not status or grant.get("status") == status:
-                    grants.append(self._normalize_grant(grant, drafted_set=drafted_set))
+                norm_grant = self._normalize_grant(grant, drafted_set=drafted_set)
+                item_keys = set(self._get_grant_dedup_keys(norm_grant))
+
+                matched = None
+                for grp in canonical_groups:
+                    if item_keys.intersection(grp["keys"]):
+                        matched = grp
+                        break
+
+                if not matched:
+                    canonical_groups.append({
+                        "keys": item_keys,
+                        "grant": norm_grant,
+                        "filepath": filepath,
+                    })
+                else:
+                    matched["keys"].update(item_keys)
+                    existing = matched["grant"]
+                    # Merge attributes
+                    if norm_grant.get("is_drafted"):
+                        existing["is_drafted"] = True
+                    if norm_grant.get("status") in ("ready_for_review", "drafting"):
+                        existing["status"] = norm_grant["status"]
+                    if str(norm_grant.get("grant_id", "")).startswith("grants-gov-") and not str(existing.get("grant_id", "")).startswith("grants-gov-"):
+                        matched["grant"] = norm_grant
+                    files_to_clean.append(filepath)
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read grant file {filepath}: {e}")
-        return sorted(grants, key=lambda g: g.get("discovered_at", ""), reverse=True)
+
+        # Clean duplicate files from disk
+        for f in files_to_clean:
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
+        all_grants = [grp["grant"] for grp in canonical_groups]
+        if status:
+            all_grants = [g for g in all_grants if g.get("status") == status]
+
+        return sorted(all_grants, key=lambda g: g.get("discovered_at", ""), reverse=True)
 
     def grant_exists(self, grant_id: str) -> bool:
-        """Check if a grant already exists in storage."""
+        """Check if a grant already exists in storage, checking all IDs and titles."""
         filepath = self.base_path / "grants" / f"{grant_id}.json"
-        return filepath.exists()
+        if filepath.exists():
+            return True
+
+        search_keys = set(self._get_grant_dedup_keys({"grant_id": grant_id, "id": grant_id, "opportunity_number": grant_id}))
+        grants_dir = self.base_path / "grants"
+        for f in grants_dir.glob("*.json"):
+            try:
+                g = json.loads(f.read_text(encoding="utf-8"))
+                g_keys = set(self._get_grant_dedup_keys(g))
+                if search_keys.intersection(g_keys):
+                    return True
+            except Exception:
+                pass
+        return False
 
     def delete_grant(self, grant_id: str) -> bool:
         """Delete a grant opportunity."""
@@ -206,6 +337,7 @@ class LocalStorage:
             except Exception as e:
                 logger.warning(f"Failed to delete {filepath}: {e}")
         return count
+
 
 
     # ── Application Operations ──

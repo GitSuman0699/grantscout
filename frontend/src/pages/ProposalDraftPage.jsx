@@ -13,63 +13,69 @@ import MarkdownRenderer from '../components/MarkdownRenderer';
 import AgentTerminal from '../components/AgentTerminal';
 
 /**
- * Returns the direct official URL to the federal opportunity / application portal.
- * Any numeric opportunity ID maps directly to its official Grants.gov notice.
+ * Resolves the official Grants.gov opportunity details page URL using the numeric Opportunity ID.
+ * Automatically extracts the numeric ID from id, grant_id, application_url, or opportunity number.
+ * Never uses hardcoded grant mapping tables or external agency domains.
  */
 export function getOfficialGrantUrl(grant) {
   if (!grant) return 'https://www.grants.gov/search-grants';
-  if (grant.application_url) return grant.application_url;
-  if (grant.additional_info_url) return grant.additional_info_url;
-  if (grant.url) return grant.url;
 
+  // 1. If grant already contains a valid Grants.gov detail URL, return it directly
+  for (const field of [grant.application_url, grant.url, grant.additional_info_url]) {
+    if (typeof field === 'string' && field.includes('grants.gov/search-results-detail/')) {
+      const match = field.match(/search-results-detail\/(\d{5,8})/i);
+      if (match && match[1]) {
+        return `https://www.grants.gov/search-results-detail/${match[1]}`;
+      }
+    }
+  }
+
+  // 2. Direct numeric opportunity ID (5 to 8 digits) from id or grant_id
   const idStr = String(grant.id || '').trim();
-  if (/^\d+$/.test(idStr)) {
+  if (/^\d{5,8}$/.test(idStr)) {
     return `https://www.grants.gov/search-results-detail/${idStr}`;
   }
 
   const rawGid = String(grant.grant_id || '').trim();
-  const numMatch = rawGid.replace('grants-gov-', '').trim();
-
-  // If there's a numeric opportunity ID, link directly to its live official Grants.gov page
-  if (/^\d+$/.test(numMatch)) {
-    return `https://www.grants.gov/search-results-detail/${numMatch}`;
+  const cleanGid = rawGid.replace(/^grants-gov-/, '').trim();
+  if (/^\d{5,8}$/.test(cleanGid)) {
+    return `https://www.grants.gov/search-results-detail/${cleanGid}`;
   }
 
-  // Known opportunity number mappings
-  if (numMatch === '26-503' || grant.title?.includes('CyberAI')) {
-    return 'https://www.grants.gov/search-results-detail/361238';
-  }
-  if (numMatch === 'PAR-27-077' || grant.title?.includes('SEPA')) {
-    return 'https://www.grants.gov/search-results-detail/359157';
+  // 3. Extract numeric oppId from URLs (e.g. oppId=350821)
+  for (const field of [grant.application_url, grant.url, grant.additional_info_url]) {
+    if (typeof field === 'string') {
+      const oppIdMatch = field.match(/(?:oppId=|opp_id=|detail\/)(\d{5,8})/i);
+      if (oppIdMatch && oppIdMatch[1]) {
+        return `https://www.grants.gov/search-results-detail/${oppIdMatch[1]}`;
+      }
+    }
   }
 
-  // If opportunity_number exists, search Grants.gov by it
+  // 4. Look for any 5-8 digit number in all identifier fields combined
   const oppNum = String(grant.opportunity_number || '').trim();
+  const matchNum = `${idStr} ${rawGid} ${oppNum}`.match(/\b(\d{5,8})\b/);
+  if (matchNum && matchNum[1]) {
+    return `https://www.grants.gov/search-results-detail/${matchNum[1]}`;
+  }
+
+  // 5. Fallback: Search Grants.gov by opportunity number or clean title
   if (oppNum) {
     return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(oppNum)}`;
   }
 
-  // If rawGid or numMatch looks like a federal solicitation code (e.g. 26-503, PAR-27-077)
-  if (/^[A-Z0-9]+-[A-Z0-9-]+$/i.test(numMatch)) {
-    return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(numMatch)}`;
-  }
-
-  // Acronym search in title
   if (grant.title) {
-    const parenMatch = grant.title.match(/\(([A-Za-z0-9\s_-]+)\)/);
-    if (parenMatch && parenMatch[1].trim().length >= 3) {
-      return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(parenMatch[1].trim())}`;
-    }
-
-    // Clean title search: remove punctuation and noise words
-    const cleanTitle = grant.title
+    const cleanWords = String(grant.title)
       .replace(/[-–—/\\()&,;:"']/g, ' ')
       .replace(/\b(for|and|the|of|in|to|a|an)\b/gi, '')
       .replace(/\s+/g, ' ')
-      .trim();
-    const words = cleanTitle.split(' ').filter(w => w.length > 2).slice(0, 4).join(' ');
-    if (words) {
-      return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(words)}`;
+      .trim()
+      .split(' ')
+      .filter(w => w.length > 2)
+      .slice(0, 3)
+      .join(' ');
+    if (cleanWords) {
+      return `https://www.grants.gov/search-grants?keywords=${encodeURIComponent(cleanWords)}`;
     }
   }
 
@@ -451,7 +457,7 @@ export default function ProposalDraftPage() {
             title="Open official opportunity page in Grants.gov"
           >
             <ExternalLink size={15} />
-            OPEN IN GRANTS.GOV ↗
+            VIEW ON GRANTS.GOV ↗
           </a>
 
           <Link
