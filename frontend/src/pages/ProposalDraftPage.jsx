@@ -10,6 +10,7 @@ import { fetchApplications, triggerDraft, createSSEStream, updateApplication } f
 import { calculateFitScore, getScoreBadgeProps } from '../components/GrantCard';
 import ComplianceAuditView from '../components/ComplianceAuditView';
 import MarkdownRenderer from '../components/MarkdownRenderer';
+import AgentTerminal from '../components/AgentTerminal';
 
 /**
  * Returns the direct official URL to the federal opportunity / application portal.
@@ -67,15 +68,8 @@ export default function ProposalDraftPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const thoughtsEndRef = useRef(null);
   const sectionScrollRef = useRef(null);
   const [sectionScrollPositions, setSectionScrollPositions] = useState({});
-
-  useEffect(() => {
-    if (thoughtsEndRef.current) {
-      thoughtsEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [agentThoughts]);
 
   useEffect(() => {
     if (sectionScrollRef.current) {
@@ -545,28 +539,15 @@ export default function ProposalDraftPage() {
 
       {/* Live Drafting Telemetry Stream */}
       {isDrafting && (
-        <div className="brutalist-card" style={{ padding: '1.5rem', marginBottom: '1.5rem', background: '#0a0a0a', border: '3px solid var(--border-dark)', color: '#10B981', fontFamily: 'var(--font-mono, monospace)', height: '260px', overflowY: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', borderBottom: '1px solid #333', paddingBottom: '0.5rem' }}>
-            <Loader2 size={16} className="spin" style={{ color: '#F59E0B' }} />
-            <span style={{ fontWeight: 800, color: '#F59E0B', fontSize: '0.82rem', letterSpacing: '0.05em' }}>
-              AUTONOMOUS BEDROCK DRAFTER SWARM (LIVE TELEMETRY)
-            </span>
-          </div>
-          {agentThoughts.map((thought, idx) => {
-            const isLast = idx === agentThoughts.length - 1;
-            const baseText = thought.replace(/\.*$/, '');
-            return (
-              <div key={idx} style={{ marginBottom: '0.45rem', display: 'flex', gap: '0.6rem', alignItems: 'flex-start', opacity: isLast ? 1 : 0.7 }}>
-                <span style={{ color: '#6B7280' }}>&gt;</span>
-                <span style={{ color: isLast ? '#34D399' : '#9CA3AF' }}>
-                  {baseText}
-                  {isLast ? <span className="animated-dots"></span> : null}
-                </span>
-              </div>
-            );
-          })}
-          <div ref={thoughtsEndRef} />
-        </div>
+        <AgentTerminal
+          title="AUTONOMOUS BEDROCK DRAFTER SWARM (LIVE TELEMETRY)"
+          badge="AMAZON BEDROCK DRAFTER"
+          thoughts={agentThoughts}
+          isActive={isDrafting}
+          height="220px"
+          style={{ marginBottom: '1.5rem' }}
+          emptyMessage="Initializing autonomous Bedrock drafter swarm and retrieving RAG evidence..."
+        />
       )}
 
       {/* Main Drafting Section */}
