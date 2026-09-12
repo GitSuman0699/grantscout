@@ -232,6 +232,15 @@ async def lifespan(app: FastAPI):
         storage.save_org_profile(default_profile.model_dump())
         logger.info("🌱 Seeded default organization profile: Youth Education Alliance")
 
+    # Ensure default RAG Knowledge Base documents exist
+    if not knowledge_base.chunks:
+        try:
+            from scripts.seed_knowledge_base import seed_rag_documents
+            seed_rag_documents()
+            logger.info("🌱 Seeded default RAG Knowledge Base documents")
+        except Exception as e:
+            logger.warning(f"Failed to auto-seed RAG Knowledge Base: {e}")
+
     # Start background autonomous scan task
     scan_task: asyncio.Task[Any] | None = None
     if config.AUTO_SCAN_ENABLED:

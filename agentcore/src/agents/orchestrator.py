@@ -81,6 +81,21 @@ def is_domain_relevant(grant_info: dict[str, Any], profile_data: dict[str, Any])
     return False, "No substantive domain keyword alignment with organization profile"
 
 
+def _safe_float(val: Any) -> float:
+    """Safely convert award amounts to float, handling 'none', 'N/A', strings, and None."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        clean = str(val).strip().replace("$", "").replace(",", "").lower()
+        if clean in ("none", "n/a", "null", ""):
+            return 0.0
+        return float(clean)
+    except (ValueError, TypeError):
+        return 0.0
+
+
 @tool
 def execute_discovery_scan() -> dict[str, Any]:
     """Discover authentic grant opportunities by querying grants.gov with targeted org profile keywords.
@@ -170,6 +185,27 @@ def execute_discovery_scan() -> dict[str, Any]:
         logger.info(f"Discovered authentic candidate grant: {gid} ('{grant_info.get('title')}') - {reason}")
         new_grants.append(grant_info)
 
+        # Immediately persist candidate grant with status='discovered' to pipeline storage
+        try:
+            save_matched_grant(
+                grant_id=gid,
+                title=grant_info.get("title", "Grant Opportunity"),
+                agency=grant_info.get("agency", "Federal Agency"),
+                synopsis=str(grant_info.get("synopsis_description") or grant_info.get("synopsis") or ""),
+                award_ceiling=_safe_float(grant_info.get("award_ceiling")),
+                award_floor=_safe_float(grant_info.get("award_floor")),
+                close_date=str(grant_info.get("close_date") or "TBD"),
+                status="discovered",
+                match_score={"mission_alignment": 0, "eligibility_fit": 0, "capacity_match": 0, "geographic_fit": 0, "track_record": 0, "total": 0},
+                match_reasoning="Discovered candidate awaiting fit evaluation",
+                opportunity_id=opp_id_str,
+                opportunity_number=grant_info.get("opportunity_number"),
+                application_url=grant_info.get("application_url"),
+            )
+            logger.info(f"Persisted candidate grant {gid} to pipeline storage.")
+        except Exception as e:
+            logger.warning(f"Failed to persist candidate grant {gid}: {e}")
+
         # Cap at 6 authentic candidates per cycle for fast response
         if len(new_grants) >= 6:
             break
@@ -178,7 +214,7 @@ def execute_discovery_scan() -> dict[str, Any]:
 
 
 @tool
-def evaluate_and_route_grant(grant_info: dict[str, Any]) -> dict[str, Any]:
+def evaluate_and_route_grant(grant_id: str = "", grant_info: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a grant against the organization profile and route according to fit score.
 
     Graph Routing Policy (implemented via Strands Graph conditional edges):
@@ -187,11 +223,34 @@ def evaluate_and_route_grant(grant_info: dict[str, Any]) -> dict[str, Any]:
     - Score < 50: Status -> 'archived'
 
     Args:
-        grant_info: Detailed grant opportunity dictionary.
+        grant_id: Unique identifier for the grant (e.g. 'grants-gov-359157').
+        grant_info: Optional detailed grant opportunity dictionary.
 
     Returns:
         Routing decision and match score details.
     """
+    if not grant_info and grant_id:
+        try:
+            from backend.storage.local_storage import storage
+            grant_info = storage.get_grant(grant_id)
+        except Exception:
+            pass
+
+        if not grant_info:
+            try:
+                from mcp_tools import fetch_grant_details
+                clean_num = grant_id.replace("grants-gov", "").replace("-", "").strip()
+                details_res = fetch_grant_details(opportunity_id=clean_num)
+                grant_info = details_res.get("grant") or {}
+                if grant_info and "grant_id" not in grant_info:
+                    grant_info["grant_id"] = grant_id
+            except Exception as e:
+                logger.warning(f"Failed to fetch details for {grant_id}: {e}")
+
+    if not grant_info:
+        logger.error(f"evaluate_and_route_grant failed: no grant details found for {grant_id}")
+        return {"error": f"Grant details not found for {grant_id}"}
+
     # Run structured evaluation via Matcher Agent (persists via MCP tool save_matched_grant)
     evaluation = evaluate_grant_structured(grant_info, persist=True)
     gid = evaluation.grant_id
@@ -217,6 +276,37 @@ def evaluate_and_route_grant(grant_info: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@tool
+def evaluate_all_discovered_grants() -> dict[str, Any]:
+    """Score and route all pending and newly discovered grants against the organization profile.
+    
+    Evaluates fit across the 5-dimension rubric and updates each grant's score and routing status
+    in persistent storage.
+
+    Returns:
+        Dictionary with count of evaluated grants and routing summary.
+    """
+    grants_to_evaluate = []
+    try:
+        from backend.storage.local_storage import storage
+        all_grants = storage.list_grants()
+        for g in all_grants:
+            status = g.get("status", "")
+            score = g.get("match_score")
+            # If newly discovered, pending, or unscored
+            if status in ("discovered", "pending", "") or not score or (isinstance(score, dict) and score.get("total", 0) == 0):
+                grants_to_evaluate.append(g)
+    except Exception as e:
+        logger.warning(f"Failed to query local storage for discovered grants: {e}")
+
+    evaluated = []
+    for g in grants_to_evaluate:
+        res = evaluate_and_route_grant(grant_info=g)
+        evaluated.append(res)
+
+    return {"count": len(evaluated), "evaluated": evaluated}
+
+
 # ──────────────────────────────────────────────
 #  Agent System Prompts
 # ──────────────────────────────────────────────
@@ -226,19 +316,21 @@ Execute a discovery scan using `execute_discovery_scan` to find new federal gran
 matching the organization's profile and keywords.
 
 STRICT NO-SUMMARY RULE (CRITICAL):
-- Do NOT output conversational text, pleasantries, markdown tables, grant lists, or status summaries.
+- Do NOT output conversational text, pleasantries, markdown tables, or essays.
 - Save execution time and Bedrock tokens.
-- Once `execute_discovery_scan` finishes, output ONLY: "Scan complete." and terminate immediately."""
+- Once `execute_discovery_scan` finishes, your ONLY message must be:
+  "Discovered grants: <comma-separated list of grant_id, e.g. grants-gov-359157, grants-gov-362422>"
+  (or "No new grants discovered." if 0 grants found).
+  Terminate immediately."""
 
 MATCHER_GRAPH_PROMPT = """You are the Matcher Node in the GrantScout Graph pipeline.
-For each new grant opportunity found by the Scanner, use `evaluate_and_route_grant(grant_info=...)` to:
-1. Score it against the organization profile (5-dimension rubric)
-2. Route it based on score: ≥80 auto-draft, 50-79 review, <50 archive
+YOUR MISSION:
+Call `evaluate_all_discovered_grants()` to score and route all newly discovered grant opportunities against the organization profile. Alternatively, call `evaluate_and_route_grant(grant_id=...)` for each grant ID reported by the Scanner.
 
 STRICT NO-SUMMARY RULE (CRITICAL):
 - Do NOT output conversational text, scoring tables, markdown reports, status recaps, or routing summaries.
-- Never output verification sections, status tables, or next-step plans.
-- Once evaluation tools have executed for all opportunities, output ONLY: "Scoring and routing complete." and terminate immediately."""
+- Never output verification sections or next-step plans.
+- Once evaluation finishes, output ONLY: "Scoring and routing complete." and terminate immediately."""
 
 DRAFTER_GRAPH_PROMPT = """You are the Drafter Node in the GrantScout Graph pipeline.
 You are only activated when high-scoring grants (≥80) have been queued for drafting.
@@ -388,7 +480,7 @@ def build_orchestration_graph(remote_tools: list[Any] | None = None):
                           → Deadline (always)
     """
     scanner_tools: list[Any] = [execute_discovery_scan, retrieve_org_profile, search_grants, fetch_grant_details]
-    matcher_tools: list[Any] = [evaluate_and_route_grant, retrieve_org_profile, save_matched_grant]
+    matcher_tools: list[Any] = [evaluate_all_discovered_grants, evaluate_and_route_grant, retrieve_org_profile, save_matched_grant]
     drafter_tools: list[Any] = [execute_swarm_proposal_drafting, retrieve_org_profile, save_application_draft, get_existing_application_draft, update_draft_section, generate_budget_csv]
     deadline_tools: list[Any] = [scan_upcoming_deadlines, send_deadline_alert]
 

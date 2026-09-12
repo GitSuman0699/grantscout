@@ -86,6 +86,19 @@ Marcus is a managing partner at Williams & Associates with 20 years of experienc
 ## Jamila Vance, Director of STEM Programs
 Jamila holds an M.Ed. in Curriculum Instruction and a B.S. in Mechanical Engineering. She oversees instructor training, student safety protocols, and curriculum alignment across all 4 center locations.
 """
+    },
+    {
+        "doc_name": "STEM_Evaluation_Metrics_2025.md",
+        "category": "test_metrics",
+        "content": """# 2025 STEM Academic Benchmarks
+
+## Math and Science Outcomes
+Across our 4 partner community hubs in Atlanta, 85% of regular youth participants achieved at least one full letter grade improvement in math.
+Furthermore, 92% of students surveyed reported increased enthusiasm for computer science and robotics careers.
+
+## Financial Efficiency
+Youth Education Alliance maintained an 88.7% program expenditure efficiency ratio, spending only 7.8% on administrative overhead.
+"""
     }
 ]
 
