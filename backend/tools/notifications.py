@@ -112,7 +112,7 @@ def send_external_notification(
     return {"delivered": True, "channel": "dashboard"}
 
 
-def scan_upcoming_deadlines(days_ahead: int = 30, **kwargs: Any) -> dict[str, Any]:
+def scan_upcoming_deadlines(days_ahead: int = 30, auto_alert: bool = False, **kwargs: Any) -> dict[str, Any]:
     """Scan all active grants in the pipeline and identify upcoming deadlines.
 
     Use this tool to find grants with active deadlines and prioritize which ones
@@ -120,6 +120,7 @@ def scan_upcoming_deadlines(days_ahead: int = 30, **kwargs: Any) -> dict[str, An
 
     Args:
         days_ahead: Maximum days ahead to inspect (default 30).
+        auto_alert: Whether to automatically record alerts for grants closing in <= 14 days.
 
     Returns:
         List of grants with calculated days remaining and urgency status.
@@ -167,6 +168,18 @@ def scan_upcoming_deadlines(days_ahead: int = 30, **kwargs: Any) -> dict[str, An
                         "urgency": urgency,
                         "status": g.get("status"),
                     })
+
+                    if auto_alert and days_left <= 14:
+                        try:
+                            send_deadline_alert(
+                                grant_id=g.get("grant_id") or "",
+                                grant_title=g.get("title") or "",
+                                deadline=close,
+                                days_remaining=days_left,
+                                urgency_level=urgency,
+                            )
+                        except Exception as alert_err:
+                            logger.debug(f"Failed to record auto alert for {g.get('grant_id')}: {alert_err}")
 
         active_deadlines.sort(key=lambda x: x["days_remaining"])
         return {

@@ -156,7 +156,7 @@ def search_grants(
         }
 
 
-def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
+def fetch_grant_details(opportunity_id: int | str) -> dict[str, Any]:
     """Fetch detailed information about a specific grant opportunity from grants.gov.
 
     Use this tool after discovering a grant via search_grants to retrieve the full
@@ -175,10 +175,11 @@ def fetch_grant_details(opportunity_id: int) -> dict[str, Any]:
     try:
         logger.info(f"Fetching grant details for opportunity_id={opportunity_id}")
 
+        opp_id_payload = int(opportunity_id) if str(opportunity_id).isdigit() else opportunity_id
         response = requests.post(
             f"{GRANTS_API_BASE}/fetchOpportunity",
             headers=DEFAULT_HEADERS,
-            json={"opportunityId": opportunity_id},
+            json={"opportunityId": opp_id_payload},
             timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()

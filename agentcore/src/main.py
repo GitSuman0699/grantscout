@@ -45,7 +45,7 @@ async def _invoke_agent(prompt: str, mcp_url: str):
                 tools_list = await session.list_tools()
                 logger.info(f"Connected to MCP Server. Loaded {len(tools_list.tools)} tools.")
 
-                # Intent routing: Check if prompt is for proposal drafting or discovery orchestration
+                # Intent routing: Check if prompt is for proposal drafting, candidate evaluation, or general orchestration
                 if "draft" in prompt.lower():
                     import re
                     from agents.drafter import draft_application_structured_async
@@ -55,8 +55,12 @@ async def _invoke_agent(prompt: str, mcp_url: str):
                         gid = f"grants-gov-{gid}"
                     result = await draft_application_structured_async({"grant_id": gid})
                     return result.model_dump()
+                elif "match" in prompt.lower() or "evaluate" in prompt.lower():
+                    from agents.matcher import evaluate_all_discovered_grants_async
+                    result = await evaluate_all_discovered_grants_async()
+                    return result
                 else:
-                    # Run the full discovery graph DAG
+                    # Run the cognitive graph cycle
                     result = await run_full_orchestration_cycle(prompt=prompt)
                     return result
 

@@ -25,7 +25,10 @@ if _reconfig_err:
 
 from pathlib import Path
 
-# Ensure agentcore/src is on sys.path so its internal modules (mcp_tools, agents, shared) resolve cleanly
+# Ensure project root and agentcore/src are on sys.path
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 _agentcore_src = str(Path(__file__).resolve().parent.parent / "agentcore" / "src")
 if _agentcore_src not in sys.path:
     sys.path.insert(0, _agentcore_src)
@@ -114,31 +117,83 @@ def draft_application_for_grant(grant: dict, callback=None) -> dict[str, Any]:
     if _invoke_remote_agent(f"Draft application for grant {grant.get('grant_id')}"):
         return {"status": "triggered_remotely"}
 
-    from agentcore.src.agents.drafter import draft_application_structured
+    try:
+        from agents.drafter import draft_application_structured
+    except ImportError:
+        from agentcore.src.agents.drafter import draft_application_structured
     draft_result = draft_application_structured(grant, status_callback=callback)
     gid = grant.get("grant_id") or f"grants-gov-{grant.get('id')}"
     return {"status": "completed", "grant_id": gid, "draft": draft_result.model_dump()}
 
 
 async def run_orchestrator(remote_tools=None, status_callback=None) -> dict[str, Any]:
-    """Run discovery and scoring orchestration using authentic Strands SDK GraphBuilder DAG."""
-    if _invoke_remote_agent("Run grant scan and orchestration"):
-        if status_callback:
-            status_callback("AWS AgentCore multi-agent swarm completed scan & scoring in cloud.")
-        grants = storage.list_grants()
-        if len(grants) > 0:
-            return {
-                "status": "completed",
-                "grants_scanned": len(grants),
-                "result_preview": f"AgentCore Swarm completed. {len(grants)} grants active.",
-            }
-        logger.info("Remote agent returned 0 grants; executing local engine.")
+    """Run discovery and scoring orchestration conforming to 3-tier architecture.
 
-    from agentcore.src.agents.orchestrator import run_full_orchestration_cycle as execute_graph_cycle
-    return await execute_graph_cycle(
-        remote_tools=remote_tools,
-        status_callback=status_callback,
-    )
+    Tier 2 (Application Backend): Deterministic Grants.gov discovery scan + date math + deduplication.
+    Tier 3 (AgentCore / Bedrock): Cognitive 5-dimension rubric match evaluation in parallel.
+    Tier 2 (Application Backend): Pipeline persistence & deadline sweeps.
+    """
+    logger.info("Executing 3-Tier Discovery & Matching Pipeline...")
+    if status_callback:
+        status_callback("[PIPELINE INITIALIZED] Launching high-performance 3-Tier discovery cycle...")
+
+    # Stage 1: Tier 2 (Application Backend) - Deterministic Discovery Scan (Zero LLM tokens)
+    if status_callback:
+        status_callback("[DISCOVERY] Querying Grants.gov API with expanded keyword variations...")
+
+    from backend.discovery import execute_discovery_scan
+    discovery_res = execute_discovery_scan()
+    grants_found = discovery_res.get("grants", [])
+    count_found = len(grants_found)
+
+    if status_callback:
+        status_callback(f"[DISCOVERY COMPLETE] Discovered {count_found} active candidate opportunities matching organization profile.")
+
+    # Stage 2: Tier 3 (AgentCore / AWS Bedrock) - AI Cognitive Matcher Agent (Parallel Rubric Scoring)
+    if status_callback:
+        status_callback("[MATCHER] Evaluating candidate opportunities concurrently via Claude Bedrock Matcher Agent...")
+
+    evaluated = []
+    if _invoke_remote_agent("Evaluate candidate grants"):
+        if status_callback:
+            status_callback("AWS AgentCore Matcher evaluated candidate opportunities in cloud.")
+        all_grants = storage.list_grants()
+        evaluated = [g for g in all_grants if g.get("status") in ("matched", "archived")]
+    else:
+        try:
+            from agents.matcher import evaluate_all_discovered_grants_async
+        except ImportError:
+            from agentcore.src.agents.matcher import evaluate_all_discovered_grants_async
+        eval_res = await evaluate_all_discovered_grants_async(candidate_grants=grants_found if grants_found else None)
+        evaluated = eval_res.get("evaluated", [])
+
+    matched_count = sum(1 for e in evaluated if e.get("action") in ("qualified_match", "auto_draft_queued") or (isinstance(e, dict) and e.get("total_score", 0) >= 80))
+    review_count = sum(1 for e in evaluated if e.get("action") == "flagged_for_review" or (isinstance(e, dict) and 50 <= e.get("total_score", 0) < 80))
+
+    if status_callback:
+        status_callback(
+            f"[MATCH COMPLETE] Evaluated {len(evaluated)} opportunities ({matched_count} qualified matches, {review_count} flagged for review)."
+        )
+
+    # Stage 3: Tier 2 (Application Backend) - Deadline & Compliance Monitoring
+    if status_callback:
+        status_callback("[DEADLINE] Scanning active pipeline opportunities for upcoming closing windows (<14 days)...")
+
+    from backend.tools.notifications import scan_upcoming_deadlines
+    deadline_summary = scan_upcoming_deadlines()
+
+    if status_callback:
+        status_callback(
+            f"[ORCHESTRATION COMPLETE] 3-Tier cycle finished. Processed {count_found} opportunities. Pipeline updated."
+        )
+
+    return {
+        "status": "completed",
+        "grants_scanned": count_found,
+        "grants_evaluated": len(evaluated),
+        "routed_opportunities": evaluated,
+        "deadline_summary": deadline_summary,
+    }
 
 
 async def run_full_orchestration_cycle(*args, **kwargs) -> dict[str, Any]:
@@ -146,10 +201,8 @@ async def run_full_orchestration_cycle(*args, **kwargs) -> dict[str, Any]:
 
 
 def run_deadline_check(*args, **kwargs):
-    if _invoke_remote_agent("Check upcoming deadlines"):
-        return {"status": "remote_check_triggered"}
     from backend.tools.notifications import scan_upcoming_deadlines
-    return scan_upcoming_deadlines()
+    return scan_upcoming_deadlines(auto_alert=True)
 
 
 def score_grant(grant: dict, profile: dict | None = None) -> dict[str, Any]:

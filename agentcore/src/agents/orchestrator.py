@@ -1,15 +1,14 @@
-"""Orchestrator Agent — Central coordinator using the Strands SDK Graph pattern for autonomous routing.
+"""Orchestrator Agent — Central coordinator for Cognitive AI evaluation and routing.
 
-This agent orchestrates the complete GrantScout lifecycle as a real Strands SDK Graph DAG:
-1. Scanner Node: Scans grants.gov for new funding opportunities matching the org profile.
-2. Matcher Node: Evaluates fit & computes 5-dimension match scores for each discovery.
-3. Drafter Node (Conditional): Auto-triggered only when high-scoring grants (≥80) are found.
-4. Deadline Node: Sweeps active deadlines and generates proactive alerts.
+In GrantScout's 3-Tier Architecture:
+1. Tier 1 (Presentation): React frontend triggers discovery cycles and receives real-time SSE progress.
+2. Tier 2 (Application Backend): Pure Python deterministic discovery (Grants.gov API ingestion,
+   query expansion, date math, RFI filtering) and deadline sweeps (<14 days).
+3. Tier 3 (Cognitive AI - AgentCore): This module coordinates cognitive reasoning:
+   - Matcher Node: Evaluates discovered opportunities across a 5-dimension rubric using Bedrock Claude
+     and routes them into qualified (≥80), manual review (50-79), or silent archive (<50).
 
-The Graph uses conditional edges to implement intelligent routing:
-- Scanner → Matcher (always)
-- Matcher → Drafter (conditional: only if high-score grants exist)
-- Matcher → Deadline (always)
+Autonomous execution is orchestrated with real-time SSE status streaming for the user interface.
 """
 
 from __future__ import annotations
@@ -24,203 +23,43 @@ from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
 from strands.multiagent.graph import GraphBuilder
 
+from shared.optimization import get_model_for_agent
+
 # Dynamic MCP tools injected from mcp_tools proxy module
 from mcp_tools import (
-    search_grants,
     fetch_grant_details,
     save_matched_grant,
     retrieve_org_profile,
-    check_grant_exists,
     scan_upcoming_deadlines,
-    save_application_draft,
-    get_existing_application_draft,
-    update_draft_section,
-    generate_budget_csv,
-    send_deadline_alert,
 )
-from agents.scanner import is_active_opportunity
-from agents.matcher import evaluate_grant_structured, score_grant
-from agents.deadline import run_deadline_check
+from agents.matcher import (
+    evaluate_all_discovered_grants,
+    evaluate_all_discovered_grants_async,
+    evaluate_grant_structured,
+    evaluate_grant_structured_async,
+    score_grant,
+)
+try:
+    from backend.tools.notifications import scan_upcoming_deadlines as run_deadline_check
+except ImportError:
+    from mcp_tools import scan_upcoming_deadlines as run_deadline_check
+
+try:
+    from backend.discovery import execute_discovery_scan
+except ImportError:
+    execute_discovery_scan = None
 
 logger = logging.getLogger(__name__)
-
-
-def is_domain_relevant(grant_info: dict[str, Any], profile_data: dict[str, Any]) -> tuple[bool, str]:
-    """Pre-filter opportunities to avoid evaluating grants completely outside the nonprofit's scope."""
-    import re
-
-    title = (grant_info.get("title") or "").lower()
-    synopsis = (grant_info.get("synopsis_description") or grant_info.get("synopsis") or "").lower()
-    full_text = f"{title} {synopsis}"
-
-    # 1. Skip RFIs (Requests for Information) and non-grant notices
-    if title.startswith("request for information") or "rfi" in title.split():
-        return False, "Skipped: Request for Information (RFI), not a grant opportunity"
-
-    # 2. Check for exact phrase matches from profile keywords
-    keywords = profile_data.get("keywords", [])
-    for kw in keywords:
-        clean_kw = kw.strip().strip('"').lower()
-        if clean_kw and clean_kw in full_text:
-            return True, f"Direct keyword phrase match: '{clean_kw}'"
-
-    # 3. Check for substantive domain keyword matches (words > 3 chars)
-    domain_terms = set()
-    for kw in keywords:
-        for word in re.findall(r"[a-zA-Z0-9\-]+", kw.lower()):
-            if len(word) > 3 and word not in {"with", "from", "that", "this", "have", "more", "into", "their"}:
-                domain_terms.add(word)
-
-    matches = [w for w in domain_terms if w in full_text]
-    # If 2 or more domain terms match anywhere in full text, or 1 in the title
-    if len(matches) >= 2:
-        return True, f"Domain terms matched: {matches[:3]}"
-    elif len(matches) == 1 and any(w in title for w in matches):
-        return True, f"Domain term matched in title: {matches[0]}"
-
-    return False, "No substantive domain keyword alignment with organization profile"
-
-
-def _safe_float(val: Any) -> float:
-    """Safely convert award amounts to float, handling 'none', 'N/A', strings, and None."""
-    if val is None:
-        return 0.0
-    if isinstance(val, (int, float)):
-        return float(val)
-    try:
-        clean = str(val).strip().replace("$", "").replace(",", "").lower()
-        if clean in ("none", "n/a", "null", ""):
-            return 0.0
-        return float(clean)
-    except (ValueError, TypeError):
-        return 0.0
-
-
-@tool
-def execute_discovery_scan() -> dict[str, Any]:
-    """Discover authentic grant opportunities by querying grants.gov with targeted org profile keywords.
-
-    Uses high-precision quoted search queries and pre-filters opportunities against the
-    nonprofit's domain and active window to avoid wasting resources on irrelevant grants.
-
-    Returns:
-        Dictionary containing the list of newly found grant opportunities.
-    """
-    profile_res = retrieve_org_profile()
-    profile_data = profile_res.get("profile") if isinstance(profile_res, dict) and "profile" in profile_res else profile_res
-    if not profile_data:
-        return {"count": 0, "grants": [], "error": "No org profile found"}
-
-    raw_keywords = profile_data.get("keywords", [])
-    # Build list of distinct targeted search queries (exact phrases)
-    search_queries = []
-    for kw in raw_keywords[:5]:
-        kw_clean = kw.strip()
-        if not kw_clean.startswith('"') and not kw_clean.endswith('"'):
-            search_queries.append(f'"{kw_clean}"')
-        else:
-            search_queries.append(kw_clean)
-
-    if not search_queries:
-        search_queries = ['"STEM education"', '"robotics"', '"computer science education"', '"after-school"']
-
-    logger.info(f"Executing discovery scan across {len(search_queries)} targeted search queries: {search_queries}")
-
-    seen_ids = set()
-    candidate_grants = []
-    for query in search_queries:
-        try:
-            search_res = search_grants(keywords=query, max_results=6)
-            for g in search_res.get("grants", []):
-                gid_num = g.get("id")
-                if gid_num and gid_num not in seen_ids:
-                    seen_ids.add(gid_num)
-                    candidate_grants.append(g)
-        except Exception as e:
-            logger.warning(f"Search query '{query}' failed: {e}")
-
-    new_grants = []
-    for g in candidate_grants:
-        gid = f"grants-gov-{g.get('id')}"
-        try:
-            exists_res = check_grant_exists(grant_id=gid)
-            if exists_res.get("exists"):
-                continue
-        except Exception as e:
-            logger.warning(f"Check exists failed for {gid}: {e}")
-
-        # Fetch full opportunity details
-        try:
-            opp_id_str = str(g.get("id") or "").strip()
-            detail_res = fetch_grant_details(opportunity_id=opp_id_str)
-            grant_info = detail_res.get("grant") or g
-            grant_info["grant_id"] = gid
-            if opp_id_str:
-                grant_info["id"] = opp_id_str
-                grant_info["application_url"] = f"https://www.grants.gov/search-results-detail/{opp_id_str}"
-                grant_info["url"] = grant_info["application_url"]
-            if g.get("opportunity_number"):
-                grant_info["opportunity_number"] = g.get("opportunity_number")
-        except Exception as e:
-            logger.warning(f"Failed to fetch details for grant {gid}: {e}")
-            continue
-
-        # 1. Filter out closed/inactive opportunities
-        if not is_active_opportunity(
-            close_date=grant_info.get("close_date", ""),
-            title=grant_info.get("title", ""),
-            original_due_date=grant_info.get("original_due_date", ""),
-            fiscal_year=grant_info.get("fiscal_year"),
-            has_packages=grant_info.get("has_packages", True),
-        ):
-            logger.info(f"Filtered out inactive/closed opportunity: {gid} - {grant_info.get('title')}")
-            continue
-
-        # 2. Pre-filter by domain relevance to avoid scanning unnecessary grants
-        relevant, reason = is_domain_relevant(grant_info, profile_data)
-        if not relevant:
-            logger.info(f"Pre-filtered unrelated opportunity: {gid} ('{grant_info.get('title')}') - {reason}")
-            continue
-
-        logger.info(f"Discovered authentic candidate grant: {gid} ('{grant_info.get('title')}') - {reason}")
-        new_grants.append(grant_info)
-
-        # Immediately persist candidate grant with status='discovered' to pipeline storage
-        try:
-            save_matched_grant(
-                grant_id=gid,
-                title=grant_info.get("title", "Grant Opportunity"),
-                agency=grant_info.get("agency", "Federal Agency"),
-                synopsis=str(grant_info.get("synopsis_description") or grant_info.get("synopsis") or ""),
-                award_ceiling=_safe_float(grant_info.get("award_ceiling")),
-                award_floor=_safe_float(grant_info.get("award_floor")),
-                close_date=str(grant_info.get("close_date") or "TBD"),
-                status="discovered",
-                match_score={"mission_alignment": 0, "eligibility_fit": 0, "capacity_match": 0, "geographic_fit": 0, "track_record": 0, "total": 0},
-                match_reasoning="Discovered candidate awaiting fit evaluation",
-                opportunity_id=opp_id_str,
-                opportunity_number=grant_info.get("opportunity_number"),
-                application_url=grant_info.get("application_url"),
-            )
-            logger.info(f"Persisted candidate grant {gid} to pipeline storage.")
-        except Exception as e:
-            logger.warning(f"Failed to persist candidate grant {gid}: {e}")
-
-        # Cap at 6 authentic candidates per cycle for fast response
-        if len(new_grants) >= 6:
-            break
-
-    return {"count": len(new_grants), "grants": new_grants, "error": None}
 
 
 @tool
 def evaluate_and_route_grant(grant_id: str = "", grant_info: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a grant against the organization profile and route according to fit score.
 
-    Graph Routing Policy (implemented via Strands Graph conditional edges):
-    - Score >= 80: Status -> 'matched', auto-triggers pre-filling application draft
-    - Score 50-79: Status -> 'matched', flags for manual review
-    - Score < 50: Status -> 'archived'
+    Evaluation Routing Policy:
+    - Score >= 80: Status -> 'matched', Action -> 'qualified_match' (highly qualified fit)
+    - Score 50-79: Status -> 'matched', Action -> 'flagged_for_review'
+    - Score < 50: Status -> 'archived', Action -> 'archived_silently'
 
     Args:
         grant_id: Unique identifier for the grant (e.g. 'grants-gov-359157').
@@ -256,12 +95,8 @@ def evaluate_and_route_grant(grant_id: str = "", grant_info: dict[str, Any] | No
     gid = evaluation.grant_id
     total_score = evaluation.match_score.total
 
-    action = "flagged_for_review"
-    draft_status = None
-
     if total_score >= 80:
-        action = "auto_draft_queued"
-        draft_status = "queued"
+        action = "qualified_match"
     elif total_score < 50:
         action = "archived_silently"
     else:
@@ -272,154 +107,35 @@ def evaluate_and_route_grant(grant_id: str = "", grant_info: dict[str, Any] | No
         "title": grant_info.get("title", "Grant Opportunity"),
         "total_score": total_score,
         "action": action,
-        "draft_status": draft_status,
     }
-
-
-@tool
-def evaluate_all_discovered_grants() -> dict[str, Any]:
-    """Score and route all pending and newly discovered grants against the organization profile.
-    
-    Evaluates fit across the 5-dimension rubric and updates each grant's score and routing status
-    in persistent storage.
-
-    Returns:
-        Dictionary with count of evaluated grants and routing summary.
-    """
-    grants_to_evaluate = []
-    try:
-        from backend.storage.local_storage import storage
-        all_grants = storage.list_grants()
-        for g in all_grants:
-            status = g.get("status", "")
-            score = g.get("match_score")
-            # If newly discovered, pending, or unscored
-            if status in ("discovered", "pending", "") or not score or (isinstance(score, dict) and score.get("total", 0) == 0):
-                grants_to_evaluate.append(g)
-    except Exception as e:
-        logger.warning(f"Failed to query local storage for discovered grants: {e}")
-
-    evaluated = []
-    for g in grants_to_evaluate:
-        res = evaluate_and_route_grant(grant_info=g)
-        evaluated.append(res)
-
-    return {"count": len(evaluated), "evaluated": evaluated}
 
 
 # ──────────────────────────────────────────────
 #  Agent System Prompts
 # ──────────────────────────────────────────────
 
-SCANNER_GRAPH_PROMPT = """You are the Scanner Node in the GrantScout Graph pipeline.
-Execute a discovery scan using `execute_discovery_scan` to find new federal grant opportunities
-matching the organization's profile and keywords.
-
-STRICT NO-SUMMARY RULE (CRITICAL):
-- Do NOT output conversational text, pleasantries, markdown tables, or essays.
-- Save execution time and Bedrock tokens.
-- Once `execute_discovery_scan` finishes, your ONLY message must be:
-  "Discovered grants: <comma-separated list of grant_id, e.g. grants-gov-359157, grants-gov-362422>"
-  (or "No new grants discovered." if 0 grants found).
-  Terminate immediately."""
-
 MATCHER_GRAPH_PROMPT = """You are the Matcher Node in the GrantScout Graph pipeline.
 YOUR MISSION:
-Call `evaluate_all_discovered_grants()` to score and route all newly discovered grant opportunities against the organization profile. Alternatively, call `evaluate_and_route_grant(grant_id=...)` for each grant ID reported by the Scanner.
+Call `evaluate_all_discovered_grants()` to score and route all candidate grant opportunities against the organization profile across the 5-dimension rubric. Alternatively, call `evaluate_and_route_grant(grant_id=...)` for each grant ID.
 
 STRICT NO-SUMMARY RULE (CRITICAL):
 - Do NOT output conversational text, scoring tables, markdown reports, status recaps, or routing summaries.
 - Never output verification sections or next-step plans.
-- Once evaluation finishes, output ONLY: "Scoring complete: auto_draft_queued for qualified opportunities." if any grant scored >= 80, else "Scoring and routing complete." and terminate immediately."""
+- Once evaluation finishes, output ONLY: "Scoring complete: qualified opportunities routed." if any grant scored >= 80, else "Scoring and routing complete." and terminate immediately."""
 
-DRAFTER_GRAPH_PROMPT = """You are the Drafter Node in the GrantScout Graph pipeline.
-You are only activated when high-scoring grants (≥80) have been queued for drafting.
-YOUR MISSION:
-Identify any grants queued for drafting or with fit score ≥80.
-For each high-scoring opportunity, invoke `execute_swarm_proposal_drafting(grant_id=...)` to trigger the authentic 5-Agent Collaborative Drafter Swarm to author the complete 6-section proposal.
-
-STRICT NO-SUMMARY RULE (CRITICAL):
-- Do NOT output conversational text, narrative commentary, proposal excerpts, or checklists.
-- Once drafting completes, output ONLY: "Proposal drafting triggered." and terminate immediately."""
-
-DEADLINE_GRAPH_PROMPT = """You are the Deadline Monitor Node in the GrantScout Graph pipeline.
-Call `scan_upcoming_deadlines(days_ahead=30)`. If any grant closes within 14 days, call `send_deadline_alert`.
-
-STRICT NO-SUMMARY RULE (CRITICAL):
-- Do NOT output conversational reports, deadline tables, monitoring strategies, completion essays, or next steps.
-- Once tools have executed, output ONLY: "Deadline monitoring complete." and terminate immediately."""
 
 ORCHESTRATOR_SYSTEM_PROMPT = """You are the Lead Autonomous Orchestrator for GrantScout.
 
 YOUR MISSION:
-Autonomously run the end-to-end grant discovery, scoring, and routing lifecycle in the background.
+Autonomously run the grant evaluation, scoring, and pipeline routing lifecycle in the background.
 
 WORKFLOW:
-1. Execute discovery using `execute_discovery_scan`.
-2. For each discovered opportunity, evaluate fit and execute Graph routing using `evaluate_and_route_grant`.
-3. Perform a deadline check across the pipeline using `scan_upcoming_deadlines`.
+1. For each candidate opportunity, evaluate fit across the 5-dimension rubric using `evaluate_all_discovered_grants` or `evaluate_and_route_grant`.
 
 STRICT NO-SUMMARY RULE (CRITICAL):
 - Do NOT output conversational text, markdown summaries, or status tables.
 - Output ONLY: "Orchestration complete." upon completion."""
 
-
-# ──────────────────────────────────────────────
-#  Strands Graph DAG Builder
-# ──────────────────────────────────────────────
-
-
-from shared.optimization import get_model_for_agent
-from mcp_tools import scan_upcoming_deadlines
-
-
-@tool
-def execute_swarm_proposal_drafting(grant_id: str) -> dict[str, Any]:
-    """Execute the authentic 5-Agent Collaborative Drafter Swarm to author a full 6-section proposal for a qualified grant.
-    
-    Args:
-        grant_id: The ID of the grant opportunity to author a proposal for.
-        
-    Returns:
-        Summary of the drafted proposal sections and completion status.
-    """
-    grant = None
-    try:
-        from backend.storage.local_storage import storage
-        grant = storage.get_grant(grant_id)
-        if not grant:
-            clean_num = grant_id.replace("grants-gov-", "")
-            for g in storage.list_grants():
-                if str(g.get("id")) == clean_num or g.get("grant_id") == grant_id:
-                    grant = g
-                    break
-    except Exception:
-        pass
-
-    if not grant:
-        # Fallback via MCP tool fetch_grant_details
-        try:
-            from mcp_tools import fetch_grant_details
-            clean_num = grant_id.replace("grants-gov-", "")
-            details_res = fetch_grant_details(opportunity_id=clean_num)
-            grant = details_res.get("grant") if isinstance(details_res, dict) else None
-            if grant and "grant_id" not in grant:
-                grant["grant_id"] = grant_id
-        except Exception as e:
-            logger.warning(f"Failed to fetch details via MCP for grant {grant_id}: {e}")
-
-    if not grant:
-        grant = {"grant_id": grant_id, "title": f"Opportunity {grant_id}"}
-        
-    from agents.drafter import draft_application_structured
-    draft_result = draft_application_structured(grant)
-    return {
-        "success": True,
-        "grant_id": grant_id,
-        "sections_count": len(draft_result.sections),
-        "completion_percentage": draft_result.completion_percentage,
-        "status": "completed",
-    }
 
 
 def _create_bedrock_model(agent_name: str) -> BedrockModel:
@@ -436,72 +152,24 @@ def _create_bedrock_model(agent_name: str) -> BedrockModel:
     )
 
 
-def _has_high_score_grants(state: Any) -> bool:
-    """Graph edge condition: only route to Drafter node if high-scoring grants (≥80) are queued.
-    
-    Evaluates both:
-    1. Structured Matcher Node result in GraphState (checking for action='auto_draft_queued')
-    2. Persistent storage for any grant with match_score >= 80 or status='queued'
-    """
-    # 1. Check matcher node results in state if available
-    try:
-        results = getattr(state, "results", {})
-        if isinstance(results, dict) and "matcher" in results:
-            matcher_res = results["matcher"]
-            res_obj = getattr(matcher_res, "result", None)
-            if hasattr(res_obj, "message") and isinstance(res_obj.message, dict):
-                content = str(res_obj.message.get("content", []))
-                if "auto_draft_queued" in content:
-                    return True
-    except Exception as e:
-        logger.debug(f"Error inspecting matcher state results: {e}")
-
-    # 2. Check persistent storage for high-scoring queued opportunities
-    try:
-        from backend.storage.local_storage import storage
-        all_grants = storage.list_grants()
-        for g in all_grants:
-            score = g.get("match_score", {}).get("total", 0) if isinstance(g.get("match_score"), dict) else (g.get("fit_score") or 0)
-            if score >= 80 and g.get("status") in ("queued", "ready_for_review", "matched"):
-                draft = storage.find_application_by_grant_id(g.get("grant_id", ""))
-                if not draft or draft.get("completion_percentage", 0) < 100:
-                    return True
-    except Exception as e:
-        logger.debug(f"Error checking storage in edge condition: {e}")
-
-    return False
+# ──────────────────────────────────────────────
+#  Strands Graph DAG Builder
+# ──────────────────────────────────────────────
 
 
 def build_orchestration_graph(remote_tools: list[Any] | None = None):
     """Build the GrantScout pipeline as a real Strands SDK Graph DAG.
 
     Graph Topology:
-        Scanner → Matcher → Drafter (conditional: high-scoring grants exist)
-                          → Deadline (always)
+        Matcher (Cognitive Reasoning Node)
     """
-    scanner_tools: list[Any] = [execute_discovery_scan, retrieve_org_profile, search_grants, fetch_grant_details]
     matcher_tools: list[Any] = [evaluate_all_discovered_grants, evaluate_and_route_grant, retrieve_org_profile, save_matched_grant]
-    drafter_tools: list[Any] = [execute_swarm_proposal_drafting, retrieve_org_profile, save_application_draft, get_existing_application_draft, update_draft_section, generate_budget_csv]
-    deadline_tools: list[Any] = [scan_upcoming_deadlines, send_deadline_alert]
 
     if remote_tools:
         for t in remote_tools:
             name = getattr(t, "tool_name", getattr(t, "__name__", ""))
-            if name in ["execute_discovery_scan", "search_grants"]:
-                scanner_tools.append(t)
-            elif name in ["evaluate_and_route_grant", "save_matched_grant"]:
+            if name in ["evaluate_and_route_grant", "save_matched_grant"]:
                 matcher_tools.append(t)
-            elif name in ["save_application_draft", "update_draft_section"]:
-                drafter_tools.append(t)
-            elif name in ["scan_upcoming_deadlines"]:
-                deadline_tools.append(t)
-
-    scanner_agent = Agent(
-        name="scanner",
-        model=_create_bedrock_model("scanner"),
-        system_prompt=SCANNER_GRAPH_PROMPT,
-        tools=scanner_tools,
-    )
 
     matcher_agent = Agent(
         name="matcher",
@@ -510,44 +178,22 @@ def build_orchestration_graph(remote_tools: list[Any] | None = None):
         tools=matcher_tools,
     )
 
-    drafter_agent = Agent(
-        name="drafter",
-        model=_create_bedrock_model("drafter"),
-        system_prompt=DRAFTER_GRAPH_PROMPT,
-        tools=drafter_tools,
-    )
-
-    deadline_agent = Agent(
-        name="deadline",
-        model=_create_bedrock_model("deadline"),
-        system_prompt=DEADLINE_GRAPH_PROMPT,
-        tools=deadline_tools,
-    )
-
     # Build the Graph DAG using Strands SDK GraphBuilder
     builder = GraphBuilder()
     builder.set_graph_id("grantscout_pipeline")
 
-    # Add nodes (no drafter — drafting is manual-only)
-    builder.add_node(scanner_agent, "scanner")
     builder.add_node(matcher_agent, "matcher")
-    builder.add_node(deadline_agent, "deadline")
-
-    # Define edges — Scanner → Matcher → Deadline (no auto-drafting)
-    builder.add_edge("scanner", "matcher")
-    builder.add_edge("matcher", "deadline")
 
     # Set entry point and timeouts
-    builder.set_entry_point("scanner")
+    builder.set_entry_point("matcher")
     builder.set_execution_timeout(1800.0)    # 30 min total pipeline timeout
     builder.set_node_timeout(600.0)          # 10 min per individual node
 
     graph = builder.build()
-    logger.info("GrantScout Graph DAG built: Scanner → Matcher → [Drafter (conditional)] + Deadline")
+    logger.info("GrantScout Graph DAG built: Matcher")
     return graph
 
 
-# Drafter tools are now dynamically injected via MCP
 
 
 def create_orchestrator_agent(remote_tools: list[Any] | None = None) -> Agent:
@@ -566,7 +212,7 @@ def create_orchestrator_agent(remote_tools: list[Any] | None = None) -> Agent:
         boto_client_config=Config(read_timeout=3600, connect_timeout=900, retries={'max_attempts': 3, 'mode': 'standard'})
     )
 
-    tools: list[Any] = [execute_discovery_scan, evaluate_and_route_grant, retrieve_org_profile]
+    tools: list[Any] = [evaluate_all_discovered_grants, evaluate_and_route_grant, retrieve_org_profile]
     if remote_tools:
         tools.extend(remote_tools)
 
@@ -636,21 +282,18 @@ async def run_graph_orchestration_cycle(
     """Execute the complete GrantScout pipeline as a Strands SDK Graph DAG with live event streaming."""
     logger.info("Starting GrantScout Graph DAG orchestration cycle...")
     if status_callback:
-        status_callback("[GRAPH INITIALIZED] Building GrantScout Discovery Graph DAG (Scanner -> Matcher -> Drafter / Deadline)...")
+        status_callback("[GRAPH INITIALIZED] Building GrantScout Evaluation Graph DAG (Matcher)...")
 
     graph = build_orchestration_graph(remote_tools)
 
     task = prompt or (
-        "Run the complete GrantScout discovery cycle. "
-        "Scanner: execute discovery scan. "
-        "Matcher: score and route each discovered grant. "
-        "Drafter: if any grant scores >= 80, trigger proposal drafting. "
-        "Deadline: scan upcoming deadlines and send alerts if closing soon. "
+        "Run the GrantScout cognitive evaluation and routing cycle. "
+        "Matcher: score and route all candidate discovered grants across the 5-dimension rubric. "
         "CRITICAL RULE: All agents must output ZERO conversational text, tables, or summaries. Minimal tool calls and one-line completion only."
     )
 
     completed_nodes: list[str] = []
-    total_nodes = 4
+    total_nodes = 1
     status = "completed"
 
     try:
@@ -689,37 +332,66 @@ async def run_full_orchestration_cycle(
     remote_tools: list[Any] | None = None,
     status_callback: Any | None = None,
 ) -> dict[str, Any]:
-    """Execute a complete autonomous scan, match, draft, and deadline cycle via Graph DAG."""
+    """Execute high-performance autonomous cycle: Tier 2 Discovery -> Tier 3 Parallel Matcher -> Deadline Sweep."""
+    logger.info("Starting GrantScout high-performance discovery cycle...")
+    if status_callback:
+        status_callback("[PIPELINE INITIALIZED] Launching high-performance autonomous discovery cycle...")
+
+    # Stage 1: Deterministic Backend Discovery Scan (Zero LLM token waste, sub-second API fetch)
+    if status_callback:
+        status_callback("[DISCOVERY] Ingesting authentic grants from Grants.gov API with expanded query variations...")
+
     try:
-        return await run_graph_orchestration_cycle(prompt, remote_tools, status_callback)
-    except Exception as e:
-        logger.error(f"Graph DAG execution failed: {e}")
-        raise e
+        from backend.discovery import execute_discovery_scan
+        discovery_res: dict[str, Any] = execute_discovery_scan()
+    except ImportError:
+        discovery_res = {"count": 0, "grants": []}
+    raw_grants = discovery_res.get("grants") if isinstance(discovery_res, dict) else []
+    grants_found: list[dict[str, Any]] = raw_grants if isinstance(raw_grants, list) else []
+    count_found = len(grants_found)
 
+    if status_callback:
+        status_callback(f"[DISCOVERY COMPLETE] Discovered {count_found} active candidate opportunities matching criteria.")
 
-def _run_sequential_fallback() -> dict[str, Any]:
-    """Fallback: sequential execution without Graph DAG (used if Graph execution fails)."""
-    logger.info("Running sequential fallback orchestration cycle...")
+    # Stage 2: Parallel Cognitive Matcher Agent (Real LLM 5-dimension rubric scoring in parallel)
+    if status_callback:
+        status_callback(f"[MATCHER] Evaluating candidate opportunities concurrently via Claude Bedrock...")
 
-    # 1. Discovery
-    discovery_res = execute_discovery_scan()
-    grants_found = discovery_res.get("grants", [])
+    eval_res = await evaluate_all_discovered_grants_async()
+    evaluated = eval_res.get("evaluated", [])
 
-    routed_results = []
-    # 2. Score & Route each new grant
-    for g in grants_found:
-        route_res = evaluate_and_route_grant(g)
-        routed_results.append(route_res)
+    matched_count = sum(1 for e in evaluated if e.get("action") in ("qualified_match", "auto_draft_queued"))
+    review_count = sum(1 for e in evaluated if e.get("action") == "flagged_for_review")
 
-    # 3. Deadline Check
-    deadline_summary = run_deadline_check()
+    if status_callback:
+        status_callback(
+            f"[MATCH COMPLETE] Evaluated {len(evaluated)} opportunities ({matched_count} qualified matches, {review_count} flagged for review)."
+        )
 
-    summary = {
-        "grants_scanned": len(grants_found),
-        "routed_opportunities": routed_results,
-        "deadline_summary": deadline_summary,
+    # Stage 3: Deterministic Deadline & Compliance Sweep (Tier 2 Backend)
+    if status_callback:
+        status_callback("[DEADLINE] Scanning active pipeline opportunities for upcoming closing windows (<14 days)...")
+
+    try:
+        from backend.tools.notifications import scan_upcoming_deadlines
+        deadline_summary = scan_upcoming_deadlines(auto_alert=True)
+    except ImportError:
+        try:
+            from mcp_tools import scan_upcoming_deadlines
+            deadline_summary = scan_upcoming_deadlines()
+        except Exception:
+            deadline_summary = {"count": 0, "deadlines": []}
+
+    if status_callback:
+        status_callback(
+            f"[ORCHESTRATION COMPLETE] Discovery cycle finished. Processed {count_found} opportunities. Pipeline updated."
+        )
+
+    return {
         "status": "completed",
+        "grants_scanned": count_found,
+        "grants_evaluated": len(evaluated),
+        "routed_opportunities": evaluated,
+        "deadline_summary": deadline_summary,
     }
 
-    logger.info(f"Sequential fallback cycle complete. Processed {len(grants_found)} opportunities.")
-    return summary
