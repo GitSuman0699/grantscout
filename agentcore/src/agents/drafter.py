@@ -634,45 +634,64 @@ async def draft_application_structured_async(
     final_sections = [sec_1, sec_2, sec_3, sec_4, sec_5, sec_6]
     total_words = sum(s.word_count for s in final_sections)
 
-    from backend.storage.local_storage import storage as _storage
+    persisted = False
+    try:
+        from backend.storage.local_storage import storage as _storage
 
-    existing = _storage.find_application_by_grant_id(grant_id)
-    draft_id = existing.get("draft_id") if existing else f"draft-{_uuid_mod.uuid4().hex[:10]}"
+        existing = _storage.find_application_by_grant_id(grant_id)
+        draft_id = existing.get("draft_id") if existing else f"draft-{_uuid_mod.uuid4().hex[:10]}"
 
-    draft_record = {
-        "draft_id": draft_id,
-        "grant_id": grant_id,
-        "org_id": grant_data.get("org_id", "default"),
-        "grant_title": title,
-        "project_title": blueprint.project_title,
-        "total_requested_amount": blueprint.total_requested_amount,
-        "sections": [s.model_dump() for s in final_sections],
-        "completion_percentage": 100.0,
-        "submission_checklist": submission_checklist,
-        "budget_csv_data": budget_csv_data,
-        "created_at": existing.get("created_at") if existing else datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _storage.save_application(draft_record)
+        draft_record = {
+            "draft_id": draft_id,
+            "grant_id": grant_id,
+            "org_id": grant_data.get("org_id", "default"),
+            "grant_title": title,
+            "project_title": blueprint.project_title,
+            "total_requested_amount": blueprint.total_requested_amount,
+            "sections": [s.model_dump() for s in final_sections],
+            "completion_percentage": 100.0,
+            "submission_checklist": submission_checklist,
+            "budget_csv_data": budget_csv_data,
+            "created_at": existing.get("created_at") if existing else datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _storage.save_application(draft_record)
 
-    # Update grant in storage to ready_for_review
-    grant = _storage.get_grant(grant_id)
-    if grant:
-        grant["status"] = "ready_for_review"
-        grant["draft_location"] = draft_id
-        grant["draft_id"] = draft_id
-        grant["is_drafted"] = True
-        grant["is_drafting"] = False
-        grant["updated_at"] = datetime.now(timezone.utc).isoformat()
-        _storage.save_grant(grant)
+        # Update grant in storage to ready_for_review
+        grant = _storage.get_grant(grant_id)
+        if grant:
+            grant["status"] = "ready_for_review"
+            grant["draft_location"] = draft_id
+            grant["draft_id"] = draft_id
+            grant["is_drafted"] = True
+            grant["is_drafting"] = False
+            grant["updated_at"] = datetime.now(timezone.utc).isoformat()
+            _storage.save_grant(grant)
 
-    # Activity feed logging
-    _storage.add_activity({
-        "event_type": "application_drafted",
-        "message": f"Generated complete 6-section proposal for '{title}' ({total_words:,} words, 100% complete)",
-        "details": {"grant_id": grant_id, "draft_id": draft_id, "total_words": total_words},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+        # Activity feed logging
+        _storage.add_activity({
+            "event_type": "application_drafted",
+            "message": f"Generated complete 6-section proposal for '{title}' ({total_words:,} words, 100% complete)",
+            "details": {"grant_id": grant_id, "draft_id": draft_id, "total_words": total_words},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        persisted = True
+    except Exception as e:
+        logger.info(f"Local storage not available ({e}), persisting via MCP save_application_draft...")
+
+    if not persisted:
+        try:
+            from mcp_tools import save_application_draft
+            save_application_draft(
+                grant_id=grant_id,
+                org_id=grant_data.get("org_id", "default"),
+                grant_title=title,
+                sections=[s.model_dump() for s in final_sections],
+                submission_checklist=submission_checklist,
+                budget_csv_data=budget_csv_data,
+            )
+        except Exception as e:
+            logger.warning(f"Could not persist draft via save_application_draft MCP tool: {e}")
 
     elapsed_s = (datetime.now(timezone.utc) - start_time).total_seconds()
     logger.info(f"✅ 3-Stage Blueprint drafting complete for {grant_id} in {elapsed_s:.1f}s ({total_words} words).")
