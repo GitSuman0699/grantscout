@@ -773,10 +773,10 @@ def execute_background_drafting(grant_id: str, loop: asyncio.AbstractEventLoop):
 
 
 def dispatch_queued_drafts(background_tasks: BackgroundTasks | None = None, loop: asyncio.AbstractEventLoop | None = None) -> list[str]:
-    """Find any grants in 'drafting' status without an existing completed draft and launch background workers."""
+    """Find any grants in 'drafting', 'queued', or high-fit 'matched' (>=80) status without a completed draft and launch background workers."""
     grants = storage.list_grants()
     apps = storage.list_applications()
-    drafted_grant_ids = {a.get("grant_id") for a in apps if a.get("grant_id")}
+    drafted_grant_ids = {a.get("grant_id") for a in apps if a.get("grant_id") and a.get("completion_percentage", 0) >= 100}
 
     if loop is None:
         loop = asyncio.get_running_loop()
@@ -786,7 +786,21 @@ def dispatch_queued_drafts(background_tasks: BackgroundTasks | None = None, loop
         gid = g.get("grant_id") or g.get("id")
         if not gid:
             continue
-        if (g.get("status") == "drafting" or g.get("is_drafting")) and gid not in drafted_grant_ids:
+
+        score_val = 0
+        ms = g.get("match_score")
+        if isinstance(ms, dict):
+            score_val = ms.get("total", 0)
+        elif isinstance(ms, (int, float)):
+            score_val = float(ms)
+
+        should_draft = (
+            g.get("status") in ("drafting", "queued")
+            or g.get("is_drafting")
+            or (g.get("status") == "matched" and score_val >= 80)
+        )
+
+        if should_draft and gid not in drafted_grant_ids:
             dispatched.append(gid)
             if background_tasks:
                 background_tasks.add_task(execute_background_drafting, gid, loop)

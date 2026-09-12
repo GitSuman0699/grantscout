@@ -166,19 +166,75 @@ def save_application_draft(
         existing = storage.find_application_by_grant_id(grant_id)
         draft_id = existing.get("draft_id") if existing else f"draft-{uuid.uuid4().hex[:10]}"
         created_at = existing.get("created_at") if existing else datetime.now(timezone.utc).isoformat()
-        
-        if sections is None:
-            sections = existing.get("sections", []) if existing else []
 
-        # Calculate completion and section counts
-        total_sections = len(sections)
-        auto_filled_count = sum(1 for s in sections if s.get("is_auto_filled", False))
-        completion_pct = round((auto_filled_count / total_sections * 100), 1) if total_sections > 0 else 0.0
+        # Build map of existing sections already drafted in storage
+        existing_sections = existing.get("sections", []) if existing else []
+        existing_map = {s.get("title", "").strip(): s for s in existing_sections if isinstance(s, dict)}
 
-        for sec in sections:
-            if "word_count" not in sec or not sec["word_count"]:
-                sec["word_count"] = len(sec.get("content", "").split())
+        # Helper to detect placeholder stubs like "See existing draft"
+        def is_placeholder_content(text: Any) -> bool:
+            if not text:
+                return True
+            cleaned = str(text).strip().lower()
+            if cleaned in (
+                "see existing draft",
+                "see existing draft.",
+                "existing draft",
+                "existing draft.",
+                "see draft",
+                "as drafted",
+                "as drafted in previous section",
+                "drafted",
+                "see previous draft",
+                "refer to draft",
+                "placeholder",
+            ):
+                return True
+            if len(cleaned) < 50:
+                return True
+            return False
 
+        # Merge sections defensively: NEVER overwrite rich drafted text with stubs
+        final_sections: list[dict[str, Any]] = []
+        if sections and isinstance(sections, list):
+            for sec in sections:
+                if not isinstance(sec, dict):
+                    continue
+                title = sec.get("title", "").strip()
+                content = str(sec.get("content", ""))
+
+                # If incoming content is a placeholder and we have an existing section with real content, preserve the existing one!
+                if is_placeholder_content(content) and title in existing_map:
+                    real_sec = existing_map[title]
+                    logger.info(f"🛡️ Guarded rich content for section '{title}' ({len(real_sec.get('content', ''))} chars) against placeholder '{content}'")
+                    final_sections.append(real_sec)
+                else:
+                    wc = sec.get("word_count") or len(content.split())
+                    final_sections.append({
+                        "title": title,
+                        "content": content,
+                        "is_auto_filled": True,
+                        "needs_review": sec.get("needs_review", True),
+                        "word_count": wc,
+                    })
+        else:
+            # If sections was None or empty, retain all existing sections
+            final_sections = existing_sections
+
+        # If any existing section was omitted in the incoming array, preserve it
+        incoming_titles = {s.get("title", "").strip() for s in final_sections}
+        for title, ex_sec in existing_map.items():
+            if title not in incoming_titles:
+                final_sections.append(ex_sec)
+
+        # Sort sections by standard title numbering (1., 2., 3., etc.)
+        final_sections.sort(key=lambda s: s.get("title", ""))
+
+        # Calculate true completion percentage based on substantive non-placeholder content
+        valid_sections = sum(1 for s in final_sections if not is_placeholder_content(s.get("content", "")))
+        completion_pct = round((valid_sections / 6.0) * 100, 1)
+
+        # Clean submission checklist
         clean_checklist = []
         for item in (submission_checklist or []):
             if isinstance(item, str):
@@ -190,16 +246,20 @@ def save_application_draft(
             else:
                 clean_checklist.append(str(item))
 
+        # Preserve existing budget CSV and checklist if not re-provided
+        final_budget_csv = budget_csv_data or (existing.get("budget_csv_data") if existing else None)
+        final_checklist = clean_checklist if clean_checklist else (existing.get("submission_checklist", []) if existing else [])
+
         draft_data = {
             "draft_id": draft_id,
             "grant_id": grant_id,
             "org_id": org_id,
             "grant_title": grant_title,
-            "sections": sections,
+            "sections": final_sections,
             "completion_percentage": completion_pct,
-            "submission_checklist": clean_checklist,
-            "budget_csv_data": budget_csv_data,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "submission_checklist": final_checklist,
+            "budget_csv_data": final_budget_csv,
+            "created_at": created_at,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -221,11 +281,12 @@ def save_application_draft(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
-        logger.info(f"Saved application draft {draft_id} for grant {grant_id}")
+        logger.info(f"Saved application draft {draft_id} for grant {grant_id} ({valid_sections}/6 valid sections)")
         return {
             "draft_id": draft_id,
             "saved": True,
             "completion_percentage": completion_pct,
+            "valid_sections": valid_sections,
             "error": None,
         }
 

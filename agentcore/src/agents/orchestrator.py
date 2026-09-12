@@ -330,7 +330,7 @@ Call `evaluate_all_discovered_grants()` to score and route all newly discovered 
 STRICT NO-SUMMARY RULE (CRITICAL):
 - Do NOT output conversational text, scoring tables, markdown reports, status recaps, or routing summaries.
 - Never output verification sections or next-step plans.
-- Once evaluation finishes, output ONLY: "Scoring and routing complete." and terminate immediately."""
+- Once evaluation finishes, output ONLY: "Scoring complete: auto_draft_queued for qualified opportunities." if any grant scored >= 80, else "Scoring and routing complete." and terminate immediately."""
 
 DRAFTER_GRAPH_PROMPT = """You are the Drafter Node in the GrantScout Graph pipeline.
 You are only activated when high-scoring grants (≥80) have been queued for drafting.

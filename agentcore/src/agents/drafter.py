@@ -110,9 +110,9 @@ CRITICAL SYNTHESIS WORKFLOW:
    - Verify that the total requested grant funds in Section 1 (Executive Summary) exactly match Section 5 (Budget).
    - Verify staffing positions in Section 4 (Project Design) align with Section 5 (Budget).
    - Ensure cohesive narrative voice across all sections.
-3. If any section needs revision or is missing, update it using `update_draft_section`.
+3. If any section needs revision or is missing, update it with complete substantive text using `update_draft_section`. NEVER pass placeholder text like "See existing draft".
 4. Ensure the structured budget CSV is created via `generate_budget_csv` if not already generated.
-5. Finalize the application draft using `save_application_draft` with the compiled `submission_checklist` (must be a simple list of strings: e.g. ["SAM.gov Active Registration", "SF-424 Application for Federal Assistance", "SF-424A Budget Information", "Project Narrative", "Letters of Support"]) and `budget_csv_data`.
+5. Finalize the application draft using `save_application_draft` with the compiled `submission_checklist` (must be a simple list of strings: e.g. ["SAM.gov Active Registration", "SF-424 Application for Federal Assistance", "SF-424A Budget Information", "Project Narrative", "Letters of Support"]) and `budget_csv_data`. Do NOT pass section stubs in `sections` (leave sections empty/omitted so existing full-length sections are preserved in storage).
 6. Immediately hand off to the `reviewer_agent` using `handoff_to_agent` with minimal message: "Draft finalized. Handoff to reviewer_agent."
 
 REVISION INSTRUCTIONS:
@@ -384,8 +384,8 @@ WORKFLOW:
    Then hand off to lead_drafter with milestones and checklist recommendations.
 4. lead_drafter: Conduct cross-section synthesis. Call `get_existing_application_draft` ONCE to inspect all sections.
    Reconcile figures: ensure Section 1 requested funds match Section 5 budget, and Section 4 staffing aligns with personnel.
-   Save the complete application using save_application_draft with grant_id='{grant_id}', org_id='default', grant_title='{title}'.
-   Then hand off to reviewer_agent with synthesis summary.
+   Save the complete application using save_application_draft with grant_id='{grant_id}', org_id='default', grant_title='{title}', submission_checklist=..., budget_csv_data=..., and do NOT pass sections so all existing rich sections are retained.
+   Then hand off to reviewer_agent with minimal handoff message.
 5. reviewer_agent: Audit compliance with `audit_application_compliance(grant_id='{grant_id}')`. Evaluate quality across
    federal rubric. If critical compliance violations exist, hand back to lead_drafter with actionable critique notes.
    Otherwise, terminate with 'Application Drafting Complete: Proposal verified for 2 CFR 200 compliance and quality rubric.'
