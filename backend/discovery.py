@@ -7,6 +7,7 @@ Executes with zero LLM tokens during discovery search.
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import re
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ def is_active_opportunity(
     """Returns True if the grant is active, open, and has an active application package on Grants.gov."""
     now_dt = datetime.now(timezone.utc)
 
+    # 1. Apply button must be active (active application packages available)
     if not has_packages:
         return False
 
@@ -52,7 +54,7 @@ def is_active_opportunity(
         return False
 
     clean_close = re.sub(r"\s+\d{1,2}:\d{2}:\d{2}.*$", "", close_date).strip()
-    for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
+    for fmt in ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%d-%b-%Y", "%Y/%m/%d"]:
         try:
             dt = datetime.strptime(clean_close, fmt).replace(tzinfo=timezone.utc)
             # Grant must be open and have at least 7 days remaining for proposal preparation
@@ -112,15 +114,19 @@ def _safe_float(val: Any) -> float:
         return 0.0
 
 
-def execute_discovery_scan(max_candidates: int = 6) -> dict[str, Any]:
+def execute_discovery_scan(max_candidates: int = 50) -> dict[str, Any]:
     """Discover authentic grant opportunities by querying Grants.gov with targeted org profile keywords.
 
-    Uses high-precision quoted search queries and pre-filters opportunities against the
-    nonprofit's domain and active window to avoid wasting resources on irrelevant grants.
-    Saves newly discovered candidate grants to persistent storage with status='discovered'.
+    1. Queries Grants.gov API across expanded keywords requesting full results (up to 25 per variation).
+    2. Uses ThreadPoolExecutor to concurrently fetch full opportunity details in seconds.
+    3. Strictly filters out:
+       - Inactive opportunities and those with disabled Apply buttons (no active application packages).
+       - Opportunities that have expired or close in less than 7 days.
+       - RFIs, forecasts, or notices outside the organization's domain.
+    4. Saves newly discovered, open, apply-enabled candidate grants to persistent storage with status='discovered'.
 
     Returns:
-        Dictionary containing the list of newly found grant opportunities.
+        Dictionary containing the list of newly found actionable grant opportunities.
     """
     profile_data = storage.get_org_profile("default") or {}
     if not profile_data:
@@ -147,20 +153,20 @@ def execute_discovery_scan(max_candidates: int = 6) -> dict[str, Any]:
     if not search_queries:
         search_queries = ['"STEM education"', "robotics", '"after-school"', "youth education"]
 
-    # Deduplicate while preserving order, cap at 6 distinct queries
+    # Deduplicate while preserving order
     dedup_queries = []
     for q in search_queries:
         if q not in dedup_queries:
             dedup_queries.append(q)
     search_queries = dedup_queries[:6]
 
-    logger.info(f"[Tier 2 Discovery] Searching Grants.gov across {len(search_queries)} queries: {search_queries}")
+    logger.info(f"[Tier 2 Discovery] Searching Grants.gov across {len(search_queries)} queries (max 25 results each): {search_queries}")
 
     seen_ids = set()
     candidate_grants = []
     for query in search_queries:
         try:
-            search_res = search_grants(keywords=query, max_results=6)
+            search_res = search_grants(keywords=query, max_results=25)
             for g in search_res.get("grants", []):
                 gid_num = g.get("id")
                 if gid_num and gid_num not in seen_ids:
@@ -169,14 +175,15 @@ def execute_discovery_scan(max_candidates: int = 6) -> dict[str, Any]:
         except Exception as e:
             logger.warning(f"Search query '{query}' failed: {e}")
 
-    new_grants = []
-    for g in candidate_grants:
+    logger.info(f"[Tier 2 Discovery] Found {len(candidate_grants)} unique raw candidate opportunities. Validating active packages & deadlines concurrently...")
+
+    def _fetch_and_filter_grant(g: dict[str, Any]) -> dict[str, Any] | None:
         gid = f"grants-gov-{g.get('id')}"
         existing = storage.get_grant(gid)
         if existing:
             # If already evaluated or archived, skip
             if existing.get("status") in ("matched", "archived", "ready_for_review", "in_progress"):
-                continue
+                return None
 
         # Fetch full opportunity details
         try:
@@ -193,29 +200,45 @@ def execute_discovery_scan(max_candidates: int = 6) -> dict[str, Any]:
                 grant_info["opportunity_number"] = g.get("opportunity_number")
         except Exception as e:
             logger.warning(f"Failed to fetch details for grant {gid}: {e}")
-            continue
+            return None
 
-        # 1. Filter out closed/inactive opportunities
+        # 1. Filter out opportunities without active packages (disabled Apply button) or closed/expired
         if not is_active_opportunity(
             close_date=grant_info.get("close_date", ""),
             title=grant_info.get("title", ""),
             original_due_date=grant_info.get("original_due_date", ""),
             fiscal_year=grant_info.get("fiscal_year"),
-            has_packages=grant_info.get("has_packages", True),
+            has_packages=grant_info.get("has_packages", False),
         ):
-            logger.info(f"Filtered out inactive/closed opportunity: {gid} - {grant_info.get('title')}")
-            continue
+            logger.info(f"Skipped inactive / closed / apply-disabled opportunity: {gid} - '{grant_info.get('title')}'")
+            return None
 
         # 2. Pre-filter by domain relevance to avoid scanning unnecessary grants
         relevant, reason = is_domain_relevant(grant_info, profile_data)
         if not relevant:
             logger.info(f"Pre-filtered unrelated opportunity: {gid} ('{grant_info.get('title')}') - {reason}")
-            continue
+            return None
 
         logger.info(f"Discovered authentic candidate grant: {gid} ('{grant_info.get('title')}') - {reason}")
-        new_grants.append(grant_info)
+        return grant_info
 
-        # Persist candidate grant with status='discovered' to pipeline storage
+    # Run detail fetching & filtering in parallel with 10 threads
+    filtered_grants = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_fetch_and_filter_grant, g): g for g in candidate_grants}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                res = future.result()
+                if res:
+                    filtered_grants.append(res)
+            except Exception as e:
+                logger.warning(f"Worker exception evaluating candidate grant: {e}")
+
+    # Persist newly verified candidate grants with status='discovered'
+    new_grants = []
+    for grant_info in filtered_grants:
+        gid = grant_info["grant_id"]
+        opp_id_str = str(grant_info.get("id") or "")
         try:
             save_matched_grant(
                 grant_id=gid,
@@ -233,6 +256,7 @@ def execute_discovery_scan(max_candidates: int = 6) -> dict[str, Any]:
                 application_url=grant_info.get("application_url"),
             )
             logger.info(f"Persisted candidate grant {gid} to pipeline storage.")
+            new_grants.append(grant_info)
         except Exception as e:
             logger.warning(f"Failed to persist candidate grant {gid}: {e}")
 

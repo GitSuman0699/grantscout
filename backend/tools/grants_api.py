@@ -7,6 +7,7 @@ The API is public and requires no authentication.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import html
 import logging
 import re
@@ -198,7 +199,20 @@ def fetch_grant_details(opportunity_id: int | str) -> dict[str, Any]:
         clean_agency = strip_html_tags(raw_agency) if raw_agency else ""
 
         pkgs = opp.get("opportunityPkgs", [])
-        has_packages = len(pkgs) > 0
+        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        has_active_packages = False
+        for p in pkgs:
+            pkg_close = str(p.get("closingDate") or p.get("closingDateStr") or "").strip()
+            if pkg_close:
+                pkg_close_date = pkg_close[:10]  # YYYY-MM-DD
+                if pkg_close_date >= now_iso:
+                    has_active_packages = True
+                    break
+            else:
+                has_active_packages = True
+                break
+
+        has_packages = has_active_packages if pkgs else False
 
         post_date = synopsis.get("postingDate") or synopsis.get("createdDate") or ""
         close_date = synopsis.get("responseDate") or synopsis.get("estApplicationResponseDate") or ""
