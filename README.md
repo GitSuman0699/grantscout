@@ -33,7 +33,17 @@ graph TD
     subgraph Tier 3: AWS Bedrock AgentCore Runtime Container
         Router[Container Entrypoint & Intent Router]
         Matcher[Matcher Agent: Claude 4.5 Haiku]
-        Drafter[Drafter Swarm: Claude 4.5 Sonnet]
+        subgraph Drafter Swarm: 4-Stage Blueprint Engine
+            BlueprintGen["Stage 1: Blueprint Architect (Haiku)"]
+            subgraph Stage 2: Parallel Specialists via asyncio.gather
+                NarrativeWriter["Narrative Writer (Sonnet): Sec 2 & 3"]
+                ProjectDesign["Project Design (Haiku): Sec 4"]
+                BudgetSpec["Budget Specialist (Haiku): Sec 5"]
+                EvalSpec["Evaluation Specialist (Haiku): Sec 6"]
+            end
+            ExecSummary["Stage 3: Executive Summary Synthesis (Sonnet)"]
+            AtomicCommit["Stage 4: Atomic Assembly & Storage Commit"]
+        end
     end
 
     subgraph External Systems
@@ -52,11 +62,29 @@ graph TD
     FastAPI --> MCP
     FastAPI -->|boto3 invoke_agent_runtime| Router
     Router -->|Match / Evaluate Intent| Matcher
-    Router -->|Draft Proposal Intent| Drafter
+    Router -->|Draft Proposal Intent| BlueprintGen
+    BlueprintGen --> NarrativeWriter
+    BlueprintGen --> ProjectDesign
+    BlueprintGen --> BudgetSpec
+    BlueprintGen --> EvalSpec
+    NarrativeWriter --> ExecSummary
+    ProjectDesign --> ExecSummary
+    BudgetSpec --> ExecSummary
+    EvalSpec --> ExecSummary
+    ExecSummary --> AtomicCommit
     Matcher -->|Fast Inference| AWSBedrock
-    Drafter -->|Deep Reasoning Inference| AWSBedrock
+    NarrativeWriter -->|Claude 4.5 Sonnet| AWSBedrock
+    ProjectDesign -->|Claude 4.5 Haiku| AWSBedrock
+    BudgetSpec -->|Claude 4.5 Haiku| AWSBedrock
+    EvalSpec -->|Claude 4.5 Haiku| AWSBedrock
+    ExecSummary -->|Claude 4.5 Sonnet| AWSBedrock
     RAG -->|Titan Text Embeddings V2| AWSBedrock
-    MCP -->|SSE Tool Invocation| Router
+    Matcher -->|MCP: retrieve_org_profile, save_matched_grant| MCP
+    BlueprintGen -->|MCP: retrieve_org_profile, query_knowledge_base| MCP
+    NarrativeWriter -->|MCP: retrieve_org_profile, query_knowledge_base| MCP
+    BudgetSpec -->|MCP: calculate_mtdc_compliance, generate_budget_csv| MCP
+    EvalSpec -->|MCP: audit_application_compliance| MCP
+    AtomicCommit -->|MCP: save_application_draft| MCP
 ```
 
 ### Tier 1: Presentation Layer
@@ -106,7 +134,7 @@ graph TD
 * **Capabilities:**
   * Scale-to-zero serverless container deployment with a 15-minute idle timeout.
   * Matcher Agent evaluating grant solicitations against 5 strategic dimensions.
-  * Multi-agent proposal authoring swarm executing a 3-stage blueprint generation workflow.
+  * Multi-agent proposal authoring swarm executing a 4-stage blueprint generation workflow with 4 parallel specialist agents via `asyncio.gather()`.
   * Automated generation of SF-424 compliant itemized budget tables in CSV format.
 
 ---
@@ -130,16 +158,15 @@ Located in `agentcore/src/agents/matcher.py`, the Matcher Agent evaluates candid
 * **Output Format:** Structured Pydantic schema with numeric scores (0 to 100), overall weighted score, eligibility flags, strengths, risks, and a recommendation status (`QUALIFIED_APPLY`, `FLAGGED_REVIEW`, or `NOT_RECOMMENDED`).
 
 ### Collaborative Proposal Drafter Swarm
-Located in `agentcore/src/agents/drafter.py`, the proposal drafting engine utilizes a 3-stage blueprint workflow to generate complete proposals without JSON decoding bottlenecks:
-* **Stage 1 (Blueprint Planning):** Synthesizes solicitation criteria, RAG knowledge base facts, and project metrics into a unified design plan.
-* **Stage 2 (Collaborative Writing):** Specialized prompts generate each section with concrete project data:
-  * Section 1: Executive Summary
-  * Section 2: Organizational Background and Capacity
-  * Section 3: Statement of Need and Target Population
-  * Section 4: Project Design and Work Plan (with 12-month quarterly milestones)
-  * Section 5: Budget Narrative and Financial Justification (itemized SF-424 cost table)
-  * Section 6: Evaluation Plan, Measurement Framework, and Long-Term Sustainability
-* **Stage 3 (Synthesis and Budget Export):** Combines the narrative sections into a cohesive document and invokes `generate_budget_csv` to produce a downloadable CSV adhering to federal cost principles.
+Located in `agentcore/src/agents/drafter.py`, the proposal drafting engine utilizes a 4-stage blueprint architecture with **parallel specialist execution** to generate complete 6-section proposals in under 40 seconds:
+* **Stage 1 — Blueprint Architect (~4s):** A fast Claude 4.5 Haiku agent synthesizes solicitation criteria, RAG knowledge base facts, and organization profile into a structured `ProjectBlueprint` Pydantic model — the single source of truth establishing budget amounts, staff FTE allocations, quarterly milestones, and SMART KPIs.
+* **Stage 2 — Parallel Specialist Writers (~25s):** Four specialized `strands.Agent` instances execute **concurrently via `asyncio.gather()`**, each running in its own threadpool executor:
+  * **Narrative Writer** (Claude 4.5 Sonnet): Sections 2 (Organizational Capacity) and 3 (Statement of Need)
+  * **Project Design Specialist** (Claude 4.5 Haiku): Section 4 (Work Plan and Implementation Timeline)
+  * **Budget Specialist** (Claude 4.5 Haiku): Section 5 (Budget Justification and SF-424 CSV generation)
+  * **Evaluation Specialist** (Claude 4.5 Haiku): Section 6 (Evaluation and Sustainability) plus Federal Submission Checklist
+* **Stage 3 — Executive Summary Synthesis (~6s):** A Claude 4.5 Sonnet agent reads all finalized Sections 2–6 and synthesizes Section 1 (Executive Summary) with accurate budget figures and project scope.
+* **Stage 4 — Atomic Assembly (~1s):** All 6 canonical sections are validated, compiled, and committed atomically to persistent storage with 100% section completion.
 
 ### RAG Knowledge Base
 Located in `backend/rag/knowledge_base.py`, the retrieval engine provides verifiable context from internal organization files:
@@ -160,6 +187,18 @@ Located in `backend/mcp_endpoints/server.py`, the application exposes tools and 
   * `grantscout://pipeline`: Full inventory of tracked opportunities and statuses.
   * `grantscout://knowledge-base/documents`: Indexed document metadata and word counts.
 * **Security:** Mounted at `/mcp` behind `MCPAuthWrapper`, enforcing authentication before allowing tool execution.
+
+### Cross-Tier MCP Tool Bridge
+Located in `agentcore/src/mcp_tools.py`, this module is the client-side bridge that enables Tier 3 agents (running on AWS) to invoke domain tools hosted on the Tier 2 MCP Server (running on Render) across environment boundaries:
+* **Architecture:** Each function is a thin `@tool`-decorated wrapper (compatible with Strands Agent SDK). Under the hood, it calls `_mcp_session.call_tool()` to forward the invocation over SSE to the Render MCP Server, which executes the real implementation against live storage and APIs.
+* **Agent-to-Tool Mapping:**
+  * **Blueprint Architect** (Stage 1): `retrieve_org_profile`, `query_knowledge_base`
+  * **Narrative Writer** (Stage 2): `retrieve_org_profile`, `query_knowledge_base`
+  * **Budget Specialist** (Stage 2): `calculate_mtdc_compliance`, `generate_budget_csv`
+  * **Evaluation Specialist** (Stage 2): `audit_application_compliance`
+  * **Atomic Commit** (Stage 4): `save_application_draft`
+  * **Matcher Agent**: `retrieve_org_profile`, `save_matched_grant`, `query_knowledge_base`
+* **Local Fallback:** When no MCP session is available (local development), the proxy automatically falls back to direct Python imports from `backend/tools/`, enabling the same agent code to run locally or in the cloud without modification.
 
 ### Security and Secret Isolation
 The security subsystem implements enterprise-grade access control and defense-in-depth:
